@@ -56,4 +56,10 @@ dist-ssr/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
->>>>>>> 1811b0d (feat: D-02 foundation (DB, Alembic, Indexes))
+
+# Local specs & seed data
+artifact.md
+artefact.md
+plan.md
+rules.md
+seed_data.json

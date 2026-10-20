@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import List, Optional
-from sqlalchemy import String, Integer, Boolean, Numeric, Text, Date, ForeignKey, Computed, Index, text
+from sqlalchemy import String, Integer, Boolean, Numeric, Text, Date, ForeignKey, Computed, Index, text, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -34,7 +34,8 @@ class Event(Base):
     canonical_title: Mapped[str] = mapped_column(String(500))
     normalized_title: Mapped[str] = mapped_column(String(500))
     event_format: Mapped[str] = mapped_column(String(100))
-    city: Mapped[str] = mapped_column(String(100))
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_online: Mapped[bool] = mapped_column(Boolean, server_default='false', default=False, nullable=False)
     venue: Mapped[Optional[str]] = mapped_column(String(255))
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
@@ -53,7 +54,9 @@ class Event(Base):
     summary_embedding = mapped_column(Vector(settings.EMBEDDING_DIM), nullable=True)
 
     __table_args__ = (
+        CheckConstraint("city IS NOT NULL OR is_online = true", name="chk_events_city_or_online"),
         Index('idx_events_city_dates', 'city', 'start_date', postgresql_where=text('is_active = TRUE')),
+        Index('idx_events_online', 'is_online', postgresql_where=text('is_active = TRUE AND is_online = TRUE')),
         Index('idx_events_fts', 'search_vector', postgresql_using='gin'),
         Index('idx_events_embedding', 'summary_embedding', postgresql_using='hnsw', postgresql_ops={'summary_embedding': 'vector_cosine_ops'}),
     )
