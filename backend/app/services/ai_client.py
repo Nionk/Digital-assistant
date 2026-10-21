@@ -1,3 +1,5 @@
+import asyncio
+import math
 from openai import AsyncOpenAI
 import instructor
 from app.core.config import settings
@@ -27,3 +29,58 @@ embedding_client = AsyncOpenAI(
     api_key=settings.EMBEDDING_API_KEY,
     base_url=settings.EMBEDDING_BASE_URL,
 )
+
+# ==========================================
+# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ОГРАНИЧИТЕЛИ (RULES.MD SECTION 3)
+# ==========================================
+# Ограничитель параллельных запросов к API эмбеддингов для предотвращения HTTP 429
+EMBEDDING_SEMAPHORE = asyncio.Semaphore(3)
+
+
+def l2_normalize(vec: list[float]) -> list[float]:
+    """
+    Выполняет L2-нормализацию вектора для корректной работы оператора
+    косинусного расстояния (<=>) в pgvector (vector_cosine_ops).
+    """
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm == 0.0:
+        return vec
+    return [x / norm for x in vec]
+
+
+async def get_embedding(text: str) -> list[float]:
+    """
+    Получает L2-нормализованный вектор заданной размерности для одного текста.
+    Вызов защищен семафором параллелизма (asyncio.Semaphore(3)).
+    """
+    async with EMBEDDING_SEMAPHORE:
+        response = await embedding_client.embeddings.create(
+            model=settings.EMBEDDING_MODEL,
+            input=[text],
+            dimensions=settings.EMBEDDING_DIM
+        )
+        return l2_normalize(response.data[0].embedding)
+
+
+async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[list[float]]:
+    """
+    Батчевая генерация эмбеддингов (10-20 текстов в пакете) с контролем частоты запросов
+    через asyncio.Semaphore(3) в строгом соответствии с rules.md (п. 3.3).
+    """
+    if not texts:
+        return []
+
+    results: list[list[float]] = []
+    for i in range(0, len(texts), batch_size):
+        chunk = texts[i:i + batch_size]
+        async with EMBEDDING_SEMAPHORE:
+            response = await embedding_client.embeddings.create(
+                model=settings.EMBEDDING_MODEL,
+                input=chunk,
+                dimensions=settings.EMBEDDING_DIM
+            )
+            # Сортируем по исходному индексу для гарантии сохранения порядка
+            ordered_data = sorted(response.data, key=lambda item: item.index)
+            results.extend([l2_normalize(item.embedding) for item in ordered_data])
+
+    return results
