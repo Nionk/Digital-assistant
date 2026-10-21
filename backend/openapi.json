@@ -1,0 +1,1525 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SKART AI Assistant API",
+    "description": "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании для ГК «СКАРТ». Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам.",
+    "version": "0.1.0-demo"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/clients": {
+      "get": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Список клиентов менеджера и алерты горящих дедлайнов Early Bird",
+        "description": "Возвращает список закрепленных за менеджером клиентов со статусами их подборок и панель срочных алертов по мероприятиям, где скидка раннего бронирования сгорает в течение 72 часов.",
+        "operationId": "get_manager_clients_api_manager_clients_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerDashboardOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/clients/{client_id}/match": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Извлечение профиля из заметки (NER), сборка 2 вариантов пакетов и генерация черновика КП",
+        "description": "Принимает заметку менеджера, проводит NER-экстракцию профиля потребностей, выполняет детерминированный подбор двух вариантов пакета (максимальная релевантность и максимальная экономия), добавляет бонусные слоты 'Цена по запросу' и генерирует текст сопроводительного письма.",
+        "operationId": "match_events_for_client_api_manager_clients__client_id__match_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchRequestIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchResponseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/selections/{selection_id}/publish": {
+      "put": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Фиксация выбранного пакета, сохранение текста КП и выпуск публичной ссылки Magic Link",
+        "description": "Атомарно фиксирует утвержденный менеджером вариант пакета, удаляет альтернативный черновик, переводит статус подборки в 'published' и возвращает уникальный UUIDv4 токен витрины.",
+        "operationId": "publish_selection_api_manager_selections__selection_id__publish_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "selection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Selection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSelectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishSelectionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/s/{magic_token}": {
+      "get": {
+        "tags": [
+          "Client Public Showcase (Magic Link)"
+        ],
+        "summary": "Получение персональной витрины клиента по защищенной ссылке Magic Link",
+        "description": "Публичный маршрут без авторизации. Доступ осуществляется строго по криптостойкому UUIDv4 токену. Возвращает сопроводительное письмо, сводную плашку бюджета, карточки мероприятий и чипсы быстрых вопросов FAQ.",
+        "operationId": "get_public_showcase_api_public_s__magic_token__get",
+        "parameters": [
+          {
+            "name": "magic_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Magic Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShowcaseViewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/s/{magic_token}/items/{item_id}/react": {
+      "post": {
+        "tags": [
+          "Client Public Showcase (Magic Link)"
+        ],
+        "summary": "Фиксация реакции клиента на карточку события и мгновенный пуш менеджеру в Telegram",
+        "description": "Сохраняет реакцию клиента ('interested' 👍 или 'rejected' 👎) и опциональный комментарий, а также инициирует отправку уведомления персональному менеджеру.",
+        "operationId": "react_to_showcase_item_api_public_s__magic_token__items__item_id__react_post",
+        "parameters": [
+          {
+            "name": "magic_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Magic Token"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientReactionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReactionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/s/{magic_token}/events/{event_id}/ask": {
+      "post": {
+        "tags": [
+          "Client Public Showcase (Magic Link)"
+        ],
+        "summary": "Изолированный RAG-ответ клиенту по регламенту конкретного события или эскалация в Telegram",
+        "description": "Принимает вопрос клиента по конкретному мероприятию пакета. Если ответ присутствует в регламенте, возвращает подтвержденный факт с цитатой. Если данных нет, фиксирует обращение и эскалирует в Telegram менеджеру.",
+        "operationId": "ask_event_regulation_question_api_public_s__magic_token__events__event_id__ask_post",
+        "parameters": [
+          {
+            "name": "magic_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Magic Token"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRegulationQuestionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskRegulationQuestionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AskRegulationQuestionIn": {
+        "properties": {
+          "question_text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Question Text",
+            "description": "Текст вопроса клиента или текст выбранного быстрого чипса",
+            "examples": [
+              "Что входит в рекомендованный тариф?"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_text"
+        ],
+        "title": "AskRegulationQuestionIn",
+        "description": "Вопрос клиента по регламенту конкретного мероприятия."
+      },
+      "AskRegulationQuestionOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID мероприятия"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text",
+            "description": "Исходный вопрос клиента"
+          },
+          "is_answer_found": {
+            "type": "boolean",
+            "title": "Is Answer Found",
+            "description": "True — точный ответ найден в тексте программы; False — информации нет, вопрос эскалирован менеджеру"
+          },
+          "answer_text": {
+            "type": "string",
+            "title": "Answer Text",
+            "description": "Сформулированный ответ ИИ по регламенту либо вежливое уведомление о передаче вопроса менеджеру"
+          },
+          "source_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote",
+            "description": "Цитата из официального регламента, подтверждающая ответ (защита от галлюцинаций)"
+          },
+          "from_cache": {
+            "type": "boolean",
+            "title": "From Cache",
+            "description": "True, если ответ получен мгновенно из PostgreSQL таблицы llm_cache",
+            "default": false
+          },
+          "escalated_to_telegram": {
+            "type": "boolean",
+            "title": "Escalated To Telegram",
+            "description": "True, если неотвеченный вопрос отправлен в виде пуша в Telegram менеджеру",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "question_text",
+          "is_answer_found",
+          "answer_text"
+        ],
+        "title": "AskRegulationQuestionOut",
+        "description": "Ответ ИИ-ассистента по регламенту события (изолированный RAG)."
+      },
+      "BundleEventItemOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID события в таблице events"
+          },
+          "canonical_title": {
+            "type": "string",
+            "title": "Canonical Title",
+            "description": "Официальное название форума/сессии"
+          },
+          "event_format": {
+            "type": "string",
+            "enum": [
+              "roundtable",
+              "business_breakfast",
+              "forum",
+              "conference",
+              "session"
+            ],
+            "title": "Event Format",
+            "description": "Формат проведения"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "description": "Город проведения в именительном падеже (None, если строго онлайн)"
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "description": "Признак онлайн-формата мероприятия",
+            "default": false
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue",
+            "description": "Площадка, отель, адрес или платформа трансляции"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date",
+            "description": "Дата начала (YYYY-MM-DD)"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date",
+            "description": "Дата окончания (YYYY-MM-DD)"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Themes",
+            "description": "Список отраслевых тегов"
+          },
+          "recommended_tariff": {
+            "$ref": "#/components/schemas/TariffOptionOut",
+            "description": "Тариф, рассчитанный алгоритмом в рамках бюджета"
+          },
+          "available_tariffs": {
+            "items": {
+              "$ref": "#/components/schemas/TariffOptionOut"
+            },
+            "type": "array",
+            "title": "Available Tariffs",
+            "description": "Все тарифы события, позволяющие менеджеру вручную переключить роль в UI"
+          },
+          "ai_rationale": {
+            "type": "string",
+            "title": "Ai Rationale",
+            "description": "Обоснование ИИ, какую конкретно бизнес-задачу клиента решает данное мероприятие"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "canonical_title",
+          "event_format",
+          "start_date",
+          "end_date",
+          "recommended_tariff",
+          "ai_rationale"
+        ],
+        "title": "BundleEventItemOut",
+        "description": "Мероприятие, предложенное в составе пакета."
+      },
+      "BundleVariantOut": {
+        "properties": {
+          "bundle_group": {
+            "type": "integer",
+            "title": "Bundle Group",
+            "description": "1 — Максимальное совпадение по темам (RRF), 2 — Оптимальный по экономии бюджета"
+          },
+          "bundle_title": {
+            "type": "string",
+            "title": "Bundle Title",
+            "description": "Заголовок пакета для вкладки в интерфейсе менеджера"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BundleEventItemOut"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Список мероприятий пакета"
+          },
+          "total_actual_price": {
+            "type": "number",
+            "title": "Total Actual Price",
+            "description": "Итоговая актуальная стоимость всего пакета в рублях"
+          },
+          "total_base_price": {
+            "type": "number",
+            "title": "Total Base Price",
+            "description": "Стоимость пакета без учета скидок раннего бронирования"
+          },
+          "total_savings": {
+            "type": "number",
+            "title": "Total Savings",
+            "description": "Суммарная экономия по скидкам Early Bird в рублях"
+          },
+          "earliest_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earliest Deadline",
+            "description": "Ближайшая дата сгорания скидки среди событий пакета"
+          },
+          "is_over_budget_tolerance": {
+            "type": "boolean",
+            "title": "Is Over Budget Tolerance",
+            "description": "True, если пакет превышает бюджет клиента в пределах допустимых +10% (требует согласования)",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "bundle_group",
+          "bundle_title",
+          "items",
+          "total_actual_price",
+          "total_base_price",
+          "total_savings"
+        ],
+        "title": "BundleVariantOut",
+        "description": "Один из сгенерированных вариантов пакета мероприятий."
+      },
+      "BurningDeadlineOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID мероприятия в БД"
+          },
+          "event_title": {
+            "type": "string",
+            "title": "Event Title",
+            "description": "Каноническое название мероприятия"
+          },
+          "early_bird_deadline": {
+            "type": "string",
+            "format": "date",
+            "title": "Early Bird Deadline",
+            "description": "Дата сгорания скидки Early Bird"
+          },
+          "potential_savings": {
+            "type": "number",
+            "title": "Potential Savings",
+            "description": "Сумма потери скидки в рублях при пропуске дедлайна"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "event_title",
+          "early_bird_deadline",
+          "potential_savings"
+        ],
+        "title": "BurningDeadlineOut",
+        "description": "Информация о горящем дедлайне со скидкой Early Bird (< 72 часов)."
+      },
+      "ClientQueryExtracted": {
+        "properties": {
+          "cities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cities",
+            "description": "Канонические названия городов проведения"
+          },
+          "include_online": {
+            "type": "boolean",
+            "title": "Include Online",
+            "description": "Включать ли онлайн-мероприятия (вебинары, трансляции)",
+            "default": true
+          },
+          "date_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date From",
+            "description": "Начало периода поиска (YYYY-MM-DD)"
+          },
+          "date_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date To",
+            "description": "Конец периода поиска (YYYY-MM-DD)"
+          },
+          "total_budget_max": {
+            "type": "number",
+            "title": "Total Budget Max",
+            "description": "Общий потолок бюджета на всю серию в рублях"
+          },
+          "target_events_count": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Target Events Count",
+            "description": "Желаемое число событий в пакете",
+            "default": 3
+          },
+          "preferred_formats": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "roundtable",
+                "business_breakfast",
+                "forum",
+                "conference",
+                "session"
+              ]
+            },
+            "type": "array",
+            "title": "Preferred Formats",
+            "description": "Предпочтительные форматы деловых событий"
+          },
+          "required_roles": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "delegate",
+                "speaker",
+                "sponsor"
+              ]
+            },
+            "type": "array",
+            "title": "Required Roles",
+            "description": "Требуемые форматы участия"
+          },
+          "min_speaker_events": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Min Speaker Events",
+            "description": "На скольких событиях минимум клиент хочет выступить спикером",
+            "default": 0
+          },
+          "themes_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Themes Keywords",
+            "description": "Ключевые отраслевые теги (КРТ, ИЖС, урбанистика, цифровизация)"
+          },
+          "semantic_search_query": {
+            "type": "string",
+            "title": "Semantic Search Query",
+            "description": "Развернутый поисковый запрос для векторного поиска (pgvector cosine ops)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_budget_max",
+          "semantic_search_query"
+        ],
+        "title": "ClientQueryExtracted",
+        "description": "Схема извлечения параметров из свободной заметки менеджера (NER-профайлер).\nПолностью совпадает с контрактом модуля profiler.py."
+      },
+      "ClientReactionIn": {
+        "properties": {
+          "reaction": {
+            "type": "string",
+            "enum": [
+              "interested",
+              "rejected"
+            ],
+            "title": "Reaction",
+            "description": "Реакция: interested (Интересно) или rejected (Заменить/Отклонить)"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment",
+            "description": "Опциональный комментарий клиента (например: 'В эти даты командировка, подберите замену')"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reaction"
+        ],
+        "title": "ClientReactionIn",
+        "description": "Входные данные при клике клиентом кнопки 'Интересно' или 'Заменить'."
+      },
+      "ClientReactionOut": {
+        "properties": {
+          "selection_item_id": {
+            "type": "integer",
+            "title": "Selection Item Id",
+            "description": "ID элемента подборки"
+          },
+          "new_reaction": {
+            "type": "string",
+            "enum": [
+              "interested",
+              "rejected"
+            ],
+            "title": "New Reaction",
+            "description": "Зафиксированная реакция"
+          },
+          "manager_notified": {
+            "type": "boolean",
+            "title": "Manager Notified",
+            "description": "True, если уведомление о реакции успешно отправлено менеджеру в Telegram"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_item_id",
+          "new_reaction",
+          "manager_notified"
+        ],
+        "title": "ClientReactionOut",
+        "description": "Результат сохранения реакции клиента."
+      },
+      "ClientSummaryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "ID клиента"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name",
+            "description": "Название компании клиента (например, ГК Пионер)"
+          },
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person",
+            "description": "Контактное лицо клиента"
+          },
+          "raw_manager_notes": {
+            "type": "string",
+            "title": "Raw Manager Notes",
+            "description": "Последний сохраненный конспект созвона"
+          },
+          "latest_selection_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Selection Id",
+            "description": "ID последней созданной подборки"
+          },
+          "latest_selection_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "published"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Selection Status",
+            "description": "Статус подборки: черновик или опубликована"
+          },
+          "magic_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magic Token",
+            "description": "UUID токен витрины, если подборка опубликована"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company_name",
+          "raw_manager_notes"
+        ],
+        "title": "ClientSummaryOut",
+        "description": "Сводная карточка клиента в сайдбаре менеджера."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ManagerDashboardOut": {
+        "properties": {
+          "clients": {
+            "items": {
+              "$ref": "#/components/schemas/ClientSummaryOut"
+            },
+            "type": "array",
+            "title": "Clients",
+            "description": "Список закрепленных клиентов"
+          },
+          "burning_deadlines": {
+            "items": {
+              "$ref": "#/components/schemas/BurningDeadlineOut"
+            },
+            "type": "array",
+            "title": "Burning Deadlines",
+            "description": "Алерты: мероприятия, у которых скидка Early Bird сгорает менее чем через 72 часа"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clients"
+        ],
+        "title": "ManagerDashboardOut",
+        "description": "Ответ дашборда менеджера: клиенты и горящие дедлайны."
+      },
+      "MatchRequestIn": {
+        "properties": {
+          "raw_manager_notes": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Raw Manager Notes",
+            "description": "Сырой текст заметки менеджера после звонка с клиентом",
+            "examples": [
+              "Созвонились с ГК Пионер. Ищут на ноябрь-декабрь в Москве или СПб 3 мероприятия по КРТ и урбанистике. Хотя бы на одном хотят выступить спикером. Общий бюджет на всё — 400 000 руб."
+            ]
+          },
+          "override_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientQueryExtracted"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Передается, если менеджер скорректировал распознанные теги в UI и нажал 'Пересобрать пакеты'"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw_manager_notes"
+        ],
+        "title": "MatchRequestIn",
+        "description": "Входной запрос на подбор пакетов деловых мероприятий."
+      },
+      "MatchResponseOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id",
+            "description": "ID созданного черновика подборки в таблице selections"
+          },
+          "client_id": {
+            "type": "integer",
+            "title": "Client Id",
+            "description": "ID клиента"
+          },
+          "extracted_profile": {
+            "$ref": "#/components/schemas/ClientQueryExtracted",
+            "description": "Извлеченный из заметки профиль потребностей"
+          },
+          "bundle_variants": {
+            "items": {
+              "$ref": "#/components/schemas/BundleVariantOut"
+            },
+            "type": "array",
+            "title": "Bundle Variants",
+            "description": "Два взаимоисключающих варианта пакета (Вариант №1 и Вариант №2)"
+          },
+          "bonus_on_request_items": {
+            "items": {
+              "$ref": "#/components/schemas/BundleEventItemOut"
+            },
+            "type": "array",
+            "title": "Bonus On Request Items",
+            "description": "Бонусный слот: профильные мероприятия с тарифом 'Цена по запросу' (base_price IS NULL)"
+          },
+          "generated_pitch_text": {
+            "type": "string",
+            "title": "Generated Pitch Text",
+            "description": "Сгенерированный ИИ текст приветственного КП с подтвержденными Python-цифрами"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id",
+          "client_id",
+          "extracted_profile",
+          "bundle_variants",
+          "generated_pitch_text"
+        ],
+        "title": "MatchResponseOut",
+        "description": "Результат подбора: извлеченный профиль, два варианта пакета, бонусный слот и черновик КП."
+      },
+      "PublishSelectionIn": {
+        "properties": {
+          "selected_bundle_group": {
+            "type": "integer",
+            "title": "Selected Bundle Group",
+            "description": "Номер выбранного пакета, который утверждается (1 или 2)",
+            "default": 1
+          },
+          "final_items": {
+            "items": {
+              "$ref": "#/components/schemas/SelectedEventTariffPairIn"
+            },
+            "type": "array",
+            "title": "Final Items",
+            "description": "Итоговый список пар (event_id, tariff_id), входящих в витрину клиента"
+          },
+          "final_pitch_text": {
+            "type": "string",
+            "title": "Final Pitch Text",
+            "description": "Финальный текст сопроводительного письма, отредактированный менеджером"
+          }
+        },
+        "type": "object",
+        "required": [
+          "final_items",
+          "final_pitch_text"
+        ],
+        "title": "PublishSelectionIn",
+        "description": "Запрос на фиксацию и публикацию персональной витрины клиенту."
+      },
+      "PublishSelectionOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id",
+            "description": "ID опубликованной подборки"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "published"
+            ],
+            "const": "published",
+            "title": "Status",
+            "default": "published"
+          },
+          "magic_token": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Magic Token",
+            "description": "Криптографический UUIDv4 токен публичной витрины"
+          },
+          "public_showcase_url": {
+            "type": "string",
+            "title": "Public Showcase Url",
+            "description": "Относительный URL витрины для копирования (/s/{magic_token})"
+          },
+          "total_package_price": {
+            "type": "number",
+            "title": "Total Package Price",
+            "description": "Итоговая сумма утвержденного пакета"
+          },
+          "total_package_savings": {
+            "type": "number",
+            "title": "Total Package Savings",
+            "description": "Суммарная экономия по раннему бронированию"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id",
+          "magic_token",
+          "public_showcase_url",
+          "total_package_price",
+          "total_package_savings"
+        ],
+        "title": "PublishSelectionOut",
+        "description": "Результат публикации: ссылка Magic Link и параметры опубликованной витрины."
+      },
+      "SelectedEventTariffPairIn": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID события"
+          },
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id",
+            "description": "ID выбранного тарифа"
+          },
+          "ai_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Rationale",
+            "description": "Отредактированное менеджером обоснование"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "tariff_id"
+        ],
+        "title": "SelectedEventTariffPairIn",
+        "description": "Пара (мероприятие, выбранный тариф), утвержденная менеджером для публикации."
+      },
+      "ShowcaseEventItemOut": {
+        "properties": {
+          "selection_item_id": {
+            "type": "integer",
+            "title": "Selection Item Id",
+            "description": "ID строки в таблице selection_items (передается при отправке реакции)"
+          },
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID события"
+          },
+          "canonical_title": {
+            "type": "string",
+            "title": "Canonical Title",
+            "description": "Официальное название мероприятия"
+          },
+          "event_format": {
+            "type": "string",
+            "title": "Event Format",
+            "description": "Формат: roundtable, business_breakfast, forum, conference, session"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "description": "Город проведения в именительном падеже (None для онлайн)"
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "description": "Признак онлайн-формата (вебинар, трансляция)",
+            "default": false
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue",
+            "description": "Площадка, отель или онлайн-платформа"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date",
+            "description": "Дата начала проведения (YYYY-MM-DD)"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date",
+            "description": "Дата окончания проведения (YYYY-MM-DD)"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Краткое саммари для карточки (2-3 предложения о ключевых темах)"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Themes",
+            "description": "Список отраслевых тем"
+          },
+          "tariff_name": {
+            "type": "string",
+            "title": "Tariff Name",
+            "description": "Название рекомендованного тарифа"
+          },
+          "participation_role": {
+            "type": "string",
+            "enum": [
+              "delegate",
+              "speaker",
+              "sponsor"
+            ],
+            "title": "Participation Role",
+            "description": "Роль участия"
+          },
+          "actual_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Price",
+            "description": "Актуальная стоимость с НДС (None = По запросу)"
+          },
+          "base_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Price",
+            "description": "Базовая стоимость без скидок"
+          },
+          "early_bird_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Early Bird Deadline",
+            "description": "Дата окончания скидки Early Bird"
+          },
+          "savings": {
+            "type": "number",
+            "title": "Savings",
+            "description": "Сумма экономии в рублях",
+            "default": 0.0
+          },
+          "included_benefits": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included Benefits",
+            "description": "Что входит в пакет участия"
+          },
+          "ai_rationale": {
+            "type": "string",
+            "title": "Ai Rationale",
+            "description": "Персональное пояснение ИИ, какую задачу компании решает это мероприятие"
+          },
+          "client_reaction": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "interested",
+              "rejected"
+            ],
+            "title": "Client Reaction",
+            "description": "Статус реакции клиента: ожидает ответа, интересно, или отклонено",
+            "default": "pending"
+          },
+          "client_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Comment",
+            "description": "Текстовый комментарий клиента к реакции"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_item_id",
+          "event_id",
+          "canonical_title",
+          "event_format",
+          "start_date",
+          "end_date",
+          "summary",
+          "tariff_name",
+          "participation_role",
+          "ai_rationale"
+        ],
+        "title": "ShowcaseEventItemOut",
+        "description": "Карточка мероприятия на интерактивной витрине клиента."
+      },
+      "ShowcaseViewOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id",
+            "description": "ID подборки"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name",
+            "description": "Название компании клиента"
+          },
+          "manager_full_name": {
+            "type": "string",
+            "title": "Manager Full Name",
+            "description": "ФИО персонального менеджера сопровождения"
+          },
+          "pitch_text": {
+            "type": "string",
+            "title": "Pitch Text",
+            "description": "Приветственное сопроводительное письмо от менеджера"
+          },
+          "total_events_count": {
+            "type": "integer",
+            "title": "Total Events Count",
+            "description": "Количество мероприятий в пакете"
+          },
+          "total_actual_price": {
+            "type": "number",
+            "title": "Total Actual Price",
+            "description": "Итоговая сумма пакета к оплате"
+          },
+          "total_savings": {
+            "type": "number",
+            "title": "Total Savings",
+            "description": "Суммарная экономия клиента при своевременном бронировании"
+          },
+          "min_early_bird_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Early Bird Deadline",
+            "description": "Ближайшая дата дедлайна, до которой необходимо согласовать пакет"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShowcaseEventItemOut"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Мероприятия утвержденного пакета"
+          },
+          "faq_quick_chips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Faq Quick Chips",
+            "description": "3 фиксированные кнопки быстрых вопросов для выдвижной панели чата"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id",
+          "company_name",
+          "manager_full_name",
+          "pitch_text",
+          "total_events_count",
+          "total_actual_price",
+          "total_savings",
+          "items"
+        ],
+        "title": "ShowcaseViewOut",
+        "description": "Полная структура данных для отрисовки витрины клиента по ссылке /s/{magic_token}.\nВключает приветственное письмо, сводную плашку бюджета, карточки и чипсы FAQ."
+      },
+      "TariffOptionOut": {
+        "properties": {
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id",
+            "description": "ID тарифа в таблице event_tariffs"
+          },
+          "tariff_name": {
+            "type": "string",
+            "title": "Tariff Name",
+            "description": "Название тарифа (например, 'Пакет Спикер сессии')"
+          },
+          "participation_role": {
+            "type": "string",
+            "enum": [
+              "delegate",
+              "speaker",
+              "sponsor"
+            ],
+            "title": "Participation Role",
+            "description": "Роль участия"
+          },
+          "base_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Price",
+            "description": "Базовая цена с НДС (None = По запросу)"
+          },
+          "early_bird_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Early Bird Price",
+            "description": "Цена Early Bird с НДС"
+          },
+          "early_bird_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Early Bird Deadline",
+            "description": "Дедлайн действия цены раннего бронирования"
+          },
+          "actual_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Price",
+            "description": "Актуальная цена на сегодня с учетом даты Early Bird"
+          },
+          "savings": {
+            "type": "number",
+            "title": "Savings",
+            "description": "Экономия в рублях при бронировании до дедлайна Early Bird",
+            "default": 0.0
+          },
+          "included_benefits": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included Benefits",
+            "description": "Что включено в тариф (билеты, нетворкинг, опции)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_id",
+          "tariff_name",
+          "participation_role"
+        ],
+        "title": "TariffOptionOut",
+        "description": "Тариф участия в мероприятии."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
