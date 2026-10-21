@@ -2,8 +2,8 @@ import re
 
 CITY_ALIASES = {
    
-    "Москва": ["москва", "мск", "msk", "moscow", "г. москва", "московская область", "мо", "г москва", "москва г"],
-    "Санкт-Петербург": ["санкт-петербург", "спб", "питер", "saint petersburg", "st petersburg", "г. спб", "санкт петербург", "петербург", "ленинградская область", "лО"],
+    "Москва": ["москва", "мск", "msk", "moscow", "г. москва", "московская область", "мо", "г москва", "москва г", "подмосковье", "московская обл"],
+    "Санкт-Петербург": ["санкт-петербург", "спб", "питер", "saint petersburg", "st petersburg", "г. спб", "санкт петербург", "петербург", "ленинградская область", "ло", "ленобласть", "ленинградская обл"],
     "Новосибирск": ["новосибирск", "нск", "новосибирская область", "новосиб"],
     "Екатеринбург": ["екатеринбург", "екб", "свердловская область", "ебург"],
     "Казань": ["казань", "республика татарстан", "татарстан"],
@@ -110,19 +110,58 @@ CITY_ALIASES = {
     "Онлайн": ["онлайн", "online", "вебинар", "web", "интернет", "дистанционно", "zoom", "зум"]
 }
 
-def normalize_city(raw_city: str | None) -> str | None:
 
+def _clean_key(text: str) -> str:
+    """Очищает строку для единообразного поиска по словарю синонимов."""
+    s = text.lower().strip()
+    s = re.sub(r'^(г\.|г\b|гор\.|гор\b|город\b|п\.|пос\.|поселок\b)\s*', '', s)
+    s = s.replace('.', ' ').replace(',', ' ')
+    return " ".join(s.split())
+
+# Предварительно скомпилированный обратный индекс: нормализованный синоним -> Каноническое название
+_REVERSE_CITY_MAP: dict[str, str] = {}
+for canonical_name, aliases in CITY_ALIASES.items():
+    _REVERSE_CITY_MAP[_clean_key(canonical_name)] = canonical_name
+    _REVERSE_CITY_MAP[canonical_name.lower().strip()] = canonical_name
+    for alias in aliases:
+        _REVERSE_CITY_MAP[_clean_key(alias)] = canonical_name
+        _REVERSE_CITY_MAP[alias.lower().strip()] = canonical_name
+
+
+def normalize_city(raw_city: str | None) -> str | None:
+    """
+    Канонизирует название города:
+    - очищает префиксы ('г.', 'гор.', 'г ', 'город')
+    - сопоставляет синонимы и агломерации ('спб' -> 'Санкт-Петербург', 'московская область' -> 'Москва')
+    - возвращает каноническое название или форматированное название неизвестного города
+    """
     if not raw_city:
         return None
         
-    clean_city = raw_city.lower().strip()
-    
-    clean_city = re.sub(r'^(г\.|город)\s*', '', clean_city)
-    clean_city = clean_city.replace('.', '').replace(',', '')
-    clean_city = " ".join(clean_city.split())
+    cleaned = raw_city.strip()
+    if not cleaned:
+        return None
 
-    for canonical_name, aliases in CITY_ALIASES.items():
-        if clean_city in aliases or clean_city == canonical_name.lower():
-            return canonical_name
-            
-    return raw_city.strip().title()
+    lookup_key = _clean_key(cleaned)
+    if not lookup_key:
+        return None
+
+    # Прямой поиск в карте синонимов
+    if lookup_key in _REVERSE_CITY_MAP:
+        return _REVERSE_CITY_MAP[lookup_key]
+
+    # Поиск с заменой дефисов на пробелы (на случай "санкт петербург")
+    lookup_no_hyphen = lookup_key.replace('-', ' ')
+    if lookup_no_hyphen in _REVERSE_CITY_MAP:
+        return _REVERSE_CITY_MAP[lookup_no_hyphen]
+
+    # Фолбэк для городов вне базы: удаляем префиксы и форматируем регистр с сохранением дефисов
+    # Например: "г. Сколково" -> "Сколково", "гор. суздаль" -> "Суздаль"
+    clean_fallback = re.sub(r'^(г\.|г\b|гор\.|гор\b|город\b|п\.|пос\.|поселок\b)\s*', '', cleaned, flags=re.IGNORECASE).strip()
+    clean_fallback = clean_fallback.strip('., ')
+
+    def _capitalize_part(word: str) -> str:
+        parts = word.split('-')
+        return '-'.join(p.capitalize() for p in parts)
+
+    return ' '.join(_capitalize_part(w) for w in clean_fallback.split())
