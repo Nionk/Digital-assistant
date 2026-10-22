@@ -62,6 +62,9 @@ artifact.md
 artefact.md
 plan.md
 rules.md
-seed_data.json
+seed_data*.json
+json_example*.json
+prompt_*.md
 CODEBASE_GUIDE.md
 d_05.md
+get_data.md
