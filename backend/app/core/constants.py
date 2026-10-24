@@ -164,4 +164,16 @@ def normalize_city(raw_city: str | None) -> str | None:
         parts = word.split('-')
         return '-'.join(p.capitalize() for p in parts)
 
-    return ' '.join(_capitalize_part(w) for w in clean_fallback.split())
+    return ' '.join(_capitalize_part(w) for w in clean_fallback.split())
+
+
+# ============================================================================
+# Фиксированные чипсы быстрых вопросов для витрины клиента и кэша llm_cache
+# Синхронизируют frontend /ask, api/showcase.py и schemas/event_ingestion.py
+# ============================================================================
+FAQ_QUICK_CHIPS: list[str] = [
+    "Что входит в рекомендованный тариф?",
+    "Какие условия раннего бронирования и дедлайны?",
+    "Формат участия и требования к спикеру",
+]
+

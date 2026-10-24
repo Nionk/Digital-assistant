@@ -52,12 +52,14 @@ async def get_embedding(text: str) -> list[float]:
     """
     Получает L2-нормализованный вектор заданной размерности для одного текста.
     Вызов защищен семафором параллелизма (asyncio.Semaphore(3)).
+    Явно передается encoding_format="float", предотвращая возврат base64-строк.
     """
     async with EMBEDDING_SEMAPHORE:
         response = await embedding_client.embeddings.create(
             model=settings.EMBEDDING_MODEL,
             input=[text],
-            dimensions=settings.EMBEDDING_DIM
+            dimensions=settings.EMBEDDING_DIM,
+            encoding_format="float",
         )
         return l2_normalize(response.data[0].embedding)
 
@@ -66,6 +68,7 @@ async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[l
     """
     Батчевая генерация эмбеддингов (10-20 текстов в пакете) с контролем частоты запросов
     через asyncio.Semaphore(3) в строгом соответствии с rules.md (п. 3.3).
+    Явно передается encoding_format="float", предотвращая возврат base64-строк.
     """
     if not texts:
         return []
@@ -77,7 +80,8 @@ async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[l
             response = await embedding_client.embeddings.create(
                 model=settings.EMBEDDING_MODEL,
                 input=chunk,
-                dimensions=settings.EMBEDDING_DIM
+                dimensions=settings.EMBEDDING_DIM,
+                encoding_format="float",
             )
             # Сортируем по исходному индексу для гарантии сохранения порядка
             ordered_data = sorted(response.data, key=lambda item: item.index)

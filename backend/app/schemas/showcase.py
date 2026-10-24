@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
+from app.core.constants import FAQ_QUICK_CHIPS
 
 
 # ============================================================================
@@ -68,11 +69,7 @@ class ShowcaseViewOut(BaseModel):
 
     items: list[ShowcaseEventItemOut] = Field(..., description="Мероприятия утвержденного пакета")
     faq_quick_chips: list[str] = Field(
-        default_factory=lambda: [
-            "Что входит в рекомендованный тариф?",
-            "Какие условия раннего бронирования и дедлайны?",
-            "Формат участия и требования к спикеру"
-        ],
+        default_factory=lambda: list(FAQ_QUICK_CHIPS),
         description="3 фиксированные кнопки быстрых вопросов для выдвижной панели чата"
     )
 
