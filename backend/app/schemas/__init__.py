@@ -20,6 +20,11 @@ from app.schemas.showcase import (
     AskRegulationQuestionIn,
     AskRegulationQuestionOut,
 )
+from app.schemas.event_ingestion import (
+    TariffExtracted,
+    FAQCacheItem,
+    EventIngestionSchema,
+)
 
 __all__ = [
     "BurningDeadlineOut",
@@ -40,4 +45,7 @@ __all__ = [
     "ClientReactionOut",
     "AskRegulationQuestionIn",
     "AskRegulationQuestionOut",
+    "TariffExtracted",
+    "FAQCacheItem",
+    "EventIngestionSchema",
 ]

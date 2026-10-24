@@ -176,6 +176,24 @@ async def seed_events_placeholder(session: AsyncSession):
     print("[INFO] Наполнение 35 мероприятиями (пункты 1–4 D-04) ожидает формирования финального seed_data.json.")
 
 
+from sqlalchemy import text
+
+
+async def sync_database_sequences(session: AsyncSession):
+    """
+    Синхронизирует последовательности (sequence) автоинкремента после вставки явных ID.
+    Предотвращает UniqueViolationError при последующих автоматических INSERT без явного id.
+    """
+    for table in ("users", "clients", "events", "event_tariffs", "selections"):
+        try:
+            await session.execute(
+                text(f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE((SELECT MAX(id) FROM {table}), 1), true);")
+            )
+        except Exception:
+            # Игнорируем в средах без поддержки pg_get_serial_sequence (например, SQLite в тестах)
+            pass
+
+
 async def seed_all():
     """Главная функция запуска сидинга базы данных."""
     print("=" * 70)
@@ -192,6 +210,9 @@ async def seed_all():
 
             # 3. Информирование о пунктах 1–4
             await seed_events_placeholder(session)
+
+            # 4. Синхронизация последовательностей (Bug 2 fix)
+            await sync_database_sequences(session)
 
     print("=" * 70)
     print(f"Сидинг успешно завершен! Создано/проверено: 1 менеджер, {len(clients)} клиента.")

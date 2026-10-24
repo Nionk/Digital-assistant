@@ -16,7 +16,7 @@ load_env_simple()
 async def test_embedding():
     api_key = os.getenv("EMBEDDING_API_KEY")
     base_url = os.getenv("EMBEDDING_BASE_URL", "https://api.jina.ai/v1")
-    model = os.getenv("EMBEDDING_MODEL", "jina-embeddings-v5-omni-small")
+    model = os.getenv("EMBEDDING_MODEL", "jina-embeddings-v3")
     dim = int(os.getenv("EMBEDDING_DIM", 1024))
     
     print("\n--- 1. Тестирование Embedding Gateway (Jina AI) ---")
@@ -29,7 +29,8 @@ async def test_embedding():
         resp = await client.embeddings.create(
             model=model,
             input=["Тест"],
-            dimensions=dim
+            dimensions=dim,
+            encoding_format="float",
         )
         vec = resp.data[0].embedding
         print(f"[OK] Эмбеддинг получен успешно!")
@@ -43,7 +44,7 @@ async def test_embedding():
 async def test_llm():
     api_key = os.getenv("LLM_API_KEY")
     base_url = os.getenv("LLM_BASE_URL", "https://api.ru-openrouter.ru/v1")
-    model = os.getenv("LLM_MODEL", "deepseek/deepseek-v4.1-flash")
+    model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
     
     print("\n--- 2. Тестирование LLM Gateway (Ru-OpenRouter) ---")
     if not api_key:
