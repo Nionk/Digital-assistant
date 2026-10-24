@@ -2,6 +2,7 @@ from datetime import date
 from uuid import UUID
 from fastapi import APIRouter
 
+from app.core.constants import FAQ_QUICK_CHIPS
 from app.schemas.showcase import (
     ShowcaseViewOut,
     ShowcaseEventItemOut,
@@ -116,11 +117,7 @@ async def get_public_showcase(magic_token: UUID) -> ShowcaseViewOut:
                 client_comment=None,
             ),
         ],
-        faq_quick_chips=[
-            "Что входит в рекомендованный тариф?",
-            "Какие условия раннего бронирования и дедлайны?",
-            "Формат участия и требования к спикеру",
-        ],
+        faq_quick_chips=list(FAQ_QUICK_CHIPS),
     )
 
 

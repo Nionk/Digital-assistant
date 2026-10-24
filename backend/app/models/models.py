@@ -1,6 +1,19 @@
 from datetime import datetime, date
 from typing import List, Optional
-from sqlalchemy import String, Integer, Boolean, Numeric, Text, Date, ForeignKey, Computed, Index, text, CheckConstraint
+from sqlalchemy import (
+    String,
+    Integer,
+    BigInteger,
+    Boolean,
+    Numeric,
+    Text,
+    Date,
+    ForeignKey,
+    Computed,
+    Index,
+    text,
+    CheckConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -14,8 +27,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255))
-    telegram_chat_id: Mapped[Optional[int]] = mapped_column(Numeric) # BIGINT
+    telegram_chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Связи
+    clients: Mapped[List["Client"]] = relationship(back_populates="manager")
 
 class Client(Base):
     __tablename__ = 'clients'
@@ -27,6 +43,10 @@ class Client(Base):
     extracted_profile: Mapped[dict] = mapped_column(JSONB, server_default='{}')
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+    # Связи
+    manager: Mapped[Optional["User"]] = relationship(back_populates="clients")
+    selections: Mapped[List["Selection"]] = relationship(back_populates="client", cascade="all, delete-orphan")
 
 class Event(Base):
     __tablename__ = 'events'
@@ -43,6 +63,10 @@ class Event(Base):
     full_regulation_markdown: Mapped[Optional[str]] = mapped_column(Text)
     themes: Mapped[List[str]] = mapped_column(ARRAY(String), server_default='{}')
     source_urls: Mapped[list] = mapped_column(JSONB, server_default='[]')
+    
+    # Статус полноты данных (ready, needs_enrichment, archived) и предупреждения
+    data_status: Mapped[str] = mapped_column(String(50), server_default='ready', default='ready')
+    missing_data_warnings: Mapped[List[str]] = mapped_column(ARRAY(String), server_default='{}', default=list)
     
     # Генерация tsvector для FTS (Полнотекстовый поиск)
     search_vector: Mapped[str] = mapped_column(
@@ -64,6 +88,11 @@ class Event(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default='true')
     last_scraped_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    # Связи
+    tariffs: Mapped[List["EventTariff"]] = relationship(back_populates="event", cascade="all, delete-orphan", lazy="selectin")
+    chunks: Mapped[List["EventChunk"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+    selection_items: Mapped[List["SelectionItem"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+
 class EventTariff(Base):
     __tablename__ = 'event_tariffs'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -81,6 +110,9 @@ class EventTariff(Base):
     )
 
     included_benefits: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Связи
+    event: Mapped["Event"] = relationship(back_populates="tariffs")
 
 class EventChunk(Base):
     __tablename__ = 'event_chunks'
@@ -103,6 +135,9 @@ class EventChunk(Base):
 
     embedding = mapped_column(Vector(settings.EMBEDDING_DIM), nullable=False)
 
+    # Связи
+    event: Mapped["Event"] = relationship(back_populates="chunks")
+
 class Selection(Base):
     __tablename__ = 'selections'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -112,6 +147,11 @@ class Selection(Base):
     generated_pitch_text: Mapped[Optional[str]] = mapped_column(Text)
     total_budget_limit: Mapped[float] = mapped_column(Numeric(12, 2))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Связи
+    client: Mapped["Client"] = relationship(back_populates="selections")
+    items: Mapped[List["SelectionItem"]] = relationship(back_populates="selection", cascade="all, delete-orphan", lazy="selectin")
+    chat_messages: Mapped[List["ChatMessage"]] = relationship(back_populates="selection", cascade="all, delete-orphan")
 
 class SelectionItem(Base):
     __tablename__ = 'selection_items'
@@ -125,6 +165,11 @@ class SelectionItem(Base):
     client_comment: Mapped[Optional[str]] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
+    # Связи
+    selection: Mapped["Selection"] = relationship(back_populates="items")
+    event: Mapped["Event"] = relationship(back_populates="selection_items")
+    recommended_tariff: Mapped[Optional["EventTariff"]] = relationship()
+
 class ChatMessage(Base):
     __tablename__ = 'chat_messages'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -135,9 +180,16 @@ class ChatMessage(Base):
     needs_manager_attention: Mapped[bool] = mapped_column(Boolean, server_default='false')
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    # Связи
+    selection: Mapped["Selection"] = relationship(back_populates="chat_messages")
+    event: Mapped["Event"] = relationship()
+
 class LLMCache(Base):
     __tablename__ = 'llm_cache'
     cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_id: Mapped[Optional[int]] = mapped_column(ForeignKey('events.id', ondelete='CASCADE'))
     response_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Связи
+    event: Mapped[Optional["Event"]] = relationship()
