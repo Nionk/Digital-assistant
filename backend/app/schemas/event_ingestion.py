@@ -24,13 +24,10 @@ class TariffExtracted(BaseModel):
 
 class FAQCacheItem(BaseModel):
     """Готовый ответ на типовой вопрос для предзаполнения llm_cache."""
-    question: Literal[
-        "Что входит в рекомендованный тариф?",
-        "Какие условия раннего бронирования и дедлайны?",
-        "Формат участия и требования к спикеру",
-    ]
+    question: str = Field(..., description="Вопрос по регламенту мероприятия (нормализуется к каноническому чипсу при совпадении).")
     answer: str = Field(..., description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.")
     source_quote: str = Field(..., description="Дословная цитата из регламента, подтверждающая ответ.")
+
 
     @model_validator(mode="before")
     @classmethod
