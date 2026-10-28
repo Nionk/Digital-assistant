@@ -1,96 +1,140 @@
-import sys
 import unittest
+import asyncio
+import json
+import math
+import sys
 from pathlib import Path
-import bcrypt
+from datetime import date
 
-# Добавляем backend в sys.path
+# Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.seed_db import (
-    DEFAULT_MANAGER_DATA,
-    TEST_CLIENTS_DATA,
-    hash_password,
-)
-from app.models.models import User, Client
-from app.core.security import get_current_manager
+from sqlalchemy import select, func
+
+from app.core.database import async_session_maker
+from app.models.models import User, Client, Event, EventTariff, LLMCache
+from app.core.config import settings
 
 
-class TestD04SeedDataUnit(unittest.IsolatedAsyncioTestCase):
+
+class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
     """
-    Юнит-тесты валидации данных и логики сидинга менеджера и клиентов (DoD D-04 п.5).
+    Интеграционный тест верификации Задачи D-04:
+    «Золотой датасет» девелоперских мероприятий, тарифов, векторов и кэша регламентов.
     """
 
-    def test_01_default_manager_data_spec(self):
-        """Проверка спецификации дефолтного менеджера: совпадение с get_current_manager stub."""
-        self.assertEqual(DEFAULT_MANAGER_DATA["id"], 1)
-        self.assertEqual(DEFAULT_MANAGER_DATA["email"], "manager@skart.ru")
-        self.assertIn("Анна Соколова", DEFAULT_MANAGER_DATA["full_name"])
-        self.assertIsNotNone(DEFAULT_MANAGER_DATA["telegram_chat_id"])
+    async def asyncTearDown(self):
+        from app.core.database import engine
+        await engine.dispose()
 
-        # Проверка хэширования пароля через bcrypt
-        raw_password = DEFAULT_MANAGER_DATA["password"]
-        hashed = hash_password(raw_password)
-        self.assertTrue(hashed.startswith("$2b$") or hashed.startswith("$2a$"))
-        self.assertTrue(bcrypt.checkpw(raw_password.encode("utf-8"), hashed.encode("utf-8")))
 
-    async def test_02_manager_security_stub_alignment(self):
-        """Проверка согласованности дефолтного менеджера с функцией get_current_manager."""
-        stub_manager = await get_current_manager()
-        self.assertEqual(stub_manager.id, DEFAULT_MANAGER_DATA["id"])
-        self.assertEqual(stub_manager.email, DEFAULT_MANAGER_DATA["email"])
-        self.assertEqual(stub_manager.telegram_chat_id, DEFAULT_MANAGER_DATA["telegram_chat_id"])
+    async def test_01_default_manager_and_clients(self):
+        """Проверка наличия ведущего менеджера (id=1) и 3 тестовых клиентов."""
+        async with async_session_maker() as s:
 
-    def test_03_test_clients_data_spec(self):
-        """Проверка структуры 3 тестовых клиентов (DoD D-04 п.5)."""
-        self.assertEqual(len(TEST_CLIENTS_DATA), 3, "Должно быть ровно 3 тестовых клиента")
+            # Менеджер
+            manager = await s.get(User, 1)
+            self.assertIsNotNone(manager, "Дефолтный менеджер с ID=1 должен существовать")
+            self.assertEqual(manager.email, "manager@skart.ru")
 
-        expected_companies = ["ГК «Пионер»", "Девелопмент-Юг", "Брусника. Сибирь"]
-        actual_companies = [c["company_name"] for c in TEST_CLIENTS_DATA]
-        self.assertEqual(actual_companies, expected_companies)
+            # Клиенты
+            stmt = select(Client)
+            res = await s.execute(stmt)
+            clients = res.scalars().all()
+            self.assertGreaterEqual(len(clients), 3, "В базе должно быть минимум 3 тестовых клиента")
 
-        for client in TEST_CLIENTS_DATA:
-            self.assertIn("id", client)
-            self.assertIn("company_name", client)
-            self.assertIn("contact_person", client)
-            self.assertIn("raw_manager_notes", client)
-            self.assertIn("extracted_profile", client)
+            client_ids = {c.id for c in clients}
+            self.assertTrue({1, 2, 3}.issubset(client_ids), "Клиенты с ID 1, 2, 3 обязаны присутствовать")
 
-            # Проверка, что заметка содержательна (>= 30 символов)
-            self.assertGreater(len(client["raw_manager_notes"]), 30)
+    async def test_02_events_count_and_embeddings(self):
+        """Проверка наличия 15 событий с 1024-мерными L2-нормализованными эмбеддингами."""
+        async with async_session_maker() as s:
+            stmt = select(Event).where(Event.is_active == True)
+            res = await s.execute(stmt)
+            events = res.scalars().all()
 
-            # Проверка извлеченного профиля
-            profile = client["extracted_profile"]
-            self.assertIn("cities", profile)
-            self.assertIn("total_budget_max", profile)
-            self.assertGreater(profile["total_budget_max"], 0)
-            self.assertIn("target_events_count", profile)
-            self.assertIn("required_roles", profile)
-            self.assertIn("themes_keywords", profile)
-            self.assertIn("semantic_search_query", profile)
+            self.assertEqual(len(events), 15, "В базе должно быть ровно 15 активных мероприятий из seed_data.json")
 
-    def test_04_orm_models_instantiation(self):
-        """Проверка создания ORM объектов User и Client без исключений типов."""
-        manager_user = User(
-            id=DEFAULT_MANAGER_DATA["id"],
-            email=DEFAULT_MANAGER_DATA["email"],
-            password_hash=hash_password(DEFAULT_MANAGER_DATA["password"]),
-            full_name=DEFAULT_MANAGER_DATA["full_name"],
-            telegram_chat_id=DEFAULT_MANAGER_DATA["telegram_chat_id"],
-        )
-        self.assertEqual(manager_user.id, 1)
-        self.assertEqual(manager_user.email, "manager@skart.ru")
+            for e in events:
+                self.assertIsNotNone(e.summary_embedding, f"Событие {e.id} '{e.canonical_title}' должно иметь эмбеддинг")
+                emb = list(e.summary_embedding)
+                self.assertEqual(
+                    len(emb),
+                    settings.EMBEDDING_DIM,
+                    f"Размерность эмбеддинга должна быть {settings.EMBEDDING_DIM}"
+                )
+                # Проверка L2-нормализации: длина вектора близка к 1.0
+                norm = math.sqrt(sum(x * x for x in emb))
+                self.assertAlmostEqual(norm, 1.0, places=3, msg="Эмбеддинг должен быть L2-нормализован для vector_cosine_ops")
 
-        for client_dict in TEST_CLIENTS_DATA:
-            client = Client(
-                id=client_dict["id"],
-                manager_id=manager_user.id,
-                company_name=client_dict["company_name"],
-                contact_person=client_dict["contact_person"],
-                raw_manager_notes=client_dict["raw_manager_notes"],
-                extracted_profile=client_dict["extracted_profile"],
-            )
-            self.assertEqual(client.manager_id, 1)
-            self.assertIsNotNone(client.company_name)
+                # Проверка дат
+                self.assertGreaterEqual(e.end_date, e.start_date, "Дата окончания должна быть >= даты начала")
+
+                # Проверка ограничения города/онлайна
+                self.assertTrue(
+                    e.city is not None or e.is_online,
+                    f"Событие {e.id} обязано иметь город или флаг is_online=True"
+                )
+
+                # Проверка Markdown-регламента
+                self.assertTrue(
+                    e.full_regulation_markdown and len(e.full_regulation_markdown) > 500,
+                    f"Событие {e.id} должно содержать связный регламент в Markdown"
+                )
+
+    async def test_03_tariffs_structure_and_pricing_diversity(self):
+        """
+        Проверка тарифной сетки:
+        - Всего 43 тарифа
+        - Наличие платных тарифов (base_price > 0)
+        - Наличие тарифов 'По запросу' (base_price is None)
+        - Наличие бесплатных тарифов (base_price == 0.0)
+        - Наличие скидок Early Bird
+        """
+        async with async_session_maker() as s:
+            stmt = select(EventTariff)
+            res = await s.execute(stmt)
+            tariffs = res.scalars().all()
+
+            self.assertEqual(len(tariffs), 43, "В базе должно быть 43 тарифа")
+
+            paid_tariffs = [t for t in tariffs if t.base_price is not None and t.base_price > 0]
+            free_tariffs = [t for t in tariffs if t.base_price == 0.0]
+            on_request_tariffs = [t for t in tariffs if t.base_price is None]
+            early_bird_tariffs = [
+                t for t in tariffs
+                if t.early_bird_price is not None and t.early_bird_deadline is not None
+            ]
+
+            self.assertGreater(len(paid_tariffs), 0, "Должны быть стандартные платные тарифы")
+            self.assertGreaterEqual(len(free_tariffs), 1, "Должны присутствовать бесплатные тарифы (base_price = 0.0)")
+            self.assertGreaterEqual(len(on_request_tariffs), 1, "Должны присутствовать тарифы 'По запросу' (base_price = NULL)")
+            self.assertGreaterEqual(len(early_bird_tariffs), 1, "Должны присутствовать тарифы со скидкой Early Bird")
+
+            # Проверка Early Bird скидки: early_bird_price < base_price
+            for eb in early_bird_tariffs:
+                self.assertIsNotNone(eb.base_price)
+                self.assertLess(eb.early_bird_price, eb.base_price, "Льготная цена Early Bird должна быть меньше базовой")
+
+    async def test_04_llm_cache_integrity(self):
+        """Проверка таблицы llm_cache: SHA-256 ключи, привязка к event_id, валидный JSON."""
+        async with async_session_maker() as s:
+            stmt = select(LLMCache)
+            res = await s.execute(stmt)
+            cache_entries = res.scalars().all()
+
+            self.assertGreaterEqual(len(cache_entries), 50, "В кэше llm_cache должно быть не менее 50 предпрогретых записей")
+
+            for entry in cache_entries:
+                self.assertEqual(len(entry.cache_key), 64, "Ключ кэша обязан быть SHA-256 хэшем длиной 64 символа")
+                self.assertIsNotNone(entry.event_id, "Запись кэша должна быть привязана к event_id")
+
+                # Проверка JSON payload
+                payload = json.loads(entry.response_text)
+                self.assertIn("is_answer_found", payload)
+                self.assertIn("answer_text", payload)
+                self.assertIn("source_quote", payload)
+                self.assertTrue(len(payload["answer_text"]) > 10, "Текст ответа в кэше должен быть содержательным")
 
 
 if __name__ == "__main__":
