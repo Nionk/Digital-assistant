@@ -1,8 +1,10 @@
 import asyncio
+import json
+import hashlib
 import sys
 from pathlib import Path
 import bcrypt
-from sqlalchemy import select
+from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Настройка sys.path для прямого запуска скрипта из любой директории
@@ -10,7 +12,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from app.core.database import async_session_maker
-from app.models.models import User, Client
+from app.models.models import User, Client, Event, EventTariff, LLMCache
+from app.services.ai_client import get_embeddings_batch
+from app.schemas.event_ingestion import EventIngestionSchema
+
 
 
 def hash_password(password: str) -> str:
@@ -167,16 +172,157 @@ async def seed_test_clients(session: AsyncSession, manager_id: int) -> list[Clie
     return seeded_clients
 
 
-async def seed_events_placeholder(session: AsyncSession):
-    """
-    Заглушка для пунктов 1–4 задачи D-04:
-    Наполнение базы данных 35 мероприятиями, тарифами и эмбеддингами из seed_data.json.
-    Будет выполнена при утверждении золотого датасета.
-    """
-    print("[INFO] Наполнение 35 мероприятиями (пункты 1–4 D-04) ожидает формирования финального seed_data.json.")
+def find_seed_data_file() -> Path:
+    """Определяет путь к seed_data.json в зависимости от рабочей директории."""
+    candidates = [
+        BASE_DIR / "scripts" / "seed_data.json",
+        BASE_DIR.parent / "seed_data.json",
+        Path("seed_data.json"),
+        Path("backend/scripts/seed_data.json"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p.resolve()
+    raise FileNotFoundError("Файл seed_data.json не найден ни в одной из доступных директорий.")
 
 
-from sqlalchemy import text
+async def seed_events(session: AsyncSession) -> list[Event]:
+    """
+    Идемпотентное наполнение базы данных мероприятиями, тарифами,
+    1024-мерными векторными эмбеддингами (Zero-Local-ML via Jina AI)
+    и предпрогретым кэшем частых вопросов регламента (llm_cache).
+    Соответствует задаче D-04 из plan.md.
+    """
+    seed_file = find_seed_data_file()
+    print(f"[INFO] Загрузка золотого датасета из: {seed_file}")
+    with open(seed_file, "r", encoding="utf-8") as f:
+        raw_items = json.load(f)
+
+    print(f"[INFO] Найдено {len(raw_items)} мероприятий в {seed_file.name}.")
+
+    # 1. Батчевая генерация 1024-мерных эмбеддингов через облачный API Jina AI
+    summaries = [item["event_data"]["summary"] for item in raw_items]
+    print(f"[INFO] Расчет эмбеддингов для {len(summaries)} саммари через Jina Embeddings v3...")
+    embeddings = await get_embeddings_batch(summaries, batch_size=16)
+    print(f"[OK] Успешно получено {len(embeddings)} векторов (размерность {len(embeddings[0]) if embeddings else 0}).")
+
+    seeded_events: list[Event] = []
+    total_tariffs_count = 0
+    total_cache_count = 0
+
+    for i, item in enumerate(raw_items):
+        e_raw = item["event_data"]
+        # Валидируем и нормализуем через строгую Pydantic v2 схему
+        e_schema = EventIngestionSchema.model_validate(e_raw)
+
+        # Проверяем наличие события в БД по каноническому названию
+        stmt = select(Event).where(Event.canonical_title == e_schema.canonical_title)
+        res = await session.execute(stmt)
+        event = res.scalar_one_or_none()
+
+        missing_fields = item.get("missing_or_needed_data", {}).get("missing_fields", [])
+        warnings = e_schema.missing_data_warnings or missing_fields
+
+        if event is None:
+            event = Event(
+                canonical_title=e_schema.canonical_title,
+                normalized_title=e_raw.get("normalized_title") or e_schema.canonical_title.lower().strip(),
+                event_format=e_schema.event_format,
+                city=e_schema.city,
+                is_online=e_schema.is_online,
+                venue=e_schema.venue,
+                start_date=e_schema.start_date,
+                end_date=e_schema.end_date,
+                summary=e_schema.summary,
+                full_regulation_markdown=e_schema.full_regulation_markdown,
+                themes=e_schema.themes,
+                source_urls=e_raw.get("source_urls", []),
+                data_status="ready",
+                missing_data_warnings=warnings,
+                summary_embedding=embeddings[i],
+                is_active=True,
+            )
+            session.add(event)
+            await session.flush()
+            print(f"[OK] Создано мероприятие: ID={event.id}, '{event.canonical_title}' (онлайн={event.is_online}, город={event.city})")
+        else:
+            event.normalized_title = e_raw.get("normalized_title") or e_schema.canonical_title.lower().strip()
+            event.event_format = e_schema.event_format
+            event.city = e_schema.city
+            event.is_online = e_schema.is_online
+            event.venue = e_schema.venue
+            event.start_date = e_schema.start_date
+            event.end_date = e_schema.end_date
+            event.summary = e_schema.summary
+            event.full_regulation_markdown = e_schema.full_regulation_markdown
+            event.themes = e_schema.themes
+            event.source_urls = e_raw.get("source_urls", [])
+            event.data_status = "ready"
+            event.missing_data_warnings = warnings
+            event.summary_embedding = embeddings[i]
+            event.is_active = True
+            await session.flush()
+            print(f"[EXISTS] Мероприятие синхронизировано: ID={event.id}, '{event.canonical_title}'")
+
+        seeded_events.append(event)
+
+        # 2. Идемпотентная синхронизация тарифов (event_tariffs)
+        await session.execute(delete(EventTariff).where(EventTariff.event_id == event.id))
+        created_tariffs: list[EventTariff] = []
+        for t_data in e_schema.tariffs:
+            tariff = EventTariff(
+                event_id=event.id,
+                tariff_name=t_data.tariff_name,
+                participation_role=t_data.participation_role,
+                base_price=t_data.base_price,
+                early_bird_price=t_data.early_bird_price,
+                early_bird_deadline=t_data.early_bird_deadline,
+                is_vat_included=t_data.is_vat_included,
+                included_benefits=t_data.included_benefits,
+            )
+            session.add(tariff)
+            created_tariffs.append(tariff)
+
+        await session.flush()
+        total_tariffs_count += len(created_tariffs)
+
+        # 3. Идемпотентный предпрогрев кэша частых вопросов регламента (llm_cache)
+        await session.execute(delete(LLMCache).where(LLMCache.event_id == event.id))
+        seen_cache_keys: set[str] = set()
+
+        for faq in e_schema.faq_cache:
+            cache_payload = json.dumps({
+                "is_answer_found": True,
+                "answer_text": faq.answer,
+                "source_quote": faq.source_quote,
+            }, ensure_ascii=False)
+
+            tariff_ids = [0] + [t.id for t in created_tariffs]
+
+            # Нормализованный вопрос (канонический чипс) + исходные вариации вопроса
+            questions_to_hash = {faq.question.strip().lower()}
+            for raw_faq in e_raw.get("faq_cache", []):
+                if raw_faq.get("answer") == faq.answer:
+                    questions_to_hash.add(raw_faq.get("question", "").strip().lower())
+
+            for tid in tariff_ids:
+                for q_str in questions_to_hash:
+                    if not q_str:
+                        continue
+                    cache_key = hashlib.sha256(f"{event.id}:{tid}:{q_str}".encode("utf-8")).hexdigest()
+                    if cache_key not in seen_cache_keys:
+                        seen_cache_keys.add(cache_key)
+                        session.add(LLMCache(
+                            cache_key=cache_key,
+                            event_id=event.id,
+                            response_text=cache_payload,
+                        ))
+
+        await session.flush()
+        total_cache_count += len(seen_cache_keys)
+
+    print(f"[OK] Успешно сидировано: {len(seeded_events)} мероприятий, {total_tariffs_count} тарифов, {total_cache_count} записей llm_cache.")
+    return seeded_events
 
 
 async def sync_database_sequences(session: AsyncSession):
@@ -208,16 +354,17 @@ async def seed_all():
             # 2. Сидинг 3 тестовых клиентов (D-04 п.5)
             clients = await seed_test_clients(session, manager.id)
 
-            # 3. Информирование о пунктах 1–4
-            await seed_events_placeholder(session)
+            # 3. Сидинг 15 мероприятий, 43 тарифов, векторов и llm_cache (D-04 п.1-4)
+            events = await seed_events(session)
 
             # 4. Синхронизация последовательностей (Bug 2 fix)
             await sync_database_sequences(session)
 
     print("=" * 70)
-    print(f"Сидинг успешно завершен! Создано/проверено: 1 менеджер, {len(clients)} клиента.")
+    print(f"Сидинг успешно завершен! Создано/проверено: 1 менеджер, {len(clients)} клиента, {len(events)} мероприятий.")
     print("=" * 70)
 
 
 if __name__ == "__main__":
     asyncio.run(seed_all())
+

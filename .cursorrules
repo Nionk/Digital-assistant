@@ -1,0 +1,136 @@
+# PROJECT: AI-Assistant for Event Support & Matching (ГК «СКАРТ»)
+
+You are a Senior Full-Stack & AI Engineer working on a B2B event intelligence & bundle matching platform.
+Follow these architectural, syntax, and domain rules strictly. Never deviate or invent alternative patterns.
+
+---
+
+## 1. HARD BANS (STRICTLY FORBIDDEN)
+1. **NO Local ML Libraries:** Never import or add `torch`, `transformers`, `sentence_transformers`, `scipy`, or `ollama`. This is a 100% Zero-Local-ML system. All LLM and Embedding calls MUST go through `app/services/ai_client.py` via HTTP APIs.
+2. **NO LangChain / LlamaIndex:** Never use `langchain` or `llamaindex`. Use ONLY native `openai` (`AsyncOpenAI`) + `instructor` + `pydantic`.
+3. **NO Redis:** Do not use Redis for caching, queues, or sessions. Exact LLM caching (`llm_cache`) and state live strictly in PostgreSQL 16.
+4. **NO WebSockets / Socket.IO:** Real-time updates on Frontend use REST API + `TanStack Query` polling (`refetchInterval: 5000..10000`). Manager push alerts go through `app/services/telegram.py` (`Telegram Bot API`).
+5. **NO Legacy Syntax:**
+   - **Pydantic v2 ONLY:** Use `model_validate()`, `model_dump()`, `ConfigDict(from_attributes=True)`. NEVER use `.dict()`, `.parse_obj()`, `@validator`, or `class Config: orm_mode = True`.
+   - **SQLAlchemy 2.0 Async ONLY:** Use `AsyncSession`, `select()`, `Mapped[...]`, `mapped_column(...)`. NEVER use synchronous `session.query()` or legacy `Column()`.
+   - **FastAPI:** Use `Annotated[AsyncSession, Depends(get_async_session)]` and `lifespan` context manager (NEVER deprecated `@app.on_event("startup")`).
+6. **NO Blocking the Event Loop:** Never run synchronous CPU/IO-bound operations (like `PyMuPDF` / `fitz.open`) directly inside `async def`. Always wrap them in `await asyncio.to_thread(sync_func, *args)`.
+
+---
+
+## 2. FIXED MONOREPO FILE STRUCTURE
+Do NOT create new top-level directories, rename modules, or scatter files outside this tree:
+
+```text
+├── docker-compose.yml
+├── .env.example
+├── .cursorrules
+├── nginx/
+│   └── nginx.conf
+├── backend/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── alembic.ini
+│   ├── alembic/
+│   ├── app/
+│   │   ├── main.py                 # FastAPI entrypoint + APScheduler in lifespan (1 uvicorn worker!)
+│   │   ├── core/
+│   │   │   ├── config.py           # pydantic-settings (.env)
+│   │   │   ├── constants.py        # normalize_city() and domain constants
+│   │   │   ├── database.py         # AsyncEngine & get_async_session
+│   │   │   └── security.py         # get_current_manager (Stub for Demo -> JWT for Prod) & Magic Link
+│   │   ├── models/                 # SQLAlchemy 2.0 ORM (9 tables: users, clients, events, event_tariffs, event_chunks, selections, selection_items, chat_messages, llm_cache)
+│   │   ├── schemas/                # Pydantic v2 request/response & Instructor LLM schemas
+│   │   ├── services/
+│   │   │   ├── ai_client.py        # Two AsyncOpenAI clients: LLM (+Instructor MD_JSON) & Embeddings
+│   │   │   ├── profiler.py         # NER extraction from raw manager notes (ClientQueryExtracted)
+│   │   │   ├── matcher.py          # SQL pre-filter + Hybrid RRF + Combinatorial Bundle Builder
+│   │   │   ├── rag.py              # Isolated RAG (WHERE event_id = X) + PostgreSQL llm_cache
+│   │   │   ├── scraper.py          # httpx + BS4 + PyMuPDF + Vision LLM fallback + RapidFuzz
+│   │   │   └── telegram.py         # Async httpx notifications to Telegram Bot API
+│   │   └── api/
+│   │       ├── auth.py             # POST /api/auth/login
+│   │       ├── manager.py          # /api/manager/* (protected by Depends(get_current_manager))
+│   │       └── showcase.py         # /api/public/s/{magic_token}/* (UUIDv4 public access)
+│   ├── scripts/
+│   │   ├── seed_db.py              # Populates DB with 35 golden construction/dev events
+│   │   └── seed_data.json
+│   └── tests/
+│       └── run_benchmark.py        # Automated NER, Bundle Math, and RAG Faithfulness evaluation
+└── frontend/
+    ├── Dockerfile
+    ├── package.json
+    └── src/
+        ├── api/                    # OpenAPI generated types & TanStack Query hooks
+        ├── pages/
+        │   ├── manager/            # /admin/*
+        │   └── showcase/           # /s/:magicToken
+        └── components/ui/          # shadcn/ui
+
+## 3. AI GATEWAY & VECTOR RULES (`app/services/ai_client.py`)
+
+1. **Split Clients:** OpenRouter does not expose `/v1/embeddings`. Always maintain two distinct `AsyncOpenAI` instances:
+* `raw_openai_client` wrapped in `instructor.from_openai(raw_openai_client, mode=instructor.Mode.MD_JSON)` for structured outputs and text generation.
+* `embedding_client` pointing to `settings.EMBEDDING_BASE_URL` for vectorization.
+
+
+2. **Vector Dimensions:** Respect `settings.EMBEDDING_DIM` (`1024` for Jina/BGE/OpenAI or `256` for native Yandex Cloud). Ensure L2-normalization for `vector_cosine_ops` (`<=>`).
+3. **Rate Limits:** Always guard batch embedding calls with `asyncio.Semaphore(3)` and process in batches of 10–20 texts to avoid `HTTP 429`.
+
+
+## 4. CORE DOMAIN & ALGORITHM RULES (DO NOT SIMPLIFY)
+
+### 4.1. Database & Tariffs (`events` vs `event_tariffs`)
+
+* Never put a single `price` column in `events`. Every event has 1-to-N `event_tariffs` with `participation_role` (`'delegate'`, `'speaker'`, `'sponsor'`), `base_price`, `early_bird_price`, and `early_bird_deadline`.
+* `base_price IS NULL` means **"Price on request" (Цена по запросу)**. Never drop these events in SQL filters — route them to a separate Bonus Slot in the bundle response.
+* All prices in DB are final and include VAT (`is_vat_included = TRUE`).
+* **Online Events & City Nullability:** Events can be held purely online. In this case `events.city IS NULL` and `events.is_online = TRUE`. The DB enforces `CHECK (city IS NOT NULL OR is_online = TRUE)` and index `idx_events_online`. Never filter events with naive `WHERE city IS NOT NULL`; always allow online events when `is_online = TRUE` or when `include_online = TRUE` in the client query.
+
+### 4.2. Profiler (`app/services/profiler.py`)
+
+* Always inject current date into the system prompt: `f"Сегодняшняя дата: {datetime.date.today().isoformat()}"` so the LLM resolves relative dates ("в следующем месяце", "в конце осени") accurately.
+* Always pass extracted cities through `normalize_city()` from `app/core/constants.py` (e.g., `'спб' -> 'Санкт-Петербург'`, `'московская область' -> 'Москва'`).
+* Always support `include_online: bool = True` in `ClientQueryExtracted` to indicate whether webinars and virtual conferences should be considered.
+
+### 4.3. Hybrid Search & Combinatorial Bundle Builder (`app/services/matcher.py`)
+
+* **NEVER ask the LLM to sum prices or build bundles.** LLM only extracts `ClientQueryExtracted` and writes the final pitch text using Python-verified numbers.
+* **Step 1 (SQL + Hybrid RRF):**
+* Filter active events by city and date range.
+* Check tariff affordability via `EXISTS (SELECT 1 FROM event_tariffs t WHERE t.event_id = events.id AND ...)` checking active `early_bird_deadline >= CURRENT_DATE`. Using `EXISTS` is mandatory to prevent row multiplication before ranking.
+* Rank candidates in PostgreSQL using Reciprocal Rank Fusion ($k=60$):
+`Score_RRF = 1.0 / (60 + rank_vec) + 1.0 / (60 + rank_fts)`
+* Use `websearch_to_tsquery('russian', :or_query)` for FTS. If `themes_keywords` is empty, fallback `:or_query` to `semantic_search_query`. Fetch Top-15 events with their tariffs.
+
+
+* **Step 2 (Python Combinatorics):**
+* Use `itertools.combinations(top_events, K)` to evaluate bundles of size $K$.
+* Assign roles deterministically based on `min_speaker_events` (e.g., 1 `'speaker'` tariff + $K-1$ `'delegate'` tariffs).
+* Verify no date overlaps across different cities.
+* Enforce $\sum P_i \le \text{total\_budget\_max}$ (allow up to $+10\%$ overflow ONLY if fewer than 2 strict bundles exist, marking it with a budget warning flag).
+* Calculate Early Bird savings: $\text{Savings} = \sum (P_{i,\text{base}} - P_{i,\text{actual}})$.
+* Return **Bundle 1 (Max Relevance by RRF)**, **Bundle 2 (Best Budget Savings)**, and **Bonus Slot (`base_price IS NULL`)**.
+
+
+
+### 4.4. Isolated RAG & Cache (`app/services/rag.py`)
+
+* Every question in the client showcase is bound to a specific `event_id` and `recommended_tariff_id`.
+* **Step 1 (Exact Cache):** Compute SHA-256 of `f"{event_id}:{tariff_id}:{question.strip().lower()}"`. If found in `llm_cache`, return immediately. Whenever an event or tariff is updated, execute `DELETE FROM llm_cache WHERE event_id = :event_id`.
+* **Step 2 (Context Retrieval):**
+* Inject recommended tariff name and `included_benefits` into the system prompt.
+* **Primary Mode (Context Stuffing):** If `len(event.full_regulation_markdown) <= 35000`, pass the entire markdown into the prompt.
+* **Fallback Mode (Chunk Hybrid Search):** If `> 35000` chars, query Top-5 chunks from `event_chunks` with a mandatory `WHERE event_id = :event_id` filter.
+
+
+* **Step 3 (Zero-Hallucination Output):**
+* Enforce `RAGResponse(is_answer_found: bool, answer_text: str, source_quote: Optional[str])`.
+* If `is_answer_found == False`, return the polite fallback message, save `chat_messages` with `needs_manager_attention = True`, and immediately trigger an alert via `app/services/telegram.py`.
+
+## 5. PLUG-AND-PLAY DEMO / MVP RULES
+
+* All `/api/manager/*` routes MUST use `Depends(get_current_manager)` from `app/core/security.py`.
+* During the Demo phase, `get_current_manager` returns the default seeded manager (`id=1`) if no Bearer token is provided, позволяя seamless frontend testing while keeping all route signatures 100% production-ready.
+* Never hardcode mock responses inside React components; Frontend must always call the FastAPI endpoints defined in `openapi.json`.
+
