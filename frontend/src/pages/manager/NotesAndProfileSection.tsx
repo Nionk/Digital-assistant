@@ -181,9 +181,9 @@ export function NotesAndProfileSection({
   };
 
   return (
-    <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm overflow-hidden">
+    <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm relative z-30">
       {/* Шапка блока Шага 01–03 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5 rounded-t-[12px]">
         <div className="flex items-baseline gap-2.5 min-w-0">
           <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
             01
@@ -301,7 +301,7 @@ export function NotesAndProfileSection({
 
       {/* Строгая 5-ячеечная табличная строка параметров в стиле Novel.AI */}
       {editableProfile && (
-        <div className="bg-[#161B22]">
+        <div className="bg-[#161B22] rounded-b-[12px]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-white">
@@ -622,7 +622,7 @@ export function NotesAndProfileSection({
             </div>
           </div>
 
-          <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-2 flex items-center justify-end text-[11px] text-[#8E95A0]">
+          <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-2 flex items-center justify-end text-[11px] text-[#8E95A0] rounded-b-[12px]">
             <span className="font-serif italic uppercase tracking-wider text-[10px] text-[#8E95A0] mr-2">
               Ориентир бюджета:
             </span>
