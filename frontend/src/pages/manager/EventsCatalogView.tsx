@@ -66,7 +66,7 @@ export function EventsCatalogView() {
       <div className="rounded-card border border-border bg-surface p-4 shadow-card">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-base font-semibold text-ink">
+            <h1 className="font-serif text-base font-semibold text-ink sm:text-lg">
               Отслеживаемый календарь отраслевых площадок
             </h1>
             <p className="text-xs text-ink-muted">
@@ -198,7 +198,7 @@ export function EventsCatalogView() {
                         )}
                       </div>
 
-                      <h3 className="mt-1 text-sm font-semibold leading-snug text-ink">
+                      <h3 className="mt-1 font-serif text-[15px] font-semibold leading-snug text-ink">
                         {ev.canonical_title}
                       </h3>
                     </div>

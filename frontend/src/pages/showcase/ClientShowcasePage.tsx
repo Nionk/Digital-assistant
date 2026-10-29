@@ -8,7 +8,6 @@ import {
   LayoutGrid,
   GalleryHorizontalEnd,
   MessageSquareText,
-  Sparkles,
   AlertCircle,
 } from "lucide-react";
 import {
@@ -229,13 +228,15 @@ export function ClientShowcasePage() {
           <div className="flex flex-col justify-between gap-4 border-b border-border/80 pb-4 lg:flex-row lg:items-center">
             <div>
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-pine" strokeWidth={1.75} />
-                <h2 className="text-lg font-bold tracking-tight text-ink">
+                <span className="rounded-tag bg-novel-sand text-[#2A2213] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+                  ВЫБОР АГЕНТСТВА
+                </span>
+                <h2 className="font-serif text-xl font-bold tracking-tight text-ink sm:text-2xl">
                   Рекомендовано для вас
                 </h2>
               </div>
               <p className="mt-0.5 text-xs text-ink-muted">
-                Подобрали на основе ваших бизнес-целей, целевой аудитории и ориентира бюджета
+                Площадки отобраны с учетом ваших целевых ориентиров, аудитории и лимита бюджета
               </p>
             </div>
 

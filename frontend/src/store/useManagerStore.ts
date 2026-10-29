@@ -10,6 +10,46 @@ import { checkDateConflicts, formatDateShort, formatNumberCompact } from "@/lib/
 
 export type ManagerWorkspaceMode = "matching" | "catalog";
 
+export interface ProducerProfile {
+  id: string;
+  name: string;
+  role: string;
+  department: string;
+  avatarText: string;
+  avatarBg: string;
+  dealsCount: number;
+}
+
+export const PRODUCER_PROFILES: ProducerProfile[] = [
+  {
+    id: "ekaterina",
+    name: "Екатерина Смирнова",
+    role: "Старший продюсер проектов",
+    department: "Девелопмент, КРТ и Урбанистика",
+    avatarText: "ЕС",
+    avatarBg: "bg-pine",
+    dealsCount: 5,
+  },
+  {
+    id: "alexey",
+    name: "Алексей Морозов",
+    role: "Head of B2B Partnerships",
+    department: "IT, FinTech & Инженерия",
+    avatarText: "АМ",
+    avatarBg: "bg-novel-slate",
+    dealsCount: 3,
+  },
+  {
+    id: "guest",
+    name: "Куратор (Демо-доступ)",
+    role: "Ознакомительный доступ",
+    department: "Все отраслевые направления",
+    avatarText: "СК",
+    avatarBg: "bg-novel-dark",
+    dealsCount: 8,
+  },
+];
+
 export interface ComputedBundleItem {
   item: BundleEventItemOut;
   isBonusSlot: boolean;
@@ -35,6 +75,10 @@ export interface ComputedFinancialSummary {
 }
 
 interface ManagerState {
+  // Профиль активного куратора (Терминал продюсера)
+  currentProducer: ProducerProfile;
+  isProducerModalOpen: boolean;
+
   // Навигация и сайдбар
   workspaceMode: ManagerWorkspaceMode;
   isSidebarCollapsed: boolean;
@@ -83,9 +127,13 @@ interface ManagerState {
     clientId: number,
     info: { magicToken: string; publicUrl: string; totalPrice: number; totalSavings: number }
   ) => void;
+  setProducer: (producer: ProducerProfile) => void;
+  setProducerModalOpen: (open: boolean) => void;
 }
 
 export const useManagerStore = create<ManagerState>((set, get) => ({
+  currentProducer: PRODUCER_PROFILES[0],
+  isProducerModalOpen: false,
   workspaceMode: "matching",
   isSidebarCollapsed: false,
   selectedClientId: null,
@@ -102,6 +150,9 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
   customRationaleByClient: {},
   pitchTextByClient: {},
   publishedInfoByClient: {},
+
+  setProducer: (producer) => set({ currentProducer: producer }),
+  setProducerModalOpen: (open) => set({ isProducerModalOpen: open }),
 
   setWorkspaceMode: (mode) => set({ workspaceMode: mode }),
   toggleSidebar: () => set((s) => ({ isSidebarCollapsed: !s.isSidebarCollapsed })),

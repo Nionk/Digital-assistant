@@ -9,8 +9,9 @@ import {
   ChevronDown,
 } from "lucide-react";
 import type { BurningDeadlineOut } from "@/api/types";
-import type { ManagerWorkspaceMode } from "@/store/useManagerStore";
+import { useManagerStore, type ManagerWorkspaceMode } from "@/store/useManagerStore";
 import { formatDateShort, formatRub, getDaysUntil } from "@/lib/formatters";
+import { ProducerProfileModal } from "@/components/ui/producer-profile-modal";
 import { cn } from "@/lib/utils";
 
 interface ManagerHeaderProps {
@@ -32,6 +33,10 @@ export function ManagerHeader({
 }: ManagerHeaderProps) {
   const [isDeadlinesOpen, setIsDeadlinesOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const currentProducer = useManagerStore((s) => s.currentProducer);
+  const isProducerModalOpen = useManagerStore((s) => s.isProducerModalOpen);
+  const setProducerModalOpen = useManagerStore((s) => s.setProducerModalOpen);
 
   React.useEffect(() => {
     if (!isDeadlinesOpen) return;
@@ -118,91 +123,120 @@ export function ManagerHeader({
         </button>
       </div>
 
-      {/* Правая группа: Поповер горящих дедлайнов Early Bird */}
-      <div className="relative" ref={dropdownRef}>
+      {/* Правая группа: Дедлайны + Профиль продюсера */}
+      <div className="flex items-center gap-2.5">
+        {/* Поповер горящих дедлайнов Early Bird */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            type="button"
+            onClick={() => setIsDeadlinesOpen((prev) => !prev)}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-control border px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
+              burningDeadlines.length > 0
+                ? "border-terracotta-border bg-terracotta-tint text-terracotta hover:bg-terracotta/15"
+                : "border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
+            )}
+          >
+            <Flame className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <span className="hidden md:inline">Дедлайны Early Bird:</span>
+            <span className="font-semibold">{burningDeadlines.length}</span>
+            <ChevronDown className="h-3.5 w-3.5 opacity-70" strokeWidth={1.5} />
+          </button>
+
+          {isDeadlinesOpen && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-card border border-border bg-surface p-4 shadow-elevated z-50">
+              <div className="flex items-center justify-between border-b border-border pb-2.5">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ink">
+                    Контроль условий Early Bird
+                  </h3>
+                  <p className="mt-0.5 text-[11px] text-ink-muted">
+                    Ближайшие даты истечения льготных тарифов организаторов
+                  </p>
+                </div>
+                <span className="rounded-badge bg-terracotta-tint px-2 py-0.5 text-[11px] font-semibold text-terracotta border border-terracotta-border tabular-nums">
+                  {burningDeadlines.length} активных
+                </span>
+              </div>
+
+              {burningDeadlines.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-muted">
+                  Нет горящих дедлайнов на ближайшие дни
+                </p>
+              ) : (
+                <div className="mt-2.5 max-h-72 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                  {burningDeadlines.map((item) => {
+                    const daysLeft = getDaysUntil(item.early_bird_deadline);
+                    const isUrgent = daysLeft !== null && daysLeft <= 3;
+
+                    return (
+                      <div
+                        key={item.event_id}
+                        className="rounded-control border border-border/80 bg-canvas/60 p-2.5 transition-colors hover:border-border-strong"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-medium leading-snug text-ink">
+                            {item.event_title}
+                          </p>
+                          <span className="shrink-0 rounded-badge bg-sage-tint px-1.5 py-0.5 text-[11px] font-semibold text-sage border border-sage-border tabular-nums">
+                            выгода {formatRub(item.potential_savings)}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-muted tabular-nums">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" strokeWidth={1.5} />
+                            Дедлайн: {formatDateShort(item.early_bird_deadline)}
+                          </span>
+                          {daysLeft !== null && (
+                            <span
+                              className={cn(
+                                "font-medium",
+                                isUrgent ? "text-terracotta" : "text-ink-secondary"
+                              )}
+                            >
+                              {daysLeft === 0
+                                ? "Истекает сегодня"
+                                : daysLeft === 1
+                                  ? "Остался 1 день"
+                                  : `Осталось дн.: ${daysLeft}`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Профиль куратора (Терминал продюсера в стиле Novel.AI) */}
         <button
           type="button"
-          onClick={() => setIsDeadlinesOpen((prev) => !prev)}
-          className={cn(
-            "inline-flex items-center gap-2 rounded-control border px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
-            burningDeadlines.length > 0
-              ? "border-terracotta-border bg-terracotta-tint text-terracotta hover:bg-terracotta/15"
-              : "border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
-          )}
+          onClick={() => setProducerModalOpen(true)}
+          className="flex items-center gap-2 rounded-control border border-border bg-canvas/80 px-2.5 py-1 text-xs transition-all hover:border-border-strong hover:bg-surface"
+          title="Сменить куратора или открыть терминал продюсера"
         >
-          <Flame className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-          <span className="hidden md:inline">Дедлайны Early Bird:</span>
-          <span className="font-semibold">{burningDeadlines.length}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-70" strokeWidth={1.5} />
-        </button>
-
-        {isDeadlinesOpen && (
-          <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-card border border-border bg-surface p-4 shadow-elevated z-50">
-            <div className="flex items-center justify-between border-b border-border pb-2.5">
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-ink">
-                  Контроль условий Early Bird
-                </h3>
-                <p className="mt-0.5 text-[11px] text-ink-muted">
-                  Ближайшие даты истечения льготных тарифов организаторов
-                </p>
-              </div>
-              <span className="rounded-badge bg-terracotta-tint px-2 py-0.5 text-[11px] font-semibold text-terracotta border border-terracotta-border tabular-nums">
-                {burningDeadlines.length} активных
-              </span>
-            </div>
-
-            {burningDeadlines.length === 0 ? (
-              <p className="py-4 text-center text-xs text-ink-muted">
-                Нет горящих дедлайнов на ближайшие дни
-              </p>
-            ) : (
-              <div className="mt-2.5 max-h-72 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
-                {burningDeadlines.map((item) => {
-                  const daysLeft = getDaysUntil(item.early_bird_deadline);
-                  const isUrgent = daysLeft !== null && daysLeft <= 3;
-
-                  return (
-                    <div
-                      key={item.event_id}
-                      className="rounded-control border border-border/80 bg-canvas/60 p-2.5 transition-colors hover:border-border-strong"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-medium leading-snug text-ink">
-                          {item.event_title}
-                        </p>
-                        <span className="shrink-0 rounded-badge bg-sage-tint px-1.5 py-0.5 text-[11px] font-semibold text-sage border border-sage-border tabular-nums">
-                          выгода {formatRub(item.potential_savings)}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-muted tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" strokeWidth={1.5} />
-                          Дедлайн: {formatDateShort(item.early_bird_deadline)}
-                        </span>
-                        {daysLeft !== null && (
-                          <span
-                            className={cn(
-                              "font-medium",
-                              isUrgent ? "text-terracotta" : "text-ink-secondary"
-                            )}
-                          >
-                            {daysLeft === 0
-                              ? "Истекает сегодня"
-                              : daysLeft === 1
-                                ? "Остался 1 день"
-                                : `Осталось дн.: ${daysLeft}`}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <div className="flex h-6 w-6 items-center justify-center rounded-tag bg-novel-dark text-[10px] font-bold text-white border border-novel-border tabular-nums">
+            {currentProducer.avatarText}
           </div>
-        )}
+          <div className="hidden sm:block text-left">
+            <span className="block text-xs font-semibold leading-none text-ink">
+              {currentProducer.name}
+            </span>
+            <span className="block text-[10px] text-ink-muted leading-tight">
+              {currentProducer.role}
+            </span>
+          </div>
+        </button>
       </div>
+
+      {/* Модальное окно переключения кураторов и приветственного экрана */}
+      <ProducerProfileModal
+        isOpen={isProducerModalOpen}
+        onClose={() => setProducerModalOpen(false)}
+      />
     </header>
   );
 }

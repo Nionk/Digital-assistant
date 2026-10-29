@@ -81,16 +81,16 @@ export function ShowcaseExecutiveHeader({
           <div className="flex flex-col justify-between rounded-card border border-border bg-canvas/55 p-5 sm:p-6 lg:col-span-7">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 rounded-badge bg-pine px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                  Персональная подборка
+                <span className="inline-flex items-center gap-1 rounded-tag bg-novel-dark text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-border">
+                  ПЕРСОНАЛЬНАЯ СЕЛЕКЦИЯ
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-badge bg-sage-tint px-2.5 py-0.5 text-[11px] font-medium text-sage border border-sage-border">
-                  <CalendarCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  Календарь сверен без накладок
+                <span className="inline-flex items-center gap-1.5 rounded-tag bg-novel-sand text-[#282112] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+                  <CalendarCheck className="h-3 w-3 text-[#644B1D]" strokeWidth={2} />
+                  КАЛЕНДАРЬ БЕЗ НАКЛАДОК
                 </span>
               </div>
 
-              <h1 className="mt-3 text-xl font-bold tracking-tight text-ink sm:text-2xl">
+              <h1 className="mt-3.5 font-serif text-2xl font-bold tracking-tight text-ink sm:text-3xl leading-tight">
                 План участия в профильных мероприятиях для {showcase.company_name}
               </h1>
 
@@ -107,17 +107,17 @@ export function ShowcaseExecutiveHeader({
               <div className="flex items-center gap-2 text-ink-muted">
                 <ShieldCheck className="h-4 w-4 text-sage" strokeWidth={1.75} />
                 <span>
-                  Отметьте подходящие площадки ниже или укажите комментарии для корректировки плана
+                  Отметьте подходящие площадки ниже или укажите пожелания для корректировки
                 </span>
               </div>
 
               <div className="flex items-center gap-2 tabular-nums">
-                <span className="rounded-badge bg-sage-tint px-2.5 py-1 font-semibold text-sage border border-sage-border">
-                  В плане: {approvedCount} из {showcase.total_events_count}
+                <span className="rounded-badge bg-novel-sand text-[#282112] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+                  В ПЛАНЕ: {approvedCount} ИЗ {showcase.total_events_count}
                 </span>
                 {rejectedCount > 0 && (
-                  <span className="rounded-badge bg-terracotta-tint px-2.5 py-1 font-semibold text-terracotta border border-terracotta-border">
-                    На замену: {rejectedCount}
+                  <span className="rounded-badge bg-novel-wine text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#7A2430]">
+                    НА ЗАМЕНУ: {rejectedCount}
                   </span>
                 )}
               </div>
@@ -128,17 +128,17 @@ export function ShowcaseExecutiveHeader({
           <div className="flex flex-col justify-between rounded-card bg-pine p-5 text-white shadow-elevated sm:p-6 lg:col-span-5">
             <div>
               <div className="flex items-center justify-between border-b border-white/15 pb-3">
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/75">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/80">
                   Сводный бюджет участия
                 </span>
-                <span className="rounded-badge bg-white/15 px-2.5 py-0.5 text-xs font-semibold tabular-nums">
-                  {showcase.total_events_count} мероприятия в пакете
+                <span className="rounded-tag bg-white/20 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider tabular-nums">
+                  {showcase.total_events_count} {showcase.total_events_count === 1 ? "мероприятие" : "мероприятия"} в пакете
                 </span>
               </div>
 
               <div className="mt-4">
                 <div className="flex items-baseline justify-between text-xs text-white/75">
-                  <span>Внешние расходы (взносы организаторов):</span>
+                  <span>Организационные взносы площадок:</span>
                   {showcase.total_savings > 0 && totalBasePrice > showcase.total_actual_price && (
                     <span className="text-white/50 line-through tabular-nums">
                       {formatRub(totalBasePrice)}
@@ -154,20 +154,20 @@ export function ShowcaseExecutiveHeader({
                 </div>
               </div>
 
-              {/* Блок выгоды Early Bird и партнёрских условий (Слайд 05) */}
+              {/* Блок выгоды Early Bird и партнёрских условий */}
               {showcase.total_savings > 0 && (
                 <div className="mt-4 rounded-control border border-white/20 bg-white/10 p-3.5">
                   <div className="flex items-center justify-between gap-2 tabular-nums">
                     <span className="text-xs font-medium text-white/90">
-                      Ваша выгода (Early Bird / партнёрские условия):
+                      Ваша выгода по спецтарифам:
                     </span>
-                    <span className="rounded-badge bg-sage px-2.5 py-0.5 text-xs font-bold text-white">
+                    <span className="rounded-tag bg-novel-gold text-[#1F1808] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                       −{formatRub(showcase.total_savings)}
                     </span>
                   </div>
                   {showcase.min_early_bird_deadline && (
                     <p className="mt-1.5 text-xs text-white/80 tabular-nums">
-                      Льготные тарифы действуют при согласовании плана до{" "}
+                      Льготные условия действительны при согласовании до{" "}
                       <strong className="text-white underline decoration-white/40 underline-offset-2">
                         {formatDateShort(showcase.min_early_bird_deadline)}
                       </strong>

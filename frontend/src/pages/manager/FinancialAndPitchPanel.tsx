@@ -61,23 +61,23 @@ export function FinancialAndPitchPanel({
       <div className="rounded-card bg-pine p-4 text-white shadow-elevated">
         <div className="flex items-center justify-between border-b border-white/15 pb-2.5">
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/70">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">
               Сводка коммерческого предложения
             </span>
-            <h3 className="text-sm font-semibold text-white">
+            <h3 className="font-serif text-base font-semibold text-white">
               {companyName}
             </h3>
           </div>
-          <span className="rounded-badge bg-white/15 px-2 py-0.5 text-xs font-semibold tabular-nums">
+          <span className="rounded-tag bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white tabular-nums">
             Площадок: {summary.includedRows.length}
           </span>
         </div>
 
-        {/* Основная сумма внешних расходов (взносы организаторов по Слайду 10) */}
+        {/* Основная сумма внешних расходов */}
         <div className="mt-3.5">
           <div className="flex items-baseline justify-between">
             <span className="text-xs text-white/75">
-              Внешние расходы (взносы организаторов):
+              Организационные взносы площадок:
             </span>
             {summary.totalSavings > 0 && (
               <span className="text-xs text-white/50 line-through tabular-nums">
@@ -98,14 +98,14 @@ export function FinancialAndPitchPanel({
           </div>
         </div>
 
-        {/* Выгода Early Bird / партнёрские условия (Слайд 05) */}
+        {/* Выгода Early Bird / спецтарифы */}
         {summary.totalSavings > 0 && (
           <div className="mt-3 rounded-control border border-white/15 bg-white/10 p-2.5">
             <div className="flex items-center justify-between tabular-nums">
               <span className="text-xs font-medium text-white/90">
-                Выгода (Early Bird / партнёрская):
+                Выгода по спецтарифам:
               </span>
-              <span className="rounded-badge bg-sage px-2 py-0.5 text-xs font-bold text-white">
+              <span className="rounded-tag bg-novel-gold px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#1F1808]">
                 −{formatRub(summary.totalSavings)}{" "}
                 {savingsPct > 0 ? `(${savingsPct}%)` : ""}
               </span>

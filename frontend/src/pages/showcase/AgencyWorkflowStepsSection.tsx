@@ -46,10 +46,10 @@ export function AgencyWorkflowStepsSection() {
       <div className="rounded-card border border-border bg-surface p-6 shadow-card">
         <div className="flex flex-col justify-between gap-2 border-b border-border/80 pb-4 md:flex-row md:items-end">
           <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-sage">
-              Этапы совместной работы · Подготовка под ваши бизнес-задачи
+            <span className="rounded-tag bg-novel-sand text-[#292213] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+              ЭКСПЕРТНОЕ СОПРОВОЖДЕНИЕ
             </span>
-            <h2 className="mt-1 text-lg font-bold text-ink">
+            <h2 className="mt-1.5 font-serif text-lg font-bold text-ink sm:text-xl">
               Как мы превращаем участие в мероприятиях в деловой результат
             </h2>
           </div>
