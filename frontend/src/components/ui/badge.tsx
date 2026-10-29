@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * чёткая тонкая граница и моноширинный трекинг без размытых нейросетевых пилюль.
  */
 const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase transition-colors select-none tabular-nums",
+  "inline-flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-[10px] font-serif italic font-bold tracking-wider uppercase transition-colors select-none tabular-nums",
   {
     variants: {
       variant: {

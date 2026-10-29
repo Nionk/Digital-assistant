@@ -161,7 +161,7 @@ export function EventsCatalogView() {
               >
                 <div>
                   <div className="flex items-start gap-3">
-                    <div className="flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-control bg-pine text-white tabular-nums">
+                    <div className="flex min-h-[60px] min-w-[58px] shrink-0 self-center flex-col items-center justify-center rounded-[6px] border border-[#7C5A20]/50 bg-[#161B21] px-2 py-1.5 text-white tabular-nums">
                       <span className="text-xs font-bold leading-none">
                         {cal.dayText}
                       </span>

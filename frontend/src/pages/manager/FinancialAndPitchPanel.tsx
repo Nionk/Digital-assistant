@@ -61,15 +61,15 @@ export function FinancialAndPitchPanel({
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 text-white shadow-sm">
         <div className="flex items-center justify-between border-b border-[#21262F] pb-2.5">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E95A0]">
-              Сводка коммерческого предложения
+            <span className="font-serif italic font-semibold uppercase tracking-widest text-[11px] text-[#8E95A0]">
+              СВОДКА КОММЕРЧЕСКОГО ПРЕДЛОЖЕНИЯ
             </span>
             <h3 className="font-serif text-base font-semibold text-white">
               {companyName}
             </h3>
           </div>
-          <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#D1D5DB] tabular-nums">
-            Площадок: {summary.includedRows.length}
+          <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#D1D5DB] tabular-nums">
+            ПЛОЩАДОК: <span className="font-sans not-italic">{summary.includedRows.length}</span>
           </span>
         </div>
 
@@ -102,10 +102,10 @@ export function FinancialAndPitchPanel({
         {summary.totalSavings > 0 && (
           <div className="mt-3 rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-2.5">
             <div className="flex items-center justify-between tabular-nums">
-              <span className="text-xs font-medium text-[#D1D5DB]">
-                Выгода по спецтарифам:
+              <span className="font-serif italic uppercase tracking-wider text-xs font-semibold text-[#D1D5DB]">
+                ВЫГОДА ПО СПЕЦТАРИФАМ:
               </span>
-              <span className="rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#34D399]">
+              <span className="rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#34D399]">
                 −{formatRub(summary.totalSavings)}{" "}
                 {savingsPct > 0 ? `(${savingsPct}%)` : ""}
               </span>
@@ -162,11 +162,11 @@ export function FinancialAndPitchPanel({
       {/* 2. Редактор сопроводительного письма и кнопка публикации (Шаг 06–07) */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#21262F]">
-          <div className="flex items-center gap-2">
-            <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#60A5FA] px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
+          <div className="flex items-baseline gap-2">
+            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
               03
             </span>
-            <span className="text-xs font-semibold uppercase tracking-wider text-white">
+            <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
               Персональное обращение к клиенту
             </span>
           </div>
@@ -196,7 +196,7 @@ export function FinancialAndPitchPanel({
             size="lg"
             disabled={isPublishing || summary.includedRows.length === 0}
             onClick={onPublish}
-            className="w-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-all"
+            className="w-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out"
           >
             {isPublishing ? (
               <span>Публикация витрины...</span>

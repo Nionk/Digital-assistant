@@ -59,7 +59,7 @@ export function PublishedShowcaseMonitor({
           <span className="h-2.5 w-2.5 rounded-full bg-[#34D399] animate-pulse" />
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider tabular-nums">
+              <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider tabular-nums font-serif italic">
                 LIVE СТАТУС
               </span>
               <h3 className="font-serif text-sm font-semibold text-white">
@@ -149,19 +149,19 @@ export function PublishedShowcaseMonitor({
                   </Badge>
 
                   {isInterested ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#0B2528] px-2 py-0.5 text-[10px] font-bold text-[#2DD4BF] border border-[#165057] uppercase tracking-wider">
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#0B2528] px-2 py-0.5 text-[10px] font-bold text-[#2DD4BF] border border-[#165057] uppercase tracking-wider font-serif italic">
                       <ThumbsUp className="h-3 w-3" strokeWidth={1.75} />
-                      Интересно
+                      ИНТЕРЕСНО
                     </span>
                   ) : isRejected ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#28131E] px-2 py-0.5 text-[10px] font-bold text-[#F472B6] border border-[#5E2242] uppercase tracking-wider">
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#28131E] px-2 py-0.5 text-[10px] font-bold text-[#F472B6] border border-[#5E2242] uppercase tracking-wider font-serif italic">
                       <RefreshCcw className="h-3 w-3" strokeWidth={1.75} />
-                      Запрошена замена
+                      ЗАПРОС ЗАМЕНЫ
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#161B21] px-2 py-0.5 text-[10px] text-[#8E95A0] border border-[#2B3545] uppercase tracking-wider">
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#161B21] px-2 py-0.5 text-[10px] text-[#8E95A0] border border-[#2B3545] uppercase tracking-wider font-serif italic">
                       <Clock className="h-3 w-3" strokeWidth={1.5} />
-                      Ожидает решения
+                      ОЖИДАЕТ РЕШЕНИЯ
                     </span>
                   )}
                 </div>
