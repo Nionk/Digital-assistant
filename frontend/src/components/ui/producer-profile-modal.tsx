@@ -1,12 +1,10 @@
 import * as React from "react";
-import { X, Check } from "lucide-react";
+import { X, Check, Play } from "lucide-react";
 import {
   PRODUCER_PROFILES,
   type ProducerProfile,
   useManagerStore,
 } from "@/store/useManagerStore";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface ProducerProfileModalProps {
@@ -39,53 +37,38 @@ export function ProducerProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Затемняющий матовый фон */}
+      {/* Затемняющий матовый фон с размытием */}
       <div
-        className="fixed inset-0 bg-ink/70 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75 backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
 
-      {/* Окно профиля в эстетике Novel.AI: глубокий графитовый/матовый фон, антиква в заголовках, строгие плашки */}
-      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-card border border-novel-border bg-novel-dark text-white shadow-2xl">
-        {/* Декоративная тонкая золотистая линия сверху */}
-        <div className="h-1 w-full bg-gradient-to-r from-novel-gold via-novel-sand to-novel-gold opacity-80" />
-
-        <div className="p-6 sm:p-7">
-          {/* Верхняя строка: Логотип + заголовок + кнопка закрытия */}
-          <div className="flex items-start justify-between gap-4">
+      {/* Окно профиля: матовый тёмный фон блоков, благородный золотой кант */}
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[14px] border border-[#7C5A20] bg-[#161B22] text-white shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_25px_rgba(229,195,120,0.12)]">
+        <div className="p-5 sm:p-6">
+          {/* Верхняя строка: заголовок + выразительный золотой крестик справа */}
+          <div className="flex items-start justify-between gap-4 border-b border-[#21262F] pb-4">
             <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="novelSand" className="text-[10px]">
-                  TERMINAL ACCESS
-                </Badge>
-                <span className="text-[11px] font-mono tracking-wider text-white/50">
-                  SYS_VER 2.4 · READY
-                </span>
-              </div>
-              <h2 className="mt-2.5 font-serif text-2xl font-bold tracking-tight text-white sm:text-[26px]">
-                Рабочее место продюсера
+              <h2 className="font-serif italic text-lg sm:text-xl font-semibold tracking-tight text-[#E5C378]">
+                Выбор куратора
               </h2>
-              <p className="mt-1 text-xs text-white/70 leading-relaxed">
-                Интеллектуальная система селекции площадок, расчета Early Bird тарифов
-                и сборки персональных клиентских витрин.
+              <p className="mt-1 text-xs text-[#8E95A0] leading-relaxed">
+                Переключение активного профиля менеджера для формирования пакетов и витрин
               </p>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="rounded-tag border border-white/10 bg-white/5 p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Закрыть окно"
+              className="shrink-0 rounded-[6px] border border-[#7C5A20]/40 bg-[#12161A] p-2 text-[#E5C378] transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.25)] outline-none"
             >
-              <X className="h-4 w-4" strokeWidth={1.75} />
+              <X className="h-4 w-4 stroke-[2]" />
             </button>
           </div>
 
           {/* Карточки продюсеров для быстрого переключения в 1 клик */}
-          <div className="mt-6 space-y-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-              Выберите активный профиль куратора
-            </span>
-
+          <div className="mt-4 space-y-2.5">
             {PRODUCER_PROFILES.map((profile) => {
               const isCurrent = profile.id === selectedId;
 
@@ -94,78 +77,56 @@ export function ProducerProfileModal({
                   key={profile.id}
                   onClick={() => handleSelect(profile)}
                   className={cn(
-                    "group relative flex cursor-pointer items-center justify-between rounded-control border p-3.5 transition-all",
+                    "group flex cursor-pointer items-center justify-between gap-3 rounded-[8px] border p-3 transition-colors duration-150 select-none",
                     isCurrent
-                      ? "border-novel-sand bg-novel-charcoal shadow-md ring-1 ring-novel-sand/30"
-                      : "border-white/10 bg-novel-charcoal/60 hover:border-white/20 hover:bg-novel-charcoal"
+                      ? "border-[#E5C378] bg-[#1E190E] shadow-[0_0_12px_rgba(229,195,120,0.12)]"
+                      : "border-[#262D35] bg-[#12161A] hover:border-[#7C5A20] hover:bg-[#1A1E24]"
                   )}
                 >
-                  <div className="flex items-center gap-3.5">
+                  <div className="flex items-center gap-3 min-w-0">
                     {/* Аватар-плашка с инициалами */}
                     <div
                       className={cn(
-                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-tag border text-xs font-bold tracking-wider",
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] border text-xs font-bold tracking-wider",
                         isCurrent
-                          ? "border-novel-sand bg-novel-sand text-[#1F1808]"
-                          : "border-white/15 bg-white/10 text-white"
+                          ? "border-[#E5C378] bg-[#E5C378] text-[#1A1405]"
+                          : "border-[#262D35] bg-[#161B21] text-[#E5C378]"
                       )}
                     >
                       {profile.avatarText}
                     </div>
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-serif text-base font-semibold text-white group-hover:text-novel-sand transition-colors">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="font-serif text-sm font-semibold text-white group-hover:text-[#E5C378] transition-colors truncate">
                           {profile.name}
                         </span>
-                        <Badge
-                          variant={isCurrent ? "novelSand" : "neutral"}
-                          className="text-[9px]"
-                        >
+                        <span className="shrink-0 rounded-[3px] border border-[#262D35] bg-[#161B21] px-1.5 py-0.2 text-[10px] font-serif italic text-[#8E95A0]">
                           {profile.role}
-                        </Badge>
+                        </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-white/65">
+                      <p className="mt-0.5 text-xs text-[#727985] truncate tabular-nums">
                         {profile.department} · {profile.dealsCount} активных сделок
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  {/* Кнопка статуса или золотой треугольник перехода, без переносов */}
+                  <div className="shrink-0 flex items-center">
                     {isCurrent ? (
-                      <span className="inline-flex items-center gap-1 rounded-tag bg-novel-sand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#1F1808]">
-                        <Check className="h-3 w-3" strokeWidth={2.5} />
-                        Активен
+                      <span className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
+                        <Check className="h-3 w-3 text-[#E5C378]" strokeWidth={2.5} />
+                        <span>Активен</span>
                       </span>
                     ) : (
-                      <span className="text-xs text-white/40 group-hover:text-white/80 transition-colors">
-                        Переключить →
+                      <span className="flex h-7 w-7 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#E5C378] transition-all duration-150 group-hover:border-[#E5C378] group-hover:bg-[#261E0F] group-hover:translate-x-0.5">
+                        <Play className="h-2.5 w-2.5 fill-[#E5C378] text-[#E5C378]" />
                       </span>
                     )}
                   </div>
                 </div>
               );
             })}
-          </div>
-
-          {/* Информационный подвал системы */}
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4 text-xs text-white/60">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>База данных актуальна: 2026</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onClose}
-                className="border-white/20 bg-transparent text-white hover:bg-white/10"
-              >
-                Закрыть окно
-              </Button>
-            </div>
           </div>
         </div>
       </div>

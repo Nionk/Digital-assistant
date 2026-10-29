@@ -98,14 +98,9 @@ export function EventsCatalogView() {
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-[4px] bg-[#94A3B8] text-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold font-serif italic">
-                Каталог
-              </span>
-              <h1 className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#E5C378]">
-                Отслеживаемый реестр отраслевых площадок
-              </h1>
-            </div>
+            <h1 className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#E5C378]">
+              Отслеживаемый реестр отраслевых площадок
+            </h1>
             <p className="mt-1 font-serif italic text-xs leading-relaxed text-[#8E95A0]">
               Архитектурные и строительные форумы, круглые столы девелоперов и конференции с актуальной сеткой тарифов организаторов и скидок Early Bird
             </p>

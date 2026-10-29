@@ -88,9 +88,31 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Выразительный благородный золотой скроллбар для всего сайта и контейнеров */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0E1216;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #7C5A20 0%, #A88238 50%, #C8A961 100%);
+    border-radius: 9999px;
+    border: 1.5px solid #0E1216;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #A88238 0%, #C8A961 50%, #E5C378 100%);
+    box-shadow: 0 0 10px rgba(229, 195, 120, 0.45);
+  }
+
+  /* Компактный золотой скроллбар для выпадающих меню, списков и панелей */
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -98,12 +120,18 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #262D35;
+    background: linear-gradient(180deg, #7C5A20, #C8A961);
     border-radius: 9999px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #38414F;
+    background: #E5C378;
+    box-shadow: 0 0 8px rgba(229, 195, 120, 0.5);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #A88238 #0E1216;
   }
 }
 
