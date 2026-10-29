@@ -1,4 +1,5 @@
 import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   MapPin,
@@ -347,9 +348,9 @@ export function EventsCatalogView() {
                 onClick={() => setViewMode("table")}
                 title="Режим реестра (таблица)"
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-[4px] px-2.5 py-1 text-xs font-serif italic transition-all duration-150",
+                  "inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-2.5 py-1 text-xs font-serif italic transition-colors duration-120 select-none cursor-pointer",
                   viewMode === "table"
-                    ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
+                    ? "bg-[#261E0F] text-[#E5C378] border-[#7C5A20]/60 font-semibold shadow-xs"
                     : "text-[#8E95A0] hover:text-white"
                 )}
               >
@@ -361,9 +362,9 @@ export function EventsCatalogView() {
                 onClick={() => setViewMode("cards")}
                 title="Режим визиток (карточки)"
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-[4px] px-2.5 py-1 text-xs font-serif italic transition-all duration-150",
+                  "inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-2.5 py-1 text-xs font-serif italic transition-colors duration-120 select-none cursor-pointer",
                   viewMode === "cards"
-                    ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
+                    ? "bg-[#261E0F] text-[#E5C378] border-[#7C5A20]/60 font-semibold shadow-xs"
                     : "text-[#8E95A0] hover:text-white"
                 )}
               >
@@ -401,48 +402,73 @@ export function EventsCatalogView() {
             <span>Сбросить все фильтры</span>
           </button>
         </div>
-      ) : viewMode === "table" ? (
-        /* ========================================================================= */
-        /* РЕЖИМ 1: РЕЕСТР (ТАБЛИЦА) — Высокая плотность, до 15 событий на экран    */
-        /* ========================================================================= */
-        <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm overflow-hidden">
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[#21262F] bg-[#12161A] text-[11px] font-serif italic text-[#8E95A0] select-none">
-                  <th className="py-2.5 pl-4 pr-3 font-semibold w-28">Сроки</th>
-                  <th className="py-2.5 px-3 font-semibold">Мероприятие и темы</th>
-                  <th className="py-2.5 px-3 font-semibold w-44">Формат и город</th>
-                  <th className="py-2.5 px-3 font-semibold w-36">Стоимость</th>
-                  <th className="py-2.5 px-3 font-semibold w-48">Спецтариф Early Bird</th>
-                  <th className="py-2.5 pr-4 pl-2 font-semibold text-right w-24">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#21262F] text-xs">
-                {filteredEvents.map((ev) => {
-                  const cal = formatCalendarBadge(ev.start_date, ev.end_date);
-                  const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
-                  const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
-                  const minPrice = getEventMinPrice(ev);
-                  const { savings, deadline } = getEventMaxSavings(ev);
+      ) : (
+        <AnimatePresence mode="wait" initial={false}>
+          {viewMode === "table" ? (
+            /* ========================================================================= */
+            /* РЕЖИМ 1: РЕЕСТР (ТАБЛИЦА) — Высокая плотность, до 15 событий на экран    */
+            /* ========================================================================= */
+            <motion.div
+              key="catalog-table"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm overflow-hidden"
+            >
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#21262F] bg-[#12161A] text-[11px] font-serif italic text-[#8E95A0] select-none">
+                      <th className="py-2.5 pl-4 pr-3 font-semibold w-28">Сроки</th>
+                      <th className="py-2.5 px-3 font-semibold">Мероприятие и темы</th>
+                      <th className="py-2.5 px-3 font-semibold w-44">Формат и город</th>
+                      <th className="py-2.5 px-3 font-semibold w-36">Стоимость</th>
+                      <th className="py-2.5 px-3 font-semibold w-48">Спецтариф Early Bird</th>
+                      <th className="py-2.5 pr-4 pl-2 font-semibold text-right w-24">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#21262F] text-xs">
+                    {filteredEvents.map((ev) => {
+                      const cal = formatCalendarBadge(ev.start_date, ev.end_date);
+                      const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
+                      const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
+                      const minPrice = getEventMinPrice(ev);
+                      const { savings, deadline } = getEventMaxSavings(ev);
+                      const isSelected = selectedEventForDrawer?.event_id === ev.event_id;
 
-                  return (
-                    <tr
-                      key={ev.event_id}
-                      onClick={() => setSelectedEventForDrawer(ev)}
-                      className="group cursor-pointer transition-colors duration-150 hover:bg-[#1A2128]"
-                    >
-                      {/* 1. Дата события */}
-                      <td className="py-3 pl-4 pr-3 align-middle tabular-nums whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span className="font-serif font-bold text-xs text-white group-hover:text-[#E5C378] transition-colors">
-                            {cal.dayText}
-                          </span>
-                          <span className="text-[10px] font-serif uppercase tracking-wider text-[#8E95A0]">
-                            {cal.monthText}
-                          </span>
-                        </div>
-                      </td>
+                      return (
+                        <tr
+                          key={ev.event_id}
+                          onClick={() => setSelectedEventForDrawer(ev)}
+                          className={cn(
+                            "group cursor-pointer transition-colors duration-150 active:scale-[0.998]",
+                            isSelected
+                              ? "bg-[#221A0E] text-[#E5C378]"
+                              : "hover:bg-[#1A2128]"
+                          )}
+                        >
+                          {/* 1. Дата события (Сроки) — единый стиль и единая высота */}
+                          <td className="py-3 pl-4 pr-3 align-middle tabular-nums whitespace-nowrap">
+                            <div className="flex items-baseline gap-1.5 font-serif text-xs">
+                              <span
+                                className={cn(
+                                  "font-semibold transition-colors",
+                                  isSelected ? "text-[#E5C378]" : "text-white group-hover:text-[#E5C378]"
+                                )}
+                              >
+                                {cal.dayText}
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-normal transition-colors",
+                                  isSelected ? "text-[#E5C378]/90" : "text-[#8E95A0] group-hover:text-[#E5C378]/80"
+                                )}
+                              >
+                                {cal.monthShortLabel}
+                              </span>
+                            </div>
+                          </td>
 
                       {/* 2. Название и тематика */}
                       <td className="py-3 px-3 align-middle">
@@ -517,27 +543,40 @@ export function EventsCatalogView() {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        /* ========================================================================= */
-        /* РЕЖИМ 2: КАРТОЧКИ (ОБЛЕГЧЕННЫЕ) — Без простыней из тарифов, высота ~140px */
-        /* ========================================================================= */
-        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
-          {filteredEvents.map((ev) => {
-            const cal = formatCalendarBadge(ev.start_date, ev.end_date);
-            const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
-            const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
-            const minPrice = getEventMinPrice(ev);
-            const { savings } = getEventMaxSavings(ev);
+                </table>
+              </div>
+            </motion.div>
+          ) : (
+            /* ========================================================================= */
+            /* РЕЖИМ 2: КАРТОЧКИ (ОБЛЕГЧЕННЫЕ) — Без простыней из тарифов, высота ~140px */
+            /* ========================================================================= */
+            <motion.div
+              key="catalog-cards"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="grid grid-cols-1 gap-3.5 lg:grid-cols-2"
+            >
+              {filteredEvents.map((ev) => {
+                const cal = formatCalendarBadge(ev.start_date, ev.end_date);
+                const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
+                const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
+                const minPrice = getEventMinPrice(ev);
+                const { savings } = getEventMaxSavings(ev);
+                const isSelected = selectedEventForDrawer?.event_id === ev.event_id;
 
-            return (
-              <div
-                key={ev.event_id}
-                onClick={() => setSelectedEventForDrawer(ev)}
-                className="group flex flex-col justify-between rounded-[10px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm transition-all duration-150 hover:border-[#7C5A20] hover:bg-[#181D24] cursor-pointer"
-              >
+                return (
+                  <div
+                    key={ev.event_id}
+                    onClick={() => setSelectedEventForDrawer(ev)}
+                    className={cn(
+                      "group flex flex-col justify-between rounded-[10px] border p-4 shadow-sm transition-colors duration-150 active:scale-[0.995] cursor-pointer",
+                      isSelected
+                        ? "border-[#E5C378] bg-[#1E190E] shadow-[0_0_12px_rgba(229,195,120,0.18)]"
+                        : "border-[#262D35] bg-[#161B22] hover:border-[#7C5A20] hover:bg-[#181D24]"
+                    )}
+                  >
                 <div>
                   <div className="flex items-start gap-3">
                     {/* Календарный листок даты */}
@@ -625,7 +664,9 @@ export function EventsCatalogView() {
               </div>
             );
           })}
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
 
       {/* 3. Выдвижная шторка детального просмотра мероприятия (Slide-over Drawer) */}
