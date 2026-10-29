@@ -173,7 +173,7 @@ export function EventsCatalogView() {
                   type="button"
                   onClick={() => setSelectedFormat(fmt.id)}
                   className={cn(
-                    "rounded-[6px] border px-2.5 py-1 text-xs transition-all select-none cursor-pointer outline-none focus-visible:outline-none active:scale-[0.98]",
+                    "rounded-[6px] border px-2.5 py-1 text-xs transition-colors duration-150 select-none cursor-pointer outline-none focus-visible:outline-none active:scale-[0.98]",
                     isActive
                       ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-semibold shadow-[0_0_8px_rgba(229,195,120,0.2)]"
                       : "border-[#262D35] bg-[#12161A] font-medium text-[#8E95A0] hover:border-[#38414F] hover:bg-[#1A2128] hover:text-white"
