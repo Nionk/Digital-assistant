@@ -1,4 +1,5 @@
 import { CheckCircle2, AlertTriangle, Calendar, MapPin, Globe } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   checkDateConflicts,
   formatCalendarBadge,
@@ -47,15 +48,15 @@ export function CalendarTimeline({
         </div>
 
         {hasConflict ? (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#F472B6] text-[#3B0716] px-2.5 py-0.5 text-[10px] font-bold font-serif italic tabular-nums">
+          <Badge variant="ebRose">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
             <span>{conflictDescription || "Обнаружено наложение дат"}</span>
-          </div>
+          </Badge>
         ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#34D399] text-[#02291D] px-2.5 py-0.5 text-[10px] font-bold font-serif italic tabular-nums">
+          <Badge variant="ebEmerald">
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#02291D]" strokeWidth={2.5} />
             <span>Календарь сверен: без накладок</span>
-          </div>
+          </Badge>
         )}
       </div>
 

@@ -11,6 +11,7 @@ import {
 import * as React from "react";
 import type { ComputedFinancialSummary } from "@/store/useManagerStore";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { formatDateShort, formatRub } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -68,9 +69,9 @@ export function FinancialAndPitchPanel({
               {companyName}
             </h3>
           </div>
-          <span className="rounded-[4px] bg-[#94A3B8] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#0F172A] tabular-nums">
+          <Badge variant="ebSlate">
             Площадок: <span className="font-sans not-italic font-bold">{summary.includedRows.length}</span>
-          </span>
+          </Badge>
         </div>
 
         {/* Основная сумма внешних расходов */}
@@ -105,10 +106,10 @@ export function FinancialAndPitchPanel({
               <span className="font-serif italic text-xs font-semibold text-[#D1D5DB]">
                 Выгода по спецтарифам:
               </span>
-              <span className="rounded-[4px] bg-[#34D399] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#02291D]">
+              <Badge variant="ebEmerald">
                 −{formatRub(summary.totalSavings)}{" "}
                 {savingsPct > 0 ? `(${savingsPct}%)` : ""}
-              </span>
+              </Badge>
             </div>
             {summary.earliestDeadline && (
               <p className="mt-1 text-[11px] text-[#8E95A0] tabular-nums">

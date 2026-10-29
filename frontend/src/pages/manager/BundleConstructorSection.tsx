@@ -393,12 +393,12 @@ function EventBuilderRow({
 
             {selectedTariff.savings > 0 ? (
               <div className="flex items-center">
-                <span className="rounded-[4px] bg-[#34D399] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#02291D] tabular-nums">
+                <Badge variant="ebEmerald">
                   Выгода {formatRub(selectedTariff.savings)}
                   {selectedTariff.early_bird_deadline
                     ? ` до ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
                     : ""}
-                </span>
+                </Badge>
               </div>
             ) : (
               <span className="text-[11px] text-[#727985]">Базовый тариф</span>

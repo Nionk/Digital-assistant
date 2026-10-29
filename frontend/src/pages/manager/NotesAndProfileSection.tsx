@@ -15,6 +15,7 @@ import type {
   ParticipationRole,
 } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { ROLE_BADGE_LABELS, formatNumberCompact } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -220,9 +221,9 @@ export function NotesAndProfileSection({
                       onClick={() => onNotesChange(preset.text)}
                       className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#E5C378] hover:bg-[#161E28]"
                     >
-                      <span className="rounded-[3px] bg-[#E59837] px-1.5 py-0.2 text-[9px] font-serif italic font-bold text-[#261502]">
+                      <Badge variant="ebAmber" className="text-[9px]">
                         {preset.category}
-                      </span>
+                      </Badge>
                       <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
                       <span className="text-[#8E95A0]">· {preset.budget}</span>
                     </button>
@@ -285,9 +286,9 @@ export function NotesAndProfileSection({
         <div className="bg-[#161B22]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] bg-[#94A3B8] px-1.5 py-0.5 text-[9px] font-serif italic font-bold text-[#0F172A]">
+              <Badge variant="ebSlate" className="text-[9px]">
                 Критерии
-              </span>
+              </Badge>
               <span className="text-xs font-semibold text-white">
                 Параметры отбора площадок
               </span>
@@ -495,13 +496,15 @@ export function NotesAndProfileSection({
                       type="button"
                       onClick={() => handleToggleRole(role)}
                       className={cn(
-                        "rounded-[4px] border px-1.5 py-0.5 text-[11px] transition-colors",
+                        "px-2 py-0.5 text-[11px] font-serif italic transition-colors outline-none",
                         active
-                          ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-medium"
-                          : "border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
+                          ? "-skew-x-[9deg] rounded-[2px] border border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-bold shadow-xs"
+                          : "rounded-[3px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
                       )}
                     >
-                      {ROLE_BADGE_LABELS[role]}
+                      <span className={active ? "inline-block skew-x-[9deg]" : ""}>
+                        {ROLE_BADGE_LABELS[role]}
+                      </span>
                     </button>
                   );
                 })}
