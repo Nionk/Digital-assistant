@@ -118,9 +118,9 @@ export function PublishedShowcaseMonitor({
             href={relativeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[#38BDF8]/50 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-all duration-200 hover:bg-[#1E3A5F] hover:text-[#BAE6FD] hover:border-[#38BDF8] hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[#7C5A20]/70 bg-[#1E190E] px-3 text-xs font-serif italic text-[#E5C378] transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] select-none"
           >
-            <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
+            <ExternalLink className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.75} />
             <span>Витрина клиента</span>
           </a>
         </div>
@@ -184,7 +184,7 @@ export function PublishedShowcaseMonitor({
               {item.client_comment && (
                 <div className="mt-2.5 rounded-[6px] border border-[#262C35] bg-[#12161A] p-2 text-[11px] text-[#D1D5DB]">
                   <div className="flex items-center gap-1 font-semibold text-white">
-                    <MessageSquare className="h-3 w-3 text-[#38BDF8]" strokeWidth={1.5} />
+                    <MessageSquare className="h-3 w-3 text-[#E5C378]" strokeWidth={1.5} />
                     <span>Комментарий клиента:</span>
                   </div>
                   <p className="mt-0.5 leading-relaxed">{item.client_comment}</p>

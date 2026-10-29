@@ -96,7 +96,7 @@ export function CalendarTimeline({
                   </span>
                   <span>·</span>
                   {ev.is_online ? (
-                    <Globe className="h-3 w-3 shrink-0 text-[#38BDF8]" strokeWidth={1.5} />
+                    <Globe className="h-3 w-3 shrink-0 text-[#529E85]" strokeWidth={1.5} />
                   ) : (
                     <MapPin className="h-3 w-3 shrink-0 text-[#8E95A0]" strokeWidth={1.5} />
                   )}
