@@ -60,7 +60,6 @@ const DEMO_NOTE_PRESETS = [
   },
 ];
 
-const QUICK_CITIES = ["Москва", "Санкт-Петербург", "Екатеринбург", "Казань", "Сочи"];
 const ALL_ROLES: ParticipationRole[] = ["delegate", "speaker", "sponsor"];
 
 const LOADING_PHRASES = [
@@ -84,8 +83,20 @@ export function NotesAndProfileSection({
   onRematchWithOverride,
 }: NotesAndProfileSectionProps) {
   const { data: catalogData } = useManagerEventsCatalog(true);
-  const [newCityText, setNewCityText] = React.useState("");
   const [loadingPhraseIndex, setLoadingPhraseIndex] = React.useState(0);
+
+  // Все уникальные города из каталога с количеством мероприятий
+  const catalogCityOptions = React.useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const ev of catalogData?.events || []) {
+      if (ev.city) {
+        counts.set(ev.city, (counts.get(ev.city) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([city, count]) => ({ value: city, label: city, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [catalogData?.events]);
 
   // Все уникальные темы площадок из каталога с количеством мероприятий
   const catalogThemeOptions = React.useMemo<MultiSelectOption[]>(() => {
@@ -112,6 +123,29 @@ export function NotesAndProfileSection({
     return () => clearInterval(interval);
   }, [isMatching]);
 
+  const handleUpdateCities = (newCities: string[]) => {
+    if (!editableProfile) return;
+    onUpdateProfile((prev) => ({
+      ...prev,
+      cities: newCities,
+    }));
+  };
+
+  const handleCreateCustomCity = (customCity: string) => {
+    const trimmed = customCity.trim();
+    if (!trimmed || !editableProfile) return;
+    if (!editableProfile.cities.includes(trimmed)) {
+      handleUpdateCities([...editableProfile.cities, trimmed]);
+    }
+  };
+
+  const handleRemoveCity = (city: string) => {
+    onUpdateProfile((prev) => ({
+      ...prev,
+      cities: prev.cities.filter((c) => c !== city),
+    }));
+  };
+
   const handleUpdateThemes = (newThemes: string[]) => {
     if (!editableProfile) return;
     onUpdateProfile((prev) => ({
@@ -135,30 +169,6 @@ export function NotesAndProfileSection({
       themes_keywords: prev.themes_keywords.filter((t) => t !== tag),
       semantic_search_query: prev.themes_keywords.filter((t) => t !== tag).join(" ").trim(),
     }));
-  };
-
-  const handleToggleCity = (city: string) => {
-    if (!editableProfile) return;
-    const exists = editableProfile.cities.includes(city);
-    onUpdateProfile((prev) => ({
-      ...prev,
-      cities: exists
-        ? prev.cities.filter((c) => c !== city)
-        : [...prev.cities, city],
-    }));
-  };
-
-  const handleAddCustomCity = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = newCityText.trim();
-    if (!cleaned || !editableProfile) return;
-    if (!editableProfile.cities.includes(cleaned)) {
-      onUpdateProfile((prev) => ({
-        ...prev,
-        cities: [...prev.cities, cleaned],
-      }));
-    }
-    setNewCityText("");
   };
 
   const handleToggleRole = (role: ParticipationRole) => {
@@ -387,8 +397,9 @@ export function NotesAndProfileSection({
             </div>
 
             {/* Ячейка 2: География и Онлайн */}
-            <div className="p-3 bg-[#161B22]">
-              <div className="flex items-center justify-between">
+            <div className="p-3 bg-[#161B22] relative flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
                 <span className="font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                   2. География
                 </span>
@@ -408,53 +419,67 @@ export function NotesAndProfileSection({
                 </label>
               </div>
 
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {QUICK_CITIES.map((city) => {
-                  const active = editableProfile.cities.includes(city);
-                  return (
-                    <button
-                      key={city}
-                      type="button"
-                      onClick={() => handleToggleCity(city)}
-                      className={cn(
-                        "rounded-[4px] border px-1.5 py-0.5 text-[11px] transition-colors",
-                        active
-                          ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-medium"
-                          : "border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
-                      )}
-                    >
-                      {city === "Санкт-Петербург" ? "СПб" : city}
-                    </button>
-                  );
-                })}
-                {editableProfile.cities
-                  .filter((c) => !QUICK_CITIES.includes(c))
-                  .map((customCity) => (
+                {/* Отображение выбранных городов в ячейке */}
+                <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
+                  {editableProfile.cities.map((city) => (
                     <span
-                      key={customCity}
-                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#E5C378] bg-[#261E0F] px-1.5 py-0.5 text-[11px] font-medium text-[#E5C378]"
+                      key={city}
+                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-white"
                     >
-                      {customCity}
+                      <span>{city === "Санкт-Петербург" ? "СПб" : city}</span>
                       <button
                         type="button"
-                        onClick={() => handleToggleCity(customCity)}
-                        className="opacity-80 hover:opacity-100"
+                        onClick={() => handleRemoveCity(city)}
+                        className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
+                        title="Удалить город"
                       >
                         <X className="h-2.5 w-2.5" />
                       </button>
                     </span>
                   ))}
+                  {editableProfile.cities.length === 0 && (
+                    <span className="text-[11px] font-serif italic text-[#6B7280]">
+                      Все города (без ограничений)
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <form onSubmit={handleAddCustomCity} className="mt-1.5 flex gap-1">
-                <input
-                  type="text"
-                  value={newCityText}
-                  onChange={(e) => setNewCityText(e.target.value)}
-                  placeholder="+ Город..."
-                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+              {/* Выдвижная панель с живым поиском и мультивыбором городов */}
+              <div className="mt-2">
+                <SearchableMultiSelectPopover
+                  label="Города"
+                  placeholder="Поиск города по каталогу..."
+                  options={catalogCityOptions}
+                  selectedValues={editableProfile.cities}
+                  onChange={handleUpdateCities}
+                  allowCustomCreation={true}
+                  onCreateCustom={handleCreateCustomCity}
+                  align="left"
+                  popoverWidthClass="w-80 sm:w-96"
+                  triggerClassName="w-full justify-between h-6 px-2 text-[11px]"
+                  allSelectedLabel="Все"
+                  renderTriggerContent={({ isOpen }) => (
+                    <button
+                      type="button"
+                      className={cn(
+                        "w-full flex h-6.5 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
+                        isOpen && "border-[#E5C378] text-[#E5C378] bg-[#161B21]"
+                      )}
+                    >
+                      <span className="truncate">
+                        + Выбрать города ({catalogCityOptions.length})
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-3 w-3 shrink-0 transition-transform duration-200",
+                          isOpen && "rotate-180 text-[#E5C378]"
+                        )}
+                      />
+                    </button>
+                  )}
                 />
-              </form>
+              </div>
             </div>
 
             {/* Ячейка 3: Период планирования */}
