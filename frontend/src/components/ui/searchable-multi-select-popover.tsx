@@ -18,6 +18,7 @@ export interface SearchableMultiSelectPopoverProps {
   allowCustomCreation?: boolean;
   onCreateCustom?: (newValue: string) => void;
   align?: "left" | "right";
+  className?: string;
   triggerClassName?: string;
   popoverClassName?: string;
   popoverWidthClass?: string;
@@ -46,6 +47,7 @@ export function SearchableMultiSelectPopover({
   allowCustomCreation = false,
   onCreateCustom,
   align = "left",
+  className,
   triggerClassName,
   popoverClassName,
   popoverWidthClass = "w-80",
@@ -55,8 +57,23 @@ export function SearchableMultiSelectPopover({
 }: SearchableMultiSelectPopoverProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [placement, setPlacement] = React.useState<"bottom" | "top">("bottom");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Определение направления раскрытия (вниз или вверх, если места мало)
+  React.useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+        setPlacement("top");
+      } else {
+        setPlacement("bottom");
+      }
+    }
+  }, [isOpen]);
 
   // Карта значений для быстрого поиска меток
   const optionMap = React.useMemo(() => {
@@ -173,7 +190,7 @@ export function SearchableMultiSelectPopover({
   }, [label, allSelectedLabel, selectedValues, optionMap]);
 
   return (
-    <div ref={containerRef} className="relative inline-block text-left">
+    <div ref={containerRef} className={cn("relative text-left", className)}>
       {/* Кнопка-триггер */}
       {renderTriggerContent ? (
         <div onClick={() => setIsOpen((prev) => !prev)}>
@@ -205,12 +222,13 @@ export function SearchableMultiSelectPopover({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            initial={{ opacity: 0, y: placement === "top" ? 4 : -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -3, scale: 0.98 }}
+            exit={{ opacity: 0, y: placement === "top" ? 3 : -3, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
             className={cn(
-              "absolute z-50 mt-1.5 rounded-[8px] border border-[#7C5A20]/80 bg-[#12161A] shadow-[0_12px_32px_rgba(0,0,0,0.65)] backdrop-blur-md overflow-hidden flex flex-col",
+              "absolute z-50 rounded-[8px] border border-[#7C5A20]/80 bg-[#12161A] shadow-[0_16px_36px_rgba(0,0,0,0.8)] backdrop-blur-md overflow-hidden flex flex-col",
+              placement === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
               align === "right" ? "right-0" : "left-0",
               popoverWidthClass,
               popoverClassName
