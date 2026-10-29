@@ -490,19 +490,6 @@ export function ManagerWorkspacePage() {
                         </>
                       )}
                     </div>
-
-                    <div className="inline-flex items-center gap-2 text-xs leading-none">
-                      <span className="font-serif italic font-semibold text-xs text-[#8E95A0] leading-none">
-                        Путь клиента:
-                      </span>
-                      <span className="inline-flex items-center text-xs font-medium text-[#E5C378] leading-none">
-                        {activeMatchResult
-                          ? activeMagicToken
-                            ? "Этап 07 · Согласование с клиентом"
-                            : "Этап 05–06 · Сравнение и рекомендация"
-                          : "Этап 01–04 · Запрос и подбор возможностей"}
-                      </span>
-                    </div>
                   </div>
 
                 {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}

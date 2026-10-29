@@ -239,10 +239,7 @@ export function NotesAndProfileSection({
                 className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
               />
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[11px] text-[#8E95A0]">
-                  Система автоматически извлечет параметры, проверит пересечения дат и рассчитает 2 пакета с учетом скидок Early Bird.
-                </p>
+              <div className="mt-3 flex items-center justify-end">
                 <Button
                   type="button"
                   variant="primary"
@@ -286,14 +283,8 @@ export function NotesAndProfileSection({
         <div className="bg-[#161B22]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
-              <Badge variant="ebSlate" className="text-[9px]">
-                Критерии
-              </Badge>
               <span className="text-xs font-semibold text-white">
                 Параметры отбора площадок
-              </span>
-              <span className="hidden sm:inline text-[11px] text-[#8E95A0]">
-                · Ручная калибровка параметров поиска
               </span>
             </div>
             <button

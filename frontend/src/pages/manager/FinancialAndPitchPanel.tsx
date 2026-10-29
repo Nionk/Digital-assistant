@@ -5,7 +5,6 @@ import {
   Send,
   ShieldCheck,
   AlertTriangle,
-  Sparkles,
   Check,
   Layers,
 } from "lucide-react";
@@ -70,10 +69,10 @@ export function FinancialAndPitchPanel({
               {companyName}
             </h3>
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 select-none">
+          <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 select-none">
             <Layers className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.5} />
             <span className="font-serif italic text-[11px] text-[#8E95A0]">Площадок:</span>
-            <span className="rounded-[4px] border border-[#2D3642] bg-[#1E252E] px-1.5 py-0.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
+            <span className="inline-flex min-w-[24px] items-center justify-center rounded-[4px] bg-[#1E252E] px-1.5 py-0.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
               {summary.includedRows.length}
             </span>
           </div>
@@ -264,13 +263,6 @@ export function FinancialAndPitchPanel({
         </div>
       </div>
 
-      {/* Памятка по циклу согласования (Шаг 07 -> Шаг 09) */}
-      <div className="rounded-[8px] border border-[#262D35] bg-[#161B22]/70 px-3.5 py-2.5 flex items-start gap-2.5">
-        <Sparkles className="h-4 w-4 shrink-0 text-[#E5C378] mt-0.5" strokeWidth={1.5} />
-        <p className="text-[11px] leading-relaxed text-[#8E95A0]">
-          После отправки ссылки все отклики клиента (<strong className="font-bold text-inherit">Утверждение плана</strong>, <strong className="font-bold text-inherit">Запрос правок</strong>, выбор <strong className="font-bold text-inherit">Подготовки спикера / Целевых встреч</strong> и вопросы по регламенту) приходят в Telegram и синхронизируются на этом экране каждые 10 секунд.
-        </p>
-      </div>
     </div>
   );
 }
