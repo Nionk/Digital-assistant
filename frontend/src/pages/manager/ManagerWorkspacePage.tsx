@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Building2, UserCheck, Compass } from "lucide-react";
+import { Building2, UserCheck, Compass, PanelLeftOpen } from "lucide-react";
 import {
   useManagerDashboard,
   useManagerEventsCatalog,
@@ -237,8 +237,6 @@ export function ManagerWorkspacePage() {
       <ManagerHeader
         workspaceMode={workspaceMode}
         onModeChange={setWorkspaceMode}
-        isSidebarCollapsed={isSidebarCollapsed}
-        onToggleSidebar={toggleSidebar}
         burningDeadlines={burningDeadlines}
         eventsCount={catalogData?.total_count}
       />
@@ -249,8 +247,8 @@ export function ManagerWorkspacePage() {
         </main>
       ) : (
         <div className="flex flex-1 overflow-hidden">
-          {/* Левая узкая колонка клиентов (260px, сворачиваемая) */}
-          {!isSidebarCollapsed && (
+          {/* Левая колонка клиентов (сворачиваемая) */}
+          {!isSidebarCollapsed ? (
             <ClientSidebar
               clients={clients}
               selectedClientId={selectedClientId}
@@ -259,7 +257,24 @@ export function ManagerWorkspacePage() {
               onSelectClient={(c) => selectClient(c.id, c.raw_manager_notes)}
               publishedByClientMap={publishedInfoByClient}
               hasDraftInSessionMap={hasDraftInSessionMap}
+              onToggleSidebar={toggleSidebar}
             />
+          ) : (
+            /* Кнопка «Развернуть список клиентов» строго под логотипом вне хедера с ровным выравниванием слева */
+            <div className="shrink-0 border-r border-border bg-surface/50 px-4 py-3">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="group flex items-center gap-2 rounded-control border border-border bg-surface px-3 py-2 text-xs font-semibold text-ink shadow-sm transition-all hover:border-border-strong hover:bg-surface-muted"
+                title="Развернуть список клиентов"
+              >
+                <PanelLeftOpen className="h-4 w-4 text-pine transition-transform group-hover:scale-110" strokeWidth={1.75} />
+                <span>Развернуть список клиентов</span>
+                <span className="rounded-tag bg-surface-muted px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary tabular-nums">
+                  {clients.length}
+                </span>
+              </button>
+            </div>
           )}
 
           {/* Основная рабочая область выбранного клиента */}
