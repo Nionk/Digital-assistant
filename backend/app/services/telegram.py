@@ -27,7 +27,11 @@ def format_reaction_alert(
         f"Мероприятие: «{escape_html(event_title)}»",
     ]
     if comment and comment.strip():
-        lines.append(f"Комментарий: <i>{escape_html(comment.strip())}</i>")
+        cleaned = comment.strip()
+        lines.append(f"Комментарий: <i>{escape_html(cleaned)}</i>")
+        lower_c = cleaned.lower()
+        if any(kw in lower_c for kw in ("сопровожден", "спикер", "знакомств", "встреч", "интерактив", "стенд", "деловая игра")):
+            lines.append("<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>")
     return "\n".join(lines)
 
 

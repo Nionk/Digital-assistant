@@ -5,16 +5,16 @@ from app.schemas.manager import ClientQueryExtracted
 from app.core.constants import normalize_city
 from app.core.config import settings
 
-async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
 
+async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
     today = datetime.date.today()
     current_date_str = today.isoformat()
     day_of_week = today.strftime("%A")
 
-    system_prompt = f"""Ты — экспертный ИИ-ассистент отдела сопровождения ивент-агентства «СКАРТ».
-Твоя задача — извлечь строго структурированные параметры запроса клиента из свободного конспекта созвона менеджера.
+    system_prompt = f"""Ты — экспертный ИИ-ассистент коммуникационного агентства «СКАРТ» (подбор площадок и сопровождение участия для строительной отрасли: производителей, застройщиков, строительных компаний, архитектурных и проектных бюро).
+Твоя задача — извлечь строго структурированные параметры запроса клиента из конспекта установочной встречи или созвона менеджера.
 
-ВАЖНЫЙ КОНТЕКСТ: Сегодняшняя дата: {current_date_str} ({day_of_week}). 
+ВАЖНЫЙ КОНТЕКСТ: Сегодняшняя дата: {current_date_str} ({day_of_week}).
 Все относительные даты (например, "в следующем месяце", "в конце осени", "на ноябрь-декабрь") ты должен перевести в абсолютные даты формата YYYY-MM-DD на основе сегодняшней даты.
 
 Правила извлечения:
@@ -23,11 +23,17 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
 3. `date_from` и `date_to`: Период поиска (YYYY-MM-DD).
 4. `total_budget_max`: Общий бюджет на ВСЮ серию (только число). Если "полтора миллиона" -> 1500000. Если "400 тыс" -> 400000.
 5. `target_events_count`: Сколько всего мероприятий нужно (по умолчанию 3, если не сказано иное).
-6. `preferred_formats`: Массив из списка ["roundtable", "business_breakfast", "forum", "conference", "session"]. Если не указано — пустой массив.
-7. `required_roles`: Массив из ["delegate", "speaker", "sponsor"]. 
-8. `min_speaker_events`: Если сказано "хотя бы на одном выступить спикером" -> 1. Если "на всех делегатами" -> 0.
-9. `themes_keywords`: Отраслевые термины и теги (КРТ, ИЖС, урбанистика, девелопмент, BIM и т.д.).
-10. `semantic_search_query`: Развернутое описание запроса на русском языке для векторного поиска.
+6. `preferred_formats`: Массив из списка ["roundtable", "business_breakfast", "forum", "conference", "session"].
+   - Если клиент упоминает "камерные встречи", "закрытые встречи", "узкий круг" -> включай "roundtable", "business_breakfast".
+   - Если клиент упоминает "выставки", "крупные форумы", "отраслевые конкурсы", "премии" -> включай "forum", "conference".
+   - Если формат не указан — верни пустой массив [].
+7. `required_roles`: Массив из ["delegate", "speaker", "sponsor"].
+   - Если нужны "целевые знакомства", "выход на ключевых игроков", "нетворкинг" -> "delegate".
+   - Если нужно "экспертное выступление", "доклад в целевой сессии", "презентация экспертизы" -> "speaker".
+   - Если нужны "стенд", "интерактивная программа на стенде", "деловая игра", "партнерский пакет" -> "sponsor".
+8. `min_speaker_events`: Если сказано "хотя бы на одном выступить спикером" или "нужно экспертное выступление" -> минимум 1 (или точное число). Если на всех делегатами или стенд без доклада -> 0.
+9. `themes_keywords`: Отраслевые термины, продукт компании, целевая аудитория и теги (КРТ, ИЖС, урбанистика, девелопмент, BIM, архитектура, производители стройматериалов, проектирование, конкурсы и т.д.).
+10. `semantic_search_query`: Развернутое описание бизнес-задачи, продукта, целевой аудитории и искомых площадок на русском языке для векторного поиска.
 """
 
     extracted_data = await asyncio.wait_for(
@@ -36,7 +42,7 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
             response_model=ClientQueryExtracted,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Заметка менеджера:\n{raw_notes}"}
+                {"role": "user", "content": f"Заметка менеджера:\n{raw_notes}"},
             ],
             max_retries=2,
         ),
@@ -56,4 +62,4 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
                 normalized_cities.append(norm)
         extracted_data.cities = normalized_cities
 
-    return extracted_data
+    return extracted_data
