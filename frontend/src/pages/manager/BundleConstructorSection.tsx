@@ -72,18 +72,18 @@ export function BundleConstructorSection({
   return (
     <section className="space-y-3">
       {/* Переключатель вариантов пакета (Шаг 05 «Сравнение вариантов») */}
-      <div className="rounded-card border border-border bg-surface p-3 shadow-card">
+      <div className="rounded-card border border-border bg-surface p-3.5 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border/80">
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-pine text-[10px] font-bold text-white tabular-nums">
+          <div className="flex items-center gap-2.5">
+            <span className="rounded-tag bg-pine text-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
               02
             </span>
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink">
-              Сравнение вариантов и настройка тарифов участия
+            <span className="font-serif text-sm font-semibold tracking-tight text-ink sm:text-[15px]">
+              Сравнение вариантов и выбор тарифов
             </span>
           </div>
           <span className="text-[11px] text-ink-muted">
-            Переключение тарифа мгновенно пересчитывает смету справа
+            Выбор тарифа синхронно пересчитывает общую смету
           </span>
         </div>
 
@@ -97,10 +97,10 @@ export function BundleConstructorSection({
                 type="button"
                 onClick={() => onSelectVariantGroup(v.bundle_group)}
                 className={cn(
-                  "flex flex-col justify-between rounded-control border p-3 text-left transition-all",
+                  "flex flex-col justify-between rounded-control border p-3.5 text-left transition-all",
                   isActive
-                    ? "border-pine bg-pine/5 shadow-sm ring-1 ring-pine/20"
-                    : "border-border bg-canvas/50 hover:border-border-strong hover:bg-canvas"
+                    ? "border-pine bg-pine/[0.04] shadow-sm ring-1 ring-pine/20"
+                    : "border-border bg-canvas/40 hover:border-border-strong hover:bg-canvas"
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -116,7 +116,7 @@ export function BundleConstructorSection({
                   </span>
                   <span
                     className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-full border text-[10px]",
+                      "flex h-4 w-4 items-center justify-center rounded-tag border text-[10px]",
                       isActive
                         ? "border-pine bg-pine text-white"
                         : "border-border-strong bg-surface"
@@ -126,7 +126,7 @@ export function BundleConstructorSection({
                   </span>
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums">
+                <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums">
                   <span className="text-ink-muted">
                     Площадок: <strong className="text-ink">{v.items.length}</strong>
                   </span>
@@ -135,9 +135,9 @@ export function BundleConstructorSection({
                       {formatRub(v.total_actual_price)}
                     </span>
                     {v.total_savings > 0 && (
-                      <span className="rounded bg-sage-tint px-1.5 py-0.5 text-[10px] font-medium text-sage border border-sage-border">
-                        выгода {formatRub(v.total_savings)}
-                      </span>
+                      <Badge variant="novelSand" className="text-[9px]">
+                        ВЫГОДА {formatRub(v.total_savings)}
+                      </Badge>
                     )}
                   </div>
                 </div>
@@ -286,13 +286,13 @@ function EventBuilderRow({
                 </>
               )}
               {isBonusSlot && (
-                <Badge variant="sage" className="ml-1">
-                  Спецпроект / По запросу
+                <Badge variant="novelEmerald" className="ml-1 text-[9px]">
+                  СПЕЦПРОЕКТ
                 </Badge>
               )}
             </div>
 
-            <h3 className="mt-0.5 text-sm font-semibold leading-snug text-ink">
+            <h3 className="mt-1 font-serif text-[15px] font-semibold leading-snug text-ink">
               {item.canonical_title}
             </h3>
 
@@ -347,10 +347,10 @@ function EventBuilderRow({
               <Badge
                 variant={
                   selectedTariff.participation_role === "speaker"
-                    ? "pine"
+                    ? "novelSand"
                     : selectedTariff.participation_role === "sponsor"
-                      ? "terracotta"
-                      : "neutral"
+                      ? "novelGold"
+                      : "novelDark"
                 }
               >
                 {ROLE_BADGE_LABELS[selectedTariff.participation_role]}

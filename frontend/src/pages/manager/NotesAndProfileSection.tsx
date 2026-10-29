@@ -34,15 +34,21 @@ interface NotesAndProfileSectionProps {
 
 const DEMO_NOTE_PRESETS = [
   {
-    label: "Девелопер (КРТ + Спикер · 400 тыс.)",
+    category: "Девелопмент",
+    focus: "КРТ · Спикер",
+    budget: "400 000 ₽",
     text: "Установочная встреча с ГК Пионер. Продукт: жилые кварталы и проекты КРТ. Ищут на осень–зиму в Москве или Санкт-Петербурге 3 профильных мероприятия (форумы и камерные круглые столы) по КРТ, урбанистике и девелопменту. Минимум на одной площадке хотят выступить спикером в целевой сессии для укрепления экспертной позиции, на остальных — деловые знакомства с застройщиками и ведомствами. Общий бюджет на взносы организаторов — до 400 000 руб.",
   },
   {
-    label: "Архитектурное бюро (Урбанистика + Конкурсы · 300 тыс.)",
+    category: "Архитектура",
+    focus: "Урбанистика · Конкурсы",
+    budget: "300 000 ₽",
     text: "Созвонились с архитектурным бюро. Интересуют 3 площадки в Москве, СПб или онлайн по темам: архитектура, градостроительство, BIM-проектирование и профессиональные конкурсы. Важен выход на главных архитекторов и директоров по продукту девелоперских компаний. Минимум 1 экспертное выступление спикером. Бюджет до 300 000 руб.",
   },
   {
-    label: "Производитель стройматериалов (Стенд + Встречи · 650 тыс.)",
+    category: "Производство",
+    focus: "Стенд · Встречи",
+    budget: "650 000 ₽",
     text: "Производитель фасадных и инженерных систем. Задача: выход на застройщиков жилья, подрядчиков и проектные институты в Москве и регионах. Рассматривают 3 мероприятия: крупный строительный форум (возможен партнёрский пакет со стендом и деловой игрой) + закрытые деловые завтраки руководителей. Общий ориентир бюджета — 650 000 руб.",
   },
 ];
@@ -147,12 +153,12 @@ export function NotesAndProfileSection({
   return (
     <section className="rounded-card border border-border bg-surface shadow-card overflow-hidden">
       {/* Шапка блока Шага 01–03 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-canvas/50 px-4 py-2.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-pine text-[10px] font-bold text-white tabular-nums">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-canvas/60 px-4 py-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="rounded-tag bg-pine text-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
             01
           </span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-ink">
+          <span className="font-serif text-sm font-semibold tracking-tight text-ink sm:text-[15px]">
             Запрос клиента и аналитика задач
           </span>
           {hasMatchResult && isCollapsed && (
@@ -167,10 +173,10 @@ export function NotesAndProfileSection({
             <button
               type="button"
               onClick={() => onToggleCollapsed(!isCollapsed)}
-              className="inline-flex items-center gap-1 rounded-control border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink"
             >
               <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
-              <span>{isCollapsed ? "Развернуть конспект" : "Свернуть конспект"}</span>
+              <span>{isCollapsed ? "Развернуть бриф" : "Свернуть бриф"}</span>
               {isCollapsed ? (
                 <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
               ) : (
@@ -184,20 +190,24 @@ export function NotesAndProfileSection({
       {/* Раскрываемая область ввода конспекта установочной встречи */}
       {(!isCollapsed || !hasMatchResult) && (
         <div className="p-4 border-b border-border/80 bg-surface">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <label className="text-xs font-medium text-ink-secondary">
-              Конспект установочной встречи (цели, продукт, целевая аудитория, бюджет и роли):
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-semibold text-ink-secondary">
+              Конспект установочной встречи с клиентом:
             </label>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-ink-faint">Шаблоны:</span>
+              <span className="text-[11px] font-medium text-ink-faint">Готовые кейсы:</span>
               {DEMO_NOTE_PRESETS.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.category}
                   type="button"
                   onClick={() => onNotesChange(preset.text)}
-                  className="rounded-badge border border-border bg-canvas px-2 py-0.5 text-[11px] text-ink-secondary transition-colors hover:border-border-strong hover:bg-surface-muted hover:text-ink"
+                  className="inline-flex items-center gap-1.5 rounded-badge border border-border bg-canvas/80 px-2 py-0.5 text-[11px] transition-all hover:border-pine/50 hover:bg-surface"
                 >
-                  {preset.label}
+                  <span className="rounded-tag bg-novel-sand px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#342812]">
+                    {preset.category}
+                  </span>
+                  <span className="text-ink-secondary font-medium">{preset.focus}</span>
+                  <span className="text-ink-faint">· {preset.budget}</span>
                 </button>
               ))}
             </div>
@@ -266,13 +276,21 @@ export function NotesAndProfileSection({
         </div>
       )}
 
-      {/* Строгая 5-ячеечная табличная строка параметров (без нейросетевого конфетти) */}
+      {/* Строгая 5-ячеечная табличная строка параметров в стиле Novel.AI */}
       {editableProfile && (
         <div className="bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-2 bg-surface-muted/40">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-secondary">
-              Параметры отбора площадок (можно скорректировать вручную без анкетирования клиента)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-tag bg-novel-dark text-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                КРИТЕРИИ
+              </span>
+              <span className="text-xs font-semibold text-ink">
+                Параметры отбора площадок
+              </span>
+              <span className="hidden sm:inline text-[11px] text-ink-muted">
+                · Ручная калибровка параметров поиска
+              </span>
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -281,7 +299,7 @@ export function NotesAndProfileSection({
               onClick={onRematchWithOverride}
             >
               <RotateCcw className="h-3 w-3" strokeWidth={1.75} />
-              <span>Пересобрать пакеты по параметрам</span>
+              <span>Пересобрать пакеты</span>
             </Button>
           </div>
 

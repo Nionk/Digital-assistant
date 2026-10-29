@@ -47,14 +47,14 @@ export function CalendarTimeline({
         </div>
 
         {hasConflict ? (
-          <div className="inline-flex items-center gap-1.5 rounded-badge bg-terracotta-tint px-2.5 py-0.5 text-xs font-medium text-terracotta border border-terracotta-border">
+          <div className="inline-flex items-center gap-1.5 rounded-badge bg-novel-wine text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#7A2430]">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span>{conflictDescription || "Обнаружено наложение дат"}</span>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-badge bg-sage-tint px-2.5 py-0.5 text-xs font-medium text-sage border border-sage-border">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            <span>Календарь сверен: пересечений по срокам нет</span>
+          <div className="inline-flex items-center gap-1.5 rounded-badge bg-novel-sand text-[#2A2213] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#6B4E1B]" strokeWidth={2} />
+            <span>Календарь сверен: без накладок</span>
           </div>
         )}
       </div>
