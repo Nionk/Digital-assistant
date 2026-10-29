@@ -17,6 +17,7 @@ from app.services.matcher import (
     build_bundles,
     run_client_matching_pipeline,
 )
+from tests.test_d08_d09_d10 import is_postgres_online
 
 
 class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
@@ -119,6 +120,7 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(opt_on_req.base_price)
         self.assertEqual(opt_on_req.savings, 0.0)
 
+    @unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
     async def test_03_build_bundles_performance_and_diversification(self) -> None:
         today = date(2026, 9, 1)
         profile = ClientQueryExtracted(
@@ -167,6 +169,7 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
             for _, tar in bonus_pairs:
                 self.assertIsNone(tar.base_price)
 
+    @unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
     async def test_04_full_matching_pipeline_and_db_persistence(self) -> None:
         async with async_session_maker() as session:
             client_res = await session.execute(select(Client).order_by(Client.id.asc()).limit(1))

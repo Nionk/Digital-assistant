@@ -14,9 +14,10 @@ from sqlalchemy import select, func
 from app.core.database import async_session_maker
 from app.models.models import User, Client, Event, EventTariff, LLMCache
 from app.core.config import settings
+from tests.test_d08_d09_d10 import is_postgres_online
 
 
-
+@unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
 class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
     """
     Интеграционный тест верификации Задачи D-04:
