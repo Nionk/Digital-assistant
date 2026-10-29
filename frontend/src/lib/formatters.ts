@@ -53,9 +53,9 @@ export const ROLE_LABELS: Record<ParticipationRole, string> = {
 };
 
 export const ROLE_BADGE_LABELS: Record<ParticipationRole, string> = {
-  speaker: "СПИКЕР",
-  delegate: "ДЕЛЕГАТ",
-  sponsor: "ПАРТНЁР / СТЕНД",
+  speaker: "Спикер",
+  delegate: "Делегат",
+  sponsor: "Партнёр / Стенд",
 };
 
 /**

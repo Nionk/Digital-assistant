@@ -1,6 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { Building2, UserCheck, Compass, PanelLeftOpen, Search } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   useManagerDashboard,
   useManagerEventsCatalog,
@@ -322,39 +323,46 @@ export function ManagerWorkspacePage() {
                     )}
                   </button>
 
-                  {/* Выпадающее меню в стиле Early Bird Popover (media_1793287754782_2088a7c6.jpg) */}
-                  {isClientsDropdownOpen && (
-                    <div className="absolute left-0 mt-2 w-[340px] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
-                            ВЫБОР КЛИЕНТА
-                          </h3>
-                          <p className="mt-1 text-xs text-[#727985]">
-                            Активные компании и согласование пакетов
-                          </p>
+                  {/* Выпадающее меню в стиле Early Bird Popover с плавной анимацией */}
+                  <AnimatePresence>
+                    {isClientsDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className="absolute left-0 mt-2 w-[340px] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-[11px] font-serif italic font-semibold text-[#8E95A0]">
+                              Выбор клиента
+                            </h3>
+                            <p className="mt-1 text-xs text-[#727985]">
+                              Активные компании и согласование пакетов
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-[4px] bg-[#E59837] px-2.5 py-1 text-[11px] font-serif italic font-bold text-[#261502] tabular-nums">
+                            [ {clients.length} компании ]
+                          </span>
                         </div>
-                        <span className="shrink-0 rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-2.5 py-1 text-[11px] font-bold text-[#E59837] tracking-wider tabular-nums">
-                          [ {clients.length} КОМПАНИИ ]
-                        </span>
-                      </div>
 
-                      <div className="border-b border-[#21262F] my-3.5" />
+                        <div className="border-b border-[#21262F] my-3.5" />
 
-                      {/* Поиск компании */}
-                      <div className="relative mb-3">
-                        <Search
-                          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#727985]"
-                          strokeWidth={1.75}
-                        />
-                        <input
-                          type="text"
-                          value={clientSearchQuery}
-                          onChange={(e) => setClientSearchQuery(e.target.value)}
-                          placeholder="Поиск компании или контакта..."
-                          className="h-8.5 w-full rounded-[8px] border border-[#262C35] bg-[#161B21] pl-9 pr-3 text-xs text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:bg-[#1A2027] focus:outline-none transition-colors"
-                        />
-                      </div>
+                        {/* Выразительный поиск компании с увеличенной высотой */}
+                        <div className="relative mb-3.5">
+                          <Search
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#E5C378]"
+                            strokeWidth={2}
+                          />
+                          <input
+                            type="text"
+                            value={clientSearchQuery}
+                            onChange={(e) => setClientSearchQuery(e.target.value)}
+                            placeholder="Поиск компании или контакта..."
+                            className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#161B21] pl-10 pr-3.5 text-sm text-white placeholder:text-[#8E95A0] shadow-inner transition-all duration-150 ease-out hover:border-[#4B5565] focus:border-[#E5C378] focus:bg-[#1A2027] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none"
+                          />
+                        </div>
 
                       {/* Список карточек клиентов в ячейках #1A1E24 */}
                       {filteredClients.length === 0 ? (
@@ -409,18 +417,18 @@ export function ManagerWorkspacePage() {
                                     </p>
                                   </div>
 
-                                  {/* Строгие статусные ячейки Novel.AI */}
+                                  {/* Однотонные сплошные плашки с тёмным текстом того же цветового тона */}
                                   {isPublished ? (
-                                    <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[10px] font-bold text-[#34D399] tracking-wider tabular-nums">
-                                      [ КП АКТИВНО ]
+                                    <span className="shrink-0 rounded-[4px] bg-[#34D399] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#02291D] tabular-nums">
+                                      [ КП активно ]
                                     </span>
                                   ) : isDraft ? (
-                                    <span className="shrink-0 rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-2 py-0.5 text-[10px] font-bold text-[#E59837] tracking-wider tabular-nums">
-                                      [ ЧЕРНОВИК ]
+                                    <span className="shrink-0 rounded-[4px] bg-[#E59837] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#261502] tabular-nums">
+                                      [ Черновик ]
                                     </span>
                                   ) : (
-                                    <span className="shrink-0 rounded-[4px] border border-[#2B3545] bg-[#161B22]/90 px-2 py-0.5 text-[10px] font-bold text-[#8E95A0] tracking-wider tabular-nums">
-                                      [ НОВЫЙ ]
+                                    <span className="shrink-0 rounded-[4px] bg-[#60A5FA] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#082242] tabular-nums">
+                                      [ Новый ]
                                     </span>
                                   )}
                                 </div>
@@ -437,8 +445,8 @@ export function ManagerWorkspacePage() {
                                     )}
                                   </span>
                                   {isSelected && (
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#E5C378]">
-                                      ВЫБРАН
+                                    <span className="rounded-[3px] bg-[#E5C378] px-1.5 py-0.5 text-[9px] font-serif italic font-bold text-[#241A04]">
+                                      Выбран
                                     </span>
                                   )}
                                 </div>
@@ -447,8 +455,9 @@ export function ManagerWorkspacePage() {
                           })}
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   )}
+                </AnimatePresence>
                 </div>
               </div>
 
@@ -488,11 +497,11 @@ export function ManagerWorkspacePage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-serif italic font-semibold uppercase tracking-widest text-[11px] text-[#8E95A0]">
-                        ПУТЬ КЛИЕНТА:
+                    <div className="inline-flex items-center gap-2 text-xs leading-none">
+                      <span className="font-serif italic font-semibold text-xs text-[#8E95A0] leading-none">
+                        Путь клиента:
                       </span>
-                      <span className="font-sans text-xs font-medium text-[#E5C378]">
+                      <span className="inline-flex items-center text-xs font-medium text-[#E5C378] leading-none">
                         {activeMatchResult
                           ? activeMagicToken
                             ? "Этап 07 · Согласование с клиентом"
@@ -549,17 +558,17 @@ export function ManagerWorkspacePage() {
                       />
                     ) : (
                       !matchMutation.isPending && (
-                        <div className="rounded-card border border-dashed border-border-strong bg-surface/60 p-8 text-center">
+                        <div className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm">
                           <Compass
-                            className="mx-auto h-8 w-8 text-ink-faint"
+                            className="mx-auto h-9 w-9 text-[#E5C378]"
                             strokeWidth={1.5}
                           />
-                          <h3 className="mt-2.5 text-sm font-semibold text-ink">
+                          <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
                             Готово к формированию пакетов участия
                           </h3>
-                          <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-ink-muted">
+                          <p className="mx-auto mt-1.5 max-w-lg font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
                             Проверьте конспект установочной встречи выше и нажмите{" "}
-                            <strong className="text-ink-secondary">
+                            <strong className="text-white not-italic font-sans font-semibold">
                               «Подобрать варианты пакетов»
                             </strong>
                             . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
@@ -586,14 +595,14 @@ export function ManagerWorkspacePage() {
                         onCopyLink={handleCopyShowcaseLink}
                       />
                     ) : (
-                      <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+                      <div className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm">
+                        <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
                           Сводка и публикация КП
                         </span>
-                        <h3 className="mt-1 text-sm font-semibold text-ink">
+                        <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
                           Ожидание расчёта подборки
                         </h3>
-                        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
+                        <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
                           После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
                         </p>
                       </div>
