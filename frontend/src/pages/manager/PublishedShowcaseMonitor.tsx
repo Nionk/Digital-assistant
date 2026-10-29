@@ -59,14 +59,14 @@ export function PublishedShowcaseMonitor({
           <span className="h-2.5 w-2.5 rounded-full bg-[#34D399] animate-pulse" />
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider tabular-nums font-serif italic">
-                LIVE СТАТУС
+              <span className="rounded-[4px] bg-[#94A3B8] text-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold font-serif italic">
+                Live статус
               </span>
               <h3 className="font-serif text-sm font-semibold text-white">
                 Мониторинг согласования витрины
               </h3>
               <Badge variant="ebEmerald" className="text-[9px]">
-                ОПУБЛИКОВАНО
+                Опубликовано
               </Badge>
             </div>
             <p className="mt-0.5 text-xs text-[#8E95A0] tabular-nums">
@@ -88,11 +88,11 @@ export function PublishedShowcaseMonitor({
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 mr-2 text-xs tabular-nums">
             <Badge variant="ebTeal" className="text-[9px]">
-              ОДОБРЕНО: {approvedCount}
+              Одобрено: {approvedCount}
             </Badge>
             {rejectedCount > 0 && (
               <Badge variant="ebRose" className="text-[9px]">
-                ЗАПРОС ЗАМЕНЫ: {rejectedCount}
+                Запрос замены: {rejectedCount}
               </Badge>
             )}
           </div>
@@ -149,19 +149,19 @@ export function PublishedShowcaseMonitor({
                   </Badge>
 
                   {isInterested ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#0B2528] px-2 py-0.5 text-[10px] font-bold text-[#2DD4BF] border border-[#165057] uppercase tracking-wider font-serif italic">
-                      <ThumbsUp className="h-3 w-3" strokeWidth={1.75} />
-                      ИНТЕРЕСНО
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#34D399] px-2 py-0.5 text-[10px] font-bold text-[#02291D] font-serif italic">
+                      <ThumbsUp className="h-3 w-3 stroke-[2.5]" />
+                      Интересно
                     </span>
                   ) : isRejected ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#28131E] px-2 py-0.5 text-[10px] font-bold text-[#F472B6] border border-[#5E2242] uppercase tracking-wider font-serif italic">
-                      <RefreshCcw className="h-3 w-3" strokeWidth={1.75} />
-                      ЗАПРОС ЗАМЕНЫ
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#F472B6] px-2 py-0.5 text-[10px] font-bold text-[#3B0716] font-serif italic">
+                      <RefreshCcw className="h-3 w-3 stroke-[2.5]" />
+                      Запрос замены
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#161B21] px-2 py-0.5 text-[10px] text-[#8E95A0] border border-[#2B3545] uppercase tracking-wider font-serif italic">
-                      <Clock className="h-3 w-3" strokeWidth={1.5} />
-                      ОЖИДАЕТ РЕШЕНИЯ
+                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#94A3B8] px-2 py-0.5 text-[10px] text-[#0F172A] font-bold font-serif italic">
+                      <Clock className="h-3 w-3" strokeWidth={2} />
+                      Ожидает решения
                     </span>
                   )}
                 </div>

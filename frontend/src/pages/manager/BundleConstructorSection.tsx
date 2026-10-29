@@ -2,7 +2,8 @@ import * as React from "react";
 import {
   MapPin,
   Globe,
-  Check,
+  Plus,
+  Compass,
   Edit3,
   Building,
   Sparkles,
@@ -56,12 +57,12 @@ export function BundleConstructorSection({
 
   if (variants.length === 0 && bonusRows.length === 0) {
     return (
-      <section className="rounded-card border border-dashed border-border bg-surface p-8 text-center shadow-card">
-        <Building className="mx-auto h-9 w-9 text-ink-muted" strokeWidth={1.5} />
-        <h3 className="mt-3 text-sm font-semibold text-ink">
+      <section className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm">
+        <Compass className="mx-auto h-9 w-9 text-[#E5C378]" strokeWidth={1.5} />
+        <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
           Подходящих мероприятий не найдено
         </h3>
-        <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-ink-muted">
+        <p className="mx-auto mt-1.5 max-w-md font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
           По заданным критериям (город, период дат, формат) в базе знаний агентства нет активных площадок.
           Скорректируйте географию или параметры отбора в блоке выше, либо добавьте новые мероприятия во вкладке «База мероприятий».
         </p>
@@ -78,7 +79,7 @@ export function BundleConstructorSection({
             <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
               02
             </span>
-            <h2 className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
               Сравнение вариантов и выбор тарифов
             </h2>
           </div>
@@ -118,25 +119,25 @@ export function BundleConstructorSection({
                     className={cn(
                       "flex h-4 w-4 items-center justify-center rounded-[3px] border text-[10px]",
                       isActive
-                        ? "border-[#E5C378] bg-[#E5C378] text-[#0E1215]"
+                        ? "border-[#E5C378] bg-[#E5C378] text-[#1A1405]"
                         : "border-[#262D35] bg-[#12161A]"
                     )}
                   >
-                    {isActive && <Check className="h-2.5 w-2.5" strokeWidth={2.5} />}
+                    {isActive && <Plus className="h-3 w-3 stroke-[3]" />}
                   </span>
                 </div>
 
                 <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums">
-                  <span className="font-serif italic uppercase tracking-wider text-[11px] text-[#8E95A0]">
-                    ПЛОЩАДОК: <strong className="font-sans not-italic font-bold text-white">{v.items.length}</strong>
+                  <span className="font-serif italic text-[11px] text-[#8E95A0]">
+                    Площадок: <strong className="font-sans not-italic font-bold text-white">{v.items.length}</strong>
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-white">
                       {formatRub(v.total_actual_price)}
                     </span>
                     {v.total_savings > 0 && (
-                      <Badge variant="ebEmerald" className="font-serif italic uppercase tracking-wider text-[9px]">
-                        ВЫГОДА {formatRub(v.total_savings)}
+                      <Badge variant="ebEmerald" className="text-[9px]">
+                        Выгода {formatRub(v.total_savings)}
                       </Badge>
                     )}
                   </div>
@@ -173,12 +174,12 @@ export function BundleConstructorSection({
           <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[#21262F] pb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
-              <span className="font-serif italic uppercase text-xs font-semibold tracking-wider text-[#D1D5DB]">
-                ДОПОЛНИТЕЛЬНЫЕ ВОЗМОЖНОСТИ: СПЕЦПРОЕКТЫ И СТЕНДЫ «ПО ЗАПРОСУ»
+              <span className="font-serif italic text-xs font-semibold tracking-wide text-[#E5C378]">
+                Дополнительные возможности: спецпроекты и стенды «По запросу»
               </span>
             </div>
             <span className="text-[11px] text-[#8E95A0]">
-              Отметьте галочкой, чтобы включить в персональную витрину клиента
+              Отметьте плюсиком, чтобы включить в персональную витрину клиента
             </span>
           </div>
 
@@ -236,19 +237,25 @@ function EventBuilderRow({
       )}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        {/* Левая колонка: Чекбокс + Календарный лист + Название и Аргументы выбора (Слайд 04) */}
+        {/* Левая колонка: Чекбокс-плюсик + Календарный лист + Название и Аргументы выбора */}
         <div className="flex items-start gap-3 min-w-0 flex-1">
-          <input
-            type="checkbox"
-            checked={isIncluded}
-            onChange={onToggleIncluded}
+          <button
+            type="button"
+            onClick={onToggleIncluded}
             title={
               isIncluded
                 ? "Включено в подборку клиента"
                 : "Включить мероприятие в подборку"
             }
-            className="h-4 w-4 shrink-0 self-center cursor-pointer rounded accent-[#E5C378]"
-          />
+            className={cn(
+              "flex h-4 w-4 shrink-0 self-center items-center justify-center rounded-[3px] border transition-colors cursor-pointer",
+              isIncluded
+                ? "border-[#E5C378] bg-[#E5C378] text-[#1A1405]"
+                : "border-[#262D35] bg-[#12161A] hover:border-[#E5C378]"
+            )}
+          >
+            {isIncluded && <Plus className="h-3 w-3 stroke-[3]" />}
+          </button>
 
           {/* Календарный лист даты с золотой рамкой, увеличенной высотой и вертикальным центрированием */}
           <div
@@ -288,8 +295,8 @@ function EventBuilderRow({
                 </>
               )}
               {isBonusSlot && (
-                <Badge variant="ebEmerald" className="ml-1 text-[9px]">
-                  СПЕЦПРОЕКТ
+                <Badge variant="ebGold" className="ml-1 text-[9px]">
+                  Спецпроект
                 </Badge>
               )}
             </div>
@@ -362,7 +369,7 @@ function EventBuilderRow({
             <select
               value={selectedTariff.tariff_id}
               onChange={(e) => onChangeTariff(Number(e.target.value))}
-              className="mt-1.5 h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-medium text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+              className="mt-1.5 h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-medium text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
             >
               {item.available_tariffs.map((t) => (
                 <option key={t.tariff_id} value={t.tariff_id} className="bg-[#161B21] text-white">
@@ -372,8 +379,8 @@ function EventBuilderRow({
             </select>
           </div>
 
-          <div className="mt-1 flex items-baseline justify-between tabular-nums">
-            <div className="flex items-baseline gap-1.5">
+          <div className="mt-1.5 flex flex-col gap-1 tabular-nums">
+            <div className="flex items-baseline gap-2">
               <span className="text-sm font-bold text-white">
                 {formatRub(selectedTariff.actual_price)}
               </span>
@@ -385,12 +392,14 @@ function EventBuilderRow({
             </div>
 
             {selectedTariff.savings > 0 ? (
-              <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#34D399] tabular-nums">
-                ВЫГОДА {formatRub(selectedTariff.savings)}
-                {selectedTariff.early_bird_deadline
-                  ? ` ДО ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
-                  : ""}
-              </span>
+              <div className="flex items-center">
+                <span className="rounded-[4px] bg-[#34D399] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#02291D] tabular-nums">
+                  Выгода {formatRub(selectedTariff.savings)}
+                  {selectedTariff.early_bird_deadline
+                    ? ` до ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
+                    : ""}
+                </span>
+              </div>
             ) : (
               <span className="text-[11px] text-[#727985]">Базовый тариф</span>
             )}
