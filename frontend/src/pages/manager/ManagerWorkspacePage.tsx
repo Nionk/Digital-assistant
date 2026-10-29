@@ -66,7 +66,7 @@ export function ManagerWorkspacePage() {
   const handleToggleClientsDropdown = () => {
     setFlashClientsBtn(true);
     setIsClientsDropdownOpen((prev) => !prev);
-    setTimeout(() => setFlashClientsBtn(false), 200);
+    setTimeout(() => setFlashClientsBtn(false), 120);
   };
 
   React.useEffect(() => {
@@ -269,8 +269,8 @@ export function ManagerWorkspacePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas text-ink">
-      {/* Верхняя панель (56px) */}
+    <div className="flex min-h-screen flex-col bg-[#0B0E12] text-[#F3F4F6]">
+      {/* Верхняя панель (67px) */}
       <ManagerHeader
         workspaceMode={workspaceMode}
         onModeChange={setWorkspaceMode}
@@ -472,33 +472,27 @@ export function ManagerWorkspacePage() {
                 </div>
               ) : (
                 <>
-                  {/* Компактная шапка активного клиента */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-4 py-3 shadow-md">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#2D3540] bg-[#12161A] text-[#38BDF8]">
-                        <Building2 className="h-4 w-4" strokeWidth={1.75} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h1 className="text-base font-semibold text-white">
-                            {activeClient.company_name}
-                          </h1>
-                          {activeClient.contact_person && (
-                            <span className="inline-flex items-center gap-1 text-xs text-[#8E95A0]">
-                              · <UserCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              {activeClient.contact_person}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[#8E95A0]">
-                          Формирование календаря отраслевых мероприятий, расчет взносов и подготовка спикеров
-                        </p>
-                      </div>
+                  {/* Компактная шапка активного клиента (без иконки здания, разделение названия и контакта) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-5 py-3.5 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h1 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                        {activeClient.company_name}
+                      </h1>
+                      {activeClient.contact_person && (
+                        <>
+                          <div className="hidden h-4 w-[1px] bg-[#2D3540] sm:block" />
+                          <span className="text-xs font-normal text-[#8E95A0]">
+                            {activeClient.contact_person}
+                          </span>
+                        </>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-[#8E95A0]">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">Путь клиента:</span>
-                      <span className="rounded-[4px] border border-[#262D35] bg-[#1A1E24] px-2.5 py-0.5 text-xs font-medium text-[#D1D5DB] tabular-nums">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-serif italic font-semibold uppercase tracking-widest text-[11px] text-[#8E95A0]">
+                        ПУТЬ КЛИЕНТА:
+                      </span>
+                      <span className="font-sans text-xs font-medium text-[#E5C378]">
                         {activeMatchResult
                           ? activeMagicToken
                             ? "Этап 07 · Согласование с клиентом"
