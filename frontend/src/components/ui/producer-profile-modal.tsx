@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X, Play } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,6 +23,12 @@ export function ProducerProfileModal({
 
   const [selectedId, setSelectedId] = React.useState(currentProducer.id);
 
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   React.useEffect(() => {
     setSelectedId(currentProducer.id);
   }, [currentProducer.id]);
@@ -34,10 +41,12 @@ export function ProducerProfileModal({
     }, 180);
   };
 
-  return (
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           {/* Матовый затемняющий фон с плавным проявлением */}
           <motion.div
             key="modal-backdrop"
@@ -142,6 +151,7 @@ export function ProducerProfileModal({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
