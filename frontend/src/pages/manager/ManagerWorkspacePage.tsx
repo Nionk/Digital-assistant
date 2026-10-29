@@ -319,7 +319,7 @@ export function ManagerWorkspacePage() {
 
                     {/* Золотая светящаяся линия подчеркивания в открытом/активном состоянии */}
                     {isClientsDropdownOpen && (
-                      <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
+                      <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[8px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
                     )}
                   </button>
 

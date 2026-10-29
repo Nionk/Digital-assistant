@@ -99,7 +99,7 @@ export function ManagerHeader({
 
           {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
           {workspaceMode === "matching" && (
-            <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
           )}
         </button>
 
@@ -131,7 +131,7 @@ export function ManagerHeader({
 
           {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
           {workspaceMode === "catalog" && (
-            <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
           )}
         </button>
       </nav>
@@ -235,14 +235,14 @@ export function ManagerHeader({
           className="group flex items-center gap-2.5 rounded-[8px] p-1 transition-opacity hover:opacity-90 focus:outline-none"
           title="Сменить куратора или открыть терминал продюсера"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#2D3540] bg-[#161B21] text-[11px] font-bold text-white tabular-nums shadow-sm">
+          <div className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#7C5A20]/60 bg-[#161B21] text-[11px] font-bold text-white tabular-nums shadow-sm group-hover:border-[#E5C378] group-hover:text-[#E5C378] transition-colors">
             {currentProducer.avatarText}
           </div>
           <div className="hidden sm:block text-left">
             <span className="block text-xs font-semibold leading-tight text-white group-hover:text-[#E5C378] transition-colors">
               {currentProducer.name}
             </span>
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-[#7E8794] leading-tight">
+            <span className="block font-serif italic text-[11px] text-[#8E95A0] leading-tight group-hover:text-[#E5C378]/80 transition-colors">
               {currentProducer.role}
             </span>
           </div>
