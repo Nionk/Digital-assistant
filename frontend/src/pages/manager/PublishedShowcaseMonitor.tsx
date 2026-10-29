@@ -59,18 +59,23 @@ export function PublishedShowcaseMonitor({
           <span className="h-2.5 w-2.5 rounded-full bg-sage animate-pulse" />
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-sage">
-                Этап 07 · Мониторинг согласования с клиентом (Live)
+              <span className="rounded-tag bg-pine text-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                LIVE СТАТУС
+              </span>
+              <h3 className="font-serif text-sm font-semibold text-ink">
+                Мониторинг согласования витрины
               </h3>
-              <Badge variant="sage">Опубликовано</Badge>
+              <Badge variant="novelSand" className="text-[9px]">
+                ОПУБЛИКОВАНО
+              </Badge>
             </div>
             <p className="mt-0.5 text-xs text-ink-muted tabular-nums">
-              Площадок в КП: {showcase.total_events_count} · Внешние взносы:{" "}
+              Площадок в КП: {showcase.total_events_count} · Взносы:{" "}
               <strong className="text-ink">{formatRub(showcase.total_actual_price)}</strong>
               {showcase.total_savings > 0 && (
                 <>
                   {" "}
-                  · Выгода Early Bird:{" "}
+                  · Выгода по спецтарифам:{" "}
                   <strong className="text-sage">
                     {formatRub(showcase.total_savings)}
                   </strong>
@@ -82,13 +87,13 @@ export function PublishedShowcaseMonitor({
 
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 mr-2 text-xs tabular-nums">
-            <span className="rounded-badge bg-sage-tint px-2 py-0.5 font-medium text-sage border border-sage-border">
-              Одобрено: {approvedCount}
-            </span>
+            <Badge variant="novelSand" className="text-[9px]">
+              ОДОБРЕНО: {approvedCount}
+            </Badge>
             {rejectedCount > 0 && (
-              <span className="rounded-badge bg-terracotta-tint px-2 py-0.5 font-medium text-terracotta border border-terracotta-border">
-                Запрос замены: {rejectedCount}
-              </span>
+              <Badge variant="novelWine" className="text-[9px]">
+                ЗАПРОС ЗАМЕНЫ: {rejectedCount}
+              </Badge>
             )}
           </div>
 

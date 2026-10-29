@@ -1,5 +1,6 @@
 import { Search, Building2, UserCheck } from "lucide-react";
 import type { ClientSummaryOut } from "@/api/types";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface ClientSidebarProps {
@@ -105,25 +106,17 @@ export function ClientSidebar({
 
                   {/* Индикатор статуса подборки */}
                   {isPublished ? (
-                    <span
-                      title="Витрина опубликована"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-badge bg-sage-tint px-1.5 py-0.5 text-[10px] font-medium text-sage border border-sage-border"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-sage" />
-                      КП активно
-                    </span>
+                    <Badge variant="novelSand" className="text-[9px]">
+                      КП АКТИВНО
+                    </Badge>
                   ) : isDraft ? (
-                    <span
-                      title="Черновик в работе"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-badge bg-terracotta-tint px-1.5 py-0.5 text-[10px] font-medium text-terracotta border border-terracotta-border"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-terracotta" />
-                      Черновик
-                    </span>
+                    <Badge variant="novelGold" className="text-[9px]">
+                      ЧЕРНОВИК
+                    </Badge>
                   ) : (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-badge bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
-                      Новый
-                    </span>
+                    <Badge variant="darkSubtle" className="text-[9px]">
+                      НОВЫЙ
+                    </Badge>
                   )}
                 </div>
 
