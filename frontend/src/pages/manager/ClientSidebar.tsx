@@ -1,4 +1,4 @@
-import { Search, Building2, UserCheck } from "lucide-react";
+import { Search, Building2, UserCheck, PanelLeftClose, Users } from "lucide-react";
 import type { ClientSummaryOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ interface ClientSidebarProps {
   onSelectClient: (client: ClientSummaryOut) => void;
   publishedByClientMap: Record<number, { magicToken: string }>;
   hasDraftInSessionMap: Record<number, boolean>;
+  onToggleSidebar?: () => void;
 }
 
 export function ClientSidebar({
@@ -21,6 +22,7 @@ export function ClientSidebar({
   onSelectClient,
   publishedByClientMap,
   hasDraftInSessionMap,
+  onToggleSidebar,
 }: ClientSidebarProps) {
   const filtered = clients.filter((c) => {
     const q = searchQuery.trim().toLowerCase();
@@ -33,6 +35,29 @@ export function ClientSidebar({
 
   return (
     <aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface/80">
+      {/* Шапка колонки клиентов с кнопкой сворачивания */}
+      <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 bg-surface">
+        <div className="flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-pine" strokeWidth={1.75} />
+          <span className="text-xs font-bold uppercase tracking-wider text-ink">
+            Клиенты
+          </span>
+          <span className="rounded-tag bg-surface-muted px-1.5 py-0.2 text-[10px] font-bold text-ink-secondary tabular-nums">
+            {filtered.length}
+          </span>
+        </div>
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title="Свернуть список клиентов"
+            className="flex h-7 w-7 items-center justify-center rounded-control border border-border bg-canvas/70 text-ink-secondary transition-colors hover:border-border-strong hover:bg-surface-muted hover:text-ink"
+          >
+            <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+        )}
+      </div>
+
       {/* Поиск по клиентам */}
       <div className="border-b border-border p-3">
         <div className="relative">
@@ -48,12 +73,6 @@ export function ClientSidebar({
             className="h-8 w-full rounded-control border border-border bg-canvas pl-8 pr-2.5 text-xs text-ink placeholder:text-ink-faint focus:border-pine focus:bg-surface focus:outline-none"
           />
         </div>
-      </div>
-
-      {/* Заголовок списка */}
-      <div className="flex items-center justify-between px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-        <span>Клиенты в работе</span>
-        <span className="tabular-nums">{filtered.length}</span>
       </div>
 
       {/* Список карточек клиентов */}
