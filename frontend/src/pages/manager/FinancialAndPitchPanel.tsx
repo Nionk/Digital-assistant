@@ -39,6 +39,16 @@ export function FinancialAndPitchPanel({
   onCopyLink,
 }: FinancialAndPitchPanelProps) {
   const [copied, setCopied] = React.useState(false);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Автоматическая подстройка высоты окна обращения под длину текста (до 400px)
+  React.useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 130), 400);
+    el.style.height = `${nextHeight}px`;
+  }, [pitchText]);
 
   const budgetRatioPct =
     summary.budgetMax > 0
@@ -188,10 +198,12 @@ export function FinancialAndPitchPanel({
         </div>
 
         <textarea
-          rows={7}
+          ref={textareaRef}
           value={pitchText}
           onChange={(e) => onPitchChange(e.target.value)}
-          className="mt-2.5 w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150 scrollbar-thin"
+          placeholder="Напишите сопроводительное письмо или нажмите кнопку синхронизации цифр..."
+          style={{ minHeight: "130px", maxHeight: "400px" }}
+          className="mt-2.5 w-full resize-y rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-[border-color,box-shadow] duration-150 overflow-y-auto scrollbar-thin"
         />
 
         <div className="mt-3 space-y-2">
