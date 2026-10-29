@@ -175,14 +175,10 @@ export function FinancialAndPitchPanel({
             type="button"
             onClick={onSyncPitchNumbers}
             title="Автоматически подставить пересчитанную сумму, выгоду и список площадок в текст письма"
-            className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-colors duration-200"
+            className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
           >
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] opacity-0 shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-opacity duration-200 ease-out group-hover:opacity-100"
-            />
-            <RefreshCw className="relative z-10 h-3 w-3 text-inherit transition-colors duration-200 shrink-0 group-hover:text-[#0E1215]" strokeWidth={2} />
-            <span className="relative z-10 transition-colors duration-200 group-hover:text-[#0E1215]">Синхронизировать цифры</span>
+            <RefreshCw className="h-3 w-3 shrink-0 text-inherit transition-colors duration-150 group-hover:text-[#E5C378]" strokeWidth={2} />
+            <span className="transition-colors duration-150">Синхронизировать цифры</span>
           </button>
         </div>
 
