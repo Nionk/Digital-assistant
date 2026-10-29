@@ -269,7 +269,7 @@ export function ManagerWorkspacePage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                   onClick={toggleSidebar}
-                  className="fixed inset-0 top-14 z-40 bg-ink/30 backdrop-blur-[1px]"
+                  className="fixed inset-0 top-[67px] z-40 bg-ink/30 backdrop-blur-[1px]"
                 />
 
                 {/* Плавно выдвигающаяся панель выбора клиентов */}
@@ -278,7 +278,7 @@ export function ManagerWorkspacePage() {
                   animate={{ x: 0 }}
                   exit={{ x: "-100%" }}
                   transition={{ type: "spring", stiffness: 350, damping: 33 }}
-                  className="fixed top-14 bottom-0 left-0 z-50 flex w-[295px] flex-col border-r border-border bg-surface shadow-2xl"
+                  className="fixed top-[67px] bottom-0 left-0 z-50 flex w-[295px] flex-col border-r border-border bg-surface shadow-2xl"
                 >
                   <ClientSidebar
                     clients={clients}

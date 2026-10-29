@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  Flame,
   Layers,
   Database,
   Clock,
@@ -10,8 +9,8 @@ import type { BurningDeadlineOut } from "@/api/types";
 import { useManagerStore, type ManagerWorkspaceMode } from "@/store/useManagerStore";
 import { formatDateShort, formatRub, getDaysUntil } from "@/lib/formatters";
 import { ProducerProfileModal } from "@/components/ui/producer-profile-modal";
-import logoPhoto from "@/assets/images/logo-photo.png";
-import logoText from "@/assets/images/logo-text.png";
+import logoImage from "@/assets/images/logo.png";
+import fireImage from "@/assets/images/fire.png";
 import { cn } from "@/lib/utils";
 
 interface ManagerHeaderProps {
@@ -27,9 +26,10 @@ export function ManagerHeader({
   workspaceMode,
   onModeChange,
   burningDeadlines,
-  eventsCount,
+  eventsCount = 15,
 }: ManagerHeaderProps) {
   const [isDeadlinesOpen, setIsDeadlinesOpen] = React.useState(false);
+  const [flashTab, setFlashTab] = React.useState<ManagerWorkspaceMode | null>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const currentProducer = useManagerStore((s) => s.currentProducer);
@@ -47,103 +47,132 @@ export function ManagerHeader({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isDeadlinesOpen]);
 
+  const handleSelectMode = (mode: ManagerWorkspaceMode) => {
+    setFlashTab(mode);
+    onModeChange(mode);
+    setTimeout(() => {
+      setFlashTab(null);
+    }, 200);
+  };
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-      {/* Левая группа: Логотип СКАРТ (фото + надпись). Клик ведет на страницу «подбор клиентам». Без лишних уточнений */}
+    <header className="sticky top-0 z-30 flex h-[67px] shrink-0 items-center justify-between border-b border-[#1A2026] bg-[#0E1215] px-4 sm:px-6 shadow-sm">
+      {/* 1. Левая часть: ТОЛЬКО logo.png, клик ведет на подбор клиентам */}
       <div className="flex items-center">
         <button
           type="button"
-          onClick={() => onModeChange("matching")}
-          className="group flex items-center gap-2.5 transition-opacity hover:opacity-85 focus:outline-none"
-          title="Подбор клиентам"
+          onClick={() => handleSelectMode("matching")}
+          className="flex items-center transition-opacity hover:opacity-90 focus:outline-none"
+          title="СКАРТ.AI — Подбор клиентам"
         >
           <img
-            src={logoPhoto}
-            alt="СКАРТ логотип"
-            className="h-8 w-auto object-contain shrink-0"
-          />
-          <img
-            src={logoText}
-            alt="СКАРТ"
-            className="h-5 sm:h-5.5 w-auto object-contain shrink-0"
+            src={logoImage}
+            alt="СКАРТ.AI"
+            className="h-8 sm:h-[34px] w-auto object-contain shrink-0"
           />
         </button>
       </div>
 
-      {/* Центральный переключатель режима */}
-      <div className="flex items-center rounded-control border border-border bg-canvas p-0.5">
+      {/* 2. Центральная часть: Селекторы с переливом в золотой цвет, миганием и подчеркиванием */}
+      <nav className="flex items-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner">
+        {/* Вкладка: Подбор клиентам */}
         <button
           type="button"
-          onClick={() => onModeChange("matching")}
+          onClick={() => handleSelectMode("matching")}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1 text-xs font-medium transition-all",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium transition-all duration-200 select-none cursor-pointer overflow-hidden",
             workspaceMode === "matching"
-              ? "bg-surface text-ink shadow-sm"
-              : "text-ink-muted hover:text-ink"
+              ? "bg-[#1A2128] text-white"
+              : "bg-transparent text-[#8E95A0]",
+            // Золотой перелив при наведении (текст и иконка становятся черными)
+            "hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215] hover:font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]",
+            // Эффект вспышки при клике
+            flashTab === "matching" && "scale-[0.98] brightness-150 ring-1 ring-[#E5C378]"
           )}
         >
-          <Layers className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Layers className="h-3.5 w-3.5 text-inherit transition-colors shrink-0" strokeWidth={1.75} />
           <span>Подбор клиентам</span>
+
+          {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
+          {workspaceMode === "matching" && (
+            <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
+          )}
         </button>
 
+        {/* Вкладка: База площадок */}
         <button
           type="button"
-          onClick={() => onModeChange("catalog")}
+          onClick={() => handleSelectMode("catalog")}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1 text-xs font-medium transition-all",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium transition-all duration-200 select-none cursor-pointer overflow-hidden",
             workspaceMode === "catalog"
-              ? "bg-surface text-ink shadow-sm"
-              : "text-ink-muted hover:text-ink"
+              ? "bg-[#1A2128] text-white"
+              : "bg-transparent text-[#8E95A0]",
+            // Золотой перелив при наведении
+            "hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215] hover:font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]",
+            // Эффект вспышки при клике
+            flashTab === "catalog" && "scale-[0.98] brightness-150 ring-1 ring-[#E5C378]"
           )}
         >
-          <Database className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Database className="h-3.5 w-3.5 text-inherit transition-colors shrink-0" strokeWidth={1.75} />
           <span>База площадок</span>
-          {typeof eventsCount === "number" && eventsCount > 0 && (
-            <span className="rounded bg-surface-muted px-1.5 py-0.2 text-[10px] font-semibold text-ink-secondary tabular-nums">
-              {eventsCount}
-            </span>
+          <span
+            className={cn(
+              "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors",
+              "group-hover:bg-[#0E1215]/20 group-hover:text-[#0E1215]"
+            )}
+          >
+            {eventsCount}
+          </span>
+
+          {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
+          {workspaceMode === "catalog" && (
+            <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
           )}
         </button>
-      </div>
+      </nav>
 
-      {/* Правая группа: Дедлайны + Профиль продюсера */}
-      <div className="flex items-center gap-2.5">
-        {/* Поповер горящих дедлайнов Early Bird */}
+      {/* 3. Правая часть: Дедлайны (fire.png + золотая цифра) + Разделитель + Профиль */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Кнопка дедлайнов Early Bird */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDeadlinesOpen((prev) => !prev)}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-control border px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
-              burningDeadlines.length > 0
-                ? "border-terracotta-border bg-terracotta-tint text-terracotta hover:bg-terracotta/15"
-                : "border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
-            )}
+            className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#11161B] px-3 py-1.5 text-xs font-medium text-[#D1D5DB] transition-all hover:border-[#3E4957] hover:bg-[#161C22] tabular-nums shadow-sm"
           >
-            <Flame className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            <span className="hidden md:inline">Дедлайны Early Bird:</span>
-            <span className="font-semibold">{burningDeadlines.length}</span>
-            <ChevronDown className="h-3.5 w-3.5 opacity-70" strokeWidth={1.5} />
+            <img
+              src={fireImage}
+              alt="Огонь"
+              className="h-4 w-auto object-contain shrink-0"
+            />
+            <span className="hidden sm:inline">Дедлайны Early Bird:</span>
+            <span className="sm:hidden">Дедлайны:</span>
+            <span className="font-bold text-[#E5C378]">
+              {burningDeadlines.length}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 text-[#7E8794]" strokeWidth={1.75} />
           </button>
 
+          {/* Выпадающий список дедлайнов в темной стилистике */}
           {isDeadlinesOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-card border border-border bg-surface p-4 shadow-elevated z-50">
-              <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-card border border-[#262D35] bg-[#11161B] p-4 shadow-2xl z-50 text-white">
+              <div className="flex items-center justify-between border-b border-[#262D35] pb-2.5">
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ink">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-white">
                     Контроль условий Early Bird
                   </h3>
-                  <p className="mt-0.5 text-[11px] text-ink-muted">
+                  <p className="mt-0.5 text-[11px] text-[#8E95A0]">
                     Ближайшие даты истечения льготных тарифов организаторов
                   </p>
                 </div>
-                <span className="rounded-badge bg-terracotta-tint px-2 py-0.5 text-[11px] font-semibold text-terracotta border border-terracotta-border tabular-nums">
+                <span className="rounded-tag bg-[#5C1D24] text-white px-2 py-0.5 text-[11px] font-bold border border-[#7A2430] tabular-nums">
                   {burningDeadlines.length} активных
                 </span>
               </div>
 
               {burningDeadlines.length === 0 ? (
-                <p className="py-4 text-center text-xs text-ink-muted">
+                <p className="py-4 text-center text-xs text-[#8E95A0]">
                   Нет горящих дедлайнов на ближайшие дни
                 </p>
               ) : (
@@ -155,17 +184,17 @@ export function ManagerHeader({
                     return (
                       <div
                         key={item.event_id}
-                        className="rounded-control border border-border/80 bg-canvas/60 p-2.5 transition-colors hover:border-border-strong"
+                        className="rounded-control border border-[#262D35] bg-[#161B21] p-2.5 transition-colors hover:border-[#38414D]"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-medium leading-snug text-ink">
+                          <p className="text-xs font-medium leading-snug text-white">
                             {item.event_title}
                           </p>
-                          <span className="shrink-0 rounded-badge bg-sage-tint px-1.5 py-0.5 text-[11px] font-semibold text-sage border border-sage-border tabular-nums">
+                          <span className="shrink-0 rounded-tag bg-[#1E3A2F] text-[#6EE7B7] px-1.5 py-0.5 text-[10px] font-bold border border-[#144A39] tabular-nums">
                             выгода {formatRub(item.potential_savings)}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-muted tabular-nums">
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#8E95A0] tabular-nums">
                           <span className="inline-flex items-center gap-1">
                             <Clock className="h-3 w-3" strokeWidth={1.5} />
                             Дедлайн: {formatDateShort(item.early_bird_deadline)}
@@ -174,7 +203,7 @@ export function ManagerHeader({
                             <span
                               className={cn(
                                 "font-medium",
-                                isUrgent ? "text-terracotta" : "text-ink-secondary"
+                                isUrgent ? "text-[#F87171]" : "text-[#D1D5DB]"
                               )}
                             >
                               {daysLeft === 0
@@ -194,28 +223,31 @@ export function ManagerHeader({
           )}
         </div>
 
-        {/* Профиль куратора (Терминал продюсера в стиле Novel.AI) */}
+        {/* Тонкий вертикальный разделитель */}
+        <div className="h-6 w-[1px] bg-[#2A313C] mx-0.5 sm:mx-1" />
+
+        {/* Профиль продюсера точь-в-точь по макету */}
         <button
           type="button"
           onClick={() => setProducerModalOpen(true)}
-          className="flex items-center gap-2 rounded-control border border-border bg-canvas/80 px-2.5 py-1 text-xs transition-all hover:border-border-strong hover:bg-surface"
+          className="group flex items-center gap-2.5 rounded-[8px] p-1 transition-opacity hover:opacity-90 focus:outline-none"
           title="Сменить куратора или открыть терминал продюсера"
         >
-          <div className="flex h-6 w-6 items-center justify-center rounded-tag bg-novel-dark text-[10px] font-bold text-white border border-novel-border tabular-nums">
+          <div className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#2D3540] bg-[#161B21] text-[11px] font-bold text-white tabular-nums shadow-sm">
             {currentProducer.avatarText}
           </div>
           <div className="hidden sm:block text-left">
-            <span className="block text-xs font-semibold leading-none text-ink">
+            <span className="block text-xs font-semibold leading-tight text-white group-hover:text-[#E5C378] transition-colors">
               {currentProducer.name}
             </span>
-            <span className="block text-[10px] text-ink-muted leading-tight">
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-[#7E8794] leading-tight">
               {currentProducer.role}
             </span>
           </div>
         </button>
       </div>
 
-      {/* Модальное окно переключения кураторов и приветственного экрана */}
+      {/* Модальное окно терминала продюсера */}
       <ProducerProfileModal
         isOpen={isProducerModalOpen}
         onClose={() => setProducerModalOpen(false)}
