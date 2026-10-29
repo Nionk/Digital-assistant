@@ -568,7 +568,7 @@ export function ManagerWorkspacePage() {
                           </h3>
                           <p className="mx-auto mt-1.5 max-w-lg font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
                             Проверьте конспект установочной встречи выше и нажмите{" "}
-                            <strong className="text-white not-italic font-sans font-semibold">
+                            <strong className="font-bold text-inherit">
                               «Подобрать варианты пакетов»
                             </strong>
                             . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.

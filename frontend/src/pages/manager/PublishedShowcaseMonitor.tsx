@@ -62,9 +62,9 @@ export function PublishedShowcaseMonitor({
               <span className="rounded-[4px] bg-[#94A3B8] text-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold font-serif italic">
                 Live статус
               </span>
-              <h3 className="font-serif text-sm font-semibold text-white">
+              <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
                 Мониторинг согласования витрины
-              </h3>
+              </h2>
               <Badge variant="ebEmerald" className="text-[9px]">
                 Опубликовано
               </Badge>
@@ -115,9 +115,9 @@ export function PublishedShowcaseMonitor({
             href={relativeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[#38BDF8]/40 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-colors hover:bg-[#1A2D44] hover:text-white"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[#38BDF8]/50 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-all duration-200 hover:bg-[#1E3A5F] hover:text-[#BAE6FD] hover:border-[#38BDF8] hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]"
           >
-            <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>Витрина клиента</span>
           </a>
         </div>

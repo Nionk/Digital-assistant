@@ -22,13 +22,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <App />
         <Toaster
           position="bottom-right"
+          theme="dark"
           toastOptions={{
             style: {
-              background: "#FFFFFF",
-              color: "#18181B",
-              border: "1px solid #E5E3DC",
+              background: "#161B22",
+              color: "#E5C378",
+              border: "1px solid #E5C378",
               borderRadius: "8px",
               fontSize: "13px",
+              fontFamily: 'Lora, Georgia, Cambria, "Times New Roman", serif',
+              fontStyle: "italic",
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.6)",
             },
           }}
         />

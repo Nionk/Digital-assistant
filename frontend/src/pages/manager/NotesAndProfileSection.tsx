@@ -15,6 +15,7 @@ import type {
   ParticipationRole,
 } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { ROLE_BADGE_LABELS, formatNumberCompact } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -294,17 +295,15 @@ export function NotesAndProfileSection({
                 · Ручная калибровка параметров поиска
               </span>
             </div>
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="xs"
               disabled={isMatching}
               onClick={onRematchWithOverride}
-              className="border-[#262D35] bg-[#161B21] text-xs text-white hover:border-[#E5C378] hover:text-[#E5C378]"
+              className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-all duration-200 select-none cursor-pointer overflow-hidden shadow-sm hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215] hover:font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RotateCcw className="h-3 w-3" strokeWidth={1.75} />
+              <RotateCcw className="h-3 w-3 text-inherit transition-transform shrink-0" strokeWidth={2} />
               <span>Пересобрать пакеты</span>
-            </Button>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
@@ -356,22 +355,21 @@ export function NotesAndProfileSection({
               </div>
               <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Площадок в пакете:</span>
-                <select
+                <CustomSelect
                   value={editableProfile.target_events_count}
-                  onChange={(e) =>
+                  onChange={(val) =>
                     onUpdateProfile((prev) => ({
                       ...prev,
-                      target_events_count: Number(e.target.value) || 3,
+                      target_events_count: Number(val) || 3,
                     }))
                   }
-                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-xs font-semibold text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
-                >
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n} className="bg-[#161B21] text-white">
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                  options={[1, 2, 3, 4, 5].map((n) => ({
+                    value: n,
+                    label: String(n),
+                  }))}
+                  buttonClassName="h-6 px-2 py-0.5"
+                  menuClassName="min-w-[60px]"
+                />
               </div>
             </div>
 
@@ -511,10 +509,10 @@ export function NotesAndProfileSection({
 
               <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Мин. докладов спикером:</span>
-                <select
+                <CustomSelect
                   value={editableProfile.min_speaker_events}
-                  onChange={(e) => {
-                    const count = Number(e.target.value) || 0;
+                  onChange={(val) => {
+                    const count = Number(val) || 0;
                     onUpdateProfile((prev) => ({
                       ...prev,
                       min_speaker_events: count,
@@ -524,14 +522,13 @@ export function NotesAndProfileSection({
                           : prev.required_roles,
                     }));
                   }}
-                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-xs font-semibold text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
-                >
-                  {[0, 1, 2, 3].map((n) => (
-                    <option key={n} value={n} className="bg-[#161B21] text-white">
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                  options={[0, 1, 2, 3].map((n) => ({
+                    value: n,
+                    label: String(n),
+                  }))}
+                  buttonClassName="h-6 px-2 py-0.5"
+                  menuClassName="min-w-[60px]"
+                />
               </div>
             </div>
 

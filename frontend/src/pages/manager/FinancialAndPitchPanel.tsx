@@ -175,9 +175,9 @@ export function FinancialAndPitchPanel({
             type="button"
             onClick={onSyncPitchNumbers}
             title="Автоматически подставить пересчитанную сумму, выгоду и список площадок в текст письма"
-            className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-[11px] font-medium text-[#D1D5DB] transition-colors hover:border-[#E5C378] hover:text-white"
+            className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] transition-all duration-200 select-none cursor-pointer overflow-hidden shadow-sm hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215] hover:font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]"
           >
-            <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
+            <RefreshCw className="h-3 w-3 text-inherit transition-transform shrink-0" strokeWidth={2} />
             <span>Синхронизировать цифры</span>
           </button>
         </div>
@@ -247,9 +247,9 @@ export function FinancialAndPitchPanel({
                   href={publishedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#38BDF8]/40 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-colors hover:bg-[#1A2D44] hover:text-white"
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#38BDF8]/50 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-all duration-200 hover:bg-[#1E3A5F] hover:text-[#BAE6FD] hover:border-[#38BDF8] hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
                   <span>Открыть витрину</span>
                 </a>
               </div>
@@ -262,7 +262,7 @@ export function FinancialAndPitchPanel({
       <div className="rounded-[8px] border border-[#262D35] bg-[#161B22]/70 px-3.5 py-2.5 flex items-start gap-2.5">
         <Sparkles className="h-4 w-4 shrink-0 text-[#E5C378] mt-0.5" strokeWidth={1.5} />
         <p className="text-[11px] leading-relaxed text-[#8E95A0]">
-          После отправки ссылки все отклики клиента (<strong className="text-[#D1D5DB]">Утверждение плана</strong>, <strong className="text-[#D1D5DB]">Запрос правок</strong>, выбор <strong className="text-[#D1D5DB]">Подготовки спикера / Целевых встреч</strong> и вопросы по регламенту) приходят в Telegram и синхронизируются на этом экране каждые 10 секунд.
+          После отправки ссылки все отклики клиента (<strong className="font-bold text-inherit">Утверждение плана</strong>, <strong className="font-bold text-inherit">Запрос правок</strong>, выбор <strong className="font-bold text-inherit">Подготовки спикера / Целевых встреч</strong> и вопросы по регламенту) приходят в Telegram и синхронизируются на этом экране каждые 10 секунд.
         </p>
       </div>
     </div>
