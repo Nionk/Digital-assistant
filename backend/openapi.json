@@ -168,6 +168,33 @@
         }
       }
     },
+    "/api/manager/events": {
+      "get": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Каталог отслеживаемых отраслевых мероприятий и тарифов для кабинета менеджера",
+        "description": "Возвращает полный список активных площадок в базе знаний агентства (форумы, закрытые встречи, конференции, круглые столы) с доступными тарифами и актуальными условиями Early Bird.",
+        "operationId": "get_manager_events_catalog_api_manager_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerEventsCatalogOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/public/s/{magic_token}": {
       "get": {
         "tags": [
@@ -624,6 +651,106 @@
         "title": "BurningDeadlineOut",
         "description": "Информация о горящем дедлайне со скидкой Early Bird (< 72 часов)."
       },
+      "CatalogEventItemOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID события в таблице events"
+          },
+          "canonical_title": {
+            "type": "string",
+            "title": "Canonical Title",
+            "description": "Официальное название мероприятия"
+          },
+          "event_format": {
+            "type": "string",
+            "enum": [
+              "roundtable",
+              "business_breakfast",
+              "forum",
+              "conference",
+              "session"
+            ],
+            "title": "Event Format",
+            "description": "Формат проведения"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "description": "Город проведения (None для онлайн)"
+          },
+          "is_online": {
+            "type": "boolean",
+            "title": "Is Online",
+            "description": "Признак онлайн-мероприятия",
+            "default": false
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue",
+            "description": "Площадка проведения или онлайн-платформа"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date",
+            "description": "Дата начала (YYYY-MM-DD)"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date",
+            "description": "Дата окончания (YYYY-MM-DD)"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Краткое описание и целевая аудитория площадки"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Themes",
+            "description": "Отраслевые теги и направления"
+          },
+          "tariffs": {
+            "items": {
+              "$ref": "#/components/schemas/TariffOptionOut"
+            },
+            "type": "array",
+            "title": "Tariffs",
+            "description": "Доступные тарифы организатора и условия раннего бронирования"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "canonical_title",
+          "event_format",
+          "start_date",
+          "end_date",
+          "summary"
+        ],
+        "title": "CatalogEventItemOut",
+        "description": "Карточка мероприятия в базе отслеживаемых площадок менеджера."
+      },
       "ClientQueryExtracted": {
         "properties": {
           "cities": {
@@ -917,6 +1044,29 @@
         ],
         "title": "ManagerDashboardOut",
         "description": "Ответ дашборда менеджера: клиенты и горящие дедлайны."
+      },
+      "ManagerEventsCatalogOut": {
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Общее количество активных площадок в базе"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogEventItemOut"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Список мероприятий с тарифами"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_count"
+        ],
+        "title": "ManagerEventsCatalogOut",
+        "description": "Список всех активных мероприятий, отслеживаемых агентством."
       },
       "MatchRequestIn": {
         "properties": {

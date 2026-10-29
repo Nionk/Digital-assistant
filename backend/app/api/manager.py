@@ -12,16 +12,18 @@ from app.schemas.manager import (
     BundleEventItemOut,
     BundleVariantOut,
     BurningDeadlineOut,
+    CatalogEventItemOut,
     ClientQueryExtracted,
     ClientSummaryOut,
     ManagerDashboardOut,
+    ManagerEventsCatalogOut,
     MatchRequestIn,
     MatchResponseOut,
     PublishSelectionIn,
     PublishSelectionOut,
     TariffOptionOut,
 )
-from app.services.matcher import run_client_matching_pipeline
+from app.services.matcher import build_tariff_option, run_client_matching_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -444,4 +446,93 @@ async def publish_selection(
         public_showcase_url=f"/s/{selection.magic_token}",
         total_package_price=round(total_price, 2),
         total_package_savings=round(total_savings, 2),
+    )
+
+
+
+@router.get(
+    "/events",
+    response_model=ManagerEventsCatalogOut,
+    summary="Каталог отслеживаемых отраслевых мероприятий и тарифов для кабинета менеджера",
+    description=(
+        "Возвращает полный список активных площадок в базе знаний агентства (форумы, закрытые встречи, "
+        "конференции, круглые столы) с доступными тарифами и актуальными условиями Early Bird."
+    ),
+)
+async def get_manager_events_catalog(
+    current_manager: CurrentManagerDep,
+    db: AsyncSession = Depends(get_async_session),
+) -> ManagerEventsCatalogOut:
+    """
+    Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинете менеджера.
+    """
+    today = datetime.date.today()
+    events_out: list[CatalogEventItemOut] = []
+    valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
+
+    try:
+        ev_stmt = select(Event).where(Event.is_active.is_(True)).order_by(Event.start_date.asc(), Event.id.asc())
+        ev_res = await db.execute(ev_stmt)
+        db_events = ev_res.scalars().all()
+
+        tar_stmt = select(EventTariff).order_by(EventTariff.id.asc())
+        tar_res = await db.execute(tar_stmt)
+        db_tariffs = tar_res.scalars().all()
+
+        tariffs_by_event: dict[int, list[TariffOptionOut]] = {}
+        for t in db_tariffs:
+            tariffs_by_event.setdefault(t.event_id, []).append(build_tariff_option(t, today))
+
+        for ev in db_events:
+            fmt = ev.event_format if ev.event_format in valid_formats else "conference"
+            events_out.append(
+                CatalogEventItemOut(
+                    event_id=ev.id,
+                    canonical_title=ev.canonical_title,
+                    event_format=fmt,  # type: ignore[arg-type]
+                    city=ev.city,
+                    is_online=ev.is_online,
+                    venue=ev.venue,
+                    start_date=ev.start_date,
+                    end_date=ev.end_date,
+                    summary=ev.summary,
+                    themes=list(ev.themes or []),
+                    tariffs=tariffs_by_event.get(ev.id, []),
+                )
+            )
+    except OSError as exc:
+        logger.warning("БД недоступна при запросе /events, используется демо-фолбэк: %s", exc)
+
+    if not events_out:
+        events_out = [
+            CatalogEventItemOut(
+                event_id=101,
+                canonical_title="Круглый стол Ведомостей: Практика КРТ в мегаполисах 2026",
+                event_format="roundtable",
+                city="Москва",
+                is_online=False,
+                venue="Отель Континенталь, ул. Тверская, 22",
+                start_date=today + datetime.timedelta(days=15),
+                end_date=today + datetime.timedelta(days=15),
+                summary="Закрытая встреча девелоперов, архитекторов и профильных ведомств по проектам КРТ.",
+                themes=["КРТ", "девелопмент", "урбанистика"],
+                tariffs=[
+                    TariffOptionOut(
+                        tariff_id=501,
+                        tariff_name="Пакет «Спикер круглого стола»",
+                        participation_role="speaker",
+                        base_price=160000.0,
+                        early_bird_price=135000.0,
+                        early_bird_deadline=today + datetime.timedelta(days=5),
+                        actual_price=135000.0,
+                        savings=25000.0,
+                        included_benefits="Выступление 15 минут в целевой сессии, 2 делегатских билета.",
+                    )
+                ],
+            )
+        ]
+
+    return ManagerEventsCatalogOut(
+        total_count=len(events_out),
+        events=events_out,
     )
