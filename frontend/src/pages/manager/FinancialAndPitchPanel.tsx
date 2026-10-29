@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Sparkles,
   Check,
+  Layers,
 } from "lucide-react";
 import * as React from "react";
 import type { ComputedFinancialSummary } from "@/store/useManagerStore";
@@ -69,9 +70,13 @@ export function FinancialAndPitchPanel({
               {companyName}
             </h3>
           </div>
-          <Badge variant="ebSlate">
-            Площадок: <span className="font-sans not-italic font-bold">{summary.includedRows.length}</span>
-          </Badge>
+          <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 select-none">
+            <Layers className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.5} />
+            <span className="font-serif italic text-[11px] text-[#8E95A0]">Площадок:</span>
+            <span className="rounded-[4px] border border-[#2D3642] bg-[#1E252E] px-1.5 py-0.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
+              {summary.includedRows.length}
+            </span>
+          </div>
         </div>
 
         {/* Основная сумма внешних расходов */}
