@@ -92,7 +92,7 @@ export function EventDetailsDrawer({
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="relative z-10 flex h-full w-full max-w-[540px] flex-col border-l border-[#7C5A20]/60 bg-[#161B22] text-white shadow-2xl"
           >
             {/* 1. Шапка шторки */}
