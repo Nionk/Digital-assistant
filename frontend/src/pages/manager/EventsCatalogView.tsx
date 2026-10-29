@@ -173,13 +173,15 @@ export function EventsCatalogView() {
                   type="button"
                   onClick={() => setSelectedFormat(fmt.id)}
                   className={cn(
-                    "rounded-[6px] border px-2.5 py-1 text-xs transition-colors duration-150 select-none cursor-pointer outline-none focus-visible:outline-none active:scale-[0.98]",
+                    "px-2.5 py-1 text-xs font-serif italic transition-colors duration-150 select-none cursor-pointer outline-none focus-visible:outline-none active:scale-[0.98]",
                     isActive
-                      ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-semibold shadow-[0_0_8px_rgba(229,195,120,0.2)]"
-                      : "border-[#262D35] bg-[#12161A] font-medium text-[#8E95A0] hover:border-[#38414F] hover:bg-[#1A2128] hover:text-white"
+                      ? "-skew-x-[9deg] rounded-[2px] border border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-bold shadow-[0_0_8px_rgba(229,195,120,0.2)]"
+                      : "rounded-[3px] border border-[#262D35] bg-[#12161A] font-medium text-[#8E95A0] hover:border-[#38414F] hover:bg-[#1A2128] hover:text-white"
                   )}
                 >
-                  {fmt.label}
+                  <span className={isActive ? "inline-block skew-x-[9deg]" : ""}>
+                    {fmt.label}
+                  </span>
                 </button>
               );
             })}
@@ -361,12 +363,12 @@ export function EventsCatalogView() {
 
                           {t.savings > 0 ? (
                             <div className="flex items-center">
-                              <span className="rounded-[3px] bg-[#34D399] px-1.5 py-0.2 font-serif italic text-[10px] font-bold text-[#02291D] tabular-nums">
+                              <Badge variant="ebEmerald" className="text-[10px]">
                                 Выгода {formatRub(t.savings)}
                                 {t.early_bird_deadline
                                   ? ` до ${formatDateShort(t.early_bird_deadline).slice(0, 5)}`
                                   : ""}
-                              </span>
+                              </Badge>
                             </div>
                           ) : (
                             <span className="text-[10px] text-[#727985]">Базовый тариф</span>

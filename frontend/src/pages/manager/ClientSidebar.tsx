@@ -123,18 +123,18 @@ export function ClientSidebar({
                     </span>
                   </div>
 
-                  {/* Индикатор статуса подборки */}
+                  {/* Индикатор статуса подборки в виде авторской скошенной ячейки */}
                   {isPublished ? (
                     <Badge variant="ebEmerald" className="text-[9px]">
-                      [ КП АКТИВНО ]
+                      КП активно
                     </Badge>
                   ) : isDraft ? (
                     <Badge variant="ebAmber" className="text-[9px]">
-                      [ ЧЕРНОВИК ]
+                      Черновик
                     </Badge>
                   ) : (
                     <Badge variant="ebSlate" className="text-[9px]">
-                      [ НОВЫЙ ]
+                      Новый
                     </Badge>
                   )}
                 </div>

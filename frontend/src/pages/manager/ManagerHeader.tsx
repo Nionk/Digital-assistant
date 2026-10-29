@@ -10,6 +10,7 @@ import type { BurningDeadlineOut } from "@/api/types";
 import { useManagerStore, type ManagerWorkspaceMode } from "@/store/useManagerStore";
 import { formatDateShort, formatRub, getDaysUntil } from "@/lib/formatters";
 import { ProducerProfileModal } from "@/components/ui/producer-profile-modal";
+import { Badge } from "@/components/ui/badge";
 import logoImage from "@/assets/images/logo.png";
 import fireImage from "@/assets/images/fire.png";
 import { cn } from "@/lib/utils";
@@ -176,9 +177,9 @@ export function ManagerHeader({
                       Ближайшие даты истечения льготных тарифов организаторов
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-[4px] bg-[#E59837] px-2.5 py-1 text-[11px] font-serif italic font-bold text-[#261502] tabular-nums">
-                    [ {burningDeadlines.length} активных ]
-                  </span>
+                  <Badge variant="ebAmber" className="text-[11px]">
+                    {burningDeadlines.length} активных
+                  </Badge>
                 </div>
 
                 <div className="border-b border-[#21262F] my-3.5" />
@@ -201,9 +202,9 @@ export function ManagerHeader({
                             <p className="text-[13px] font-medium leading-snug text-white">
                               {item.event_title}
                             </p>
-                            <span className="shrink-0 rounded-[4px] bg-[#34D399] px-2 py-0.5 text-[11px] font-serif italic font-bold text-[#02291D] tabular-nums">
+                            <Badge variant="ebEmerald" className="text-[11px]">
                               Выгода {formatRub(item.potential_savings)}
-                            </span>
+                            </Badge>
                           </div>
                           <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
                             <span className="inline-flex items-center gap-1.5">

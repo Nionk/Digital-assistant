@@ -62,9 +62,9 @@ export function PublishedShowcaseMonitor({
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] bg-[#94A3B8] text-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold font-serif italic">
+              <Badge variant="ebSlate" className="text-[9px]">
                 Live статус
-              </span>
+              </Badge>
               <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
                 Мониторинг согласования витрины
               </h2>
@@ -158,20 +158,20 @@ export function PublishedShowcaseMonitor({
                   </Badge>
 
                   {isInterested ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#34D399] px-2 py-0.5 text-[10px] font-bold text-[#02291D] font-serif italic">
+                    <Badge variant="ebEmerald" className="text-[9px]">
                       <ThumbsUp className="h-3 w-3 stroke-[2.5]" />
                       Интересно
-                    </span>
+                    </Badge>
                   ) : isRejected ? (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#F472B6] px-2 py-0.5 text-[10px] font-bold text-[#3B0716] font-serif italic">
+                    <Badge variant="ebRose" className="text-[9px]">
                       <RefreshCcw className="h-3 w-3 stroke-[2.5]" />
                       Запрос замены
-                    </span>
+                    </Badge>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#94A3B8] px-2 py-0.5 text-[10px] text-[#0F172A] font-bold font-serif italic">
+                    <Badge variant="ebSlate" className="text-[9px]">
                       <Clock className="h-3 w-3" strokeWidth={2} />
                       Ожидает решения
-                    </span>
+                    </Badge>
                   )}
                 </div>
 

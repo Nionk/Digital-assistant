@@ -13,6 +13,7 @@ import {
   useManagerStore,
 } from "@/store/useManagerStore";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { ManagerHeader } from "./ManagerHeader";
 import { NotesAndProfileSection } from "./NotesAndProfileSection";
 import { BundleConstructorSection } from "./BundleConstructorSection";
@@ -335,9 +336,9 @@ export function ManagerWorkspacePage() {
                               Активные компании и согласование пакетов
                             </p>
                           </div>
-                          <span className="shrink-0 rounded-[4px] bg-[#E59837] px-2.5 py-1 text-[11px] font-serif italic font-bold text-[#261502] tabular-nums">
-                            [ {clients.length} компании ]
-                          </span>
+                          <Badge variant="ebAmber" className="text-[11px]">
+                            {clients.length} компании
+                          </Badge>
                         </div>
 
                         <div className="border-b border-[#21262F] my-3.5" />
@@ -410,19 +411,19 @@ export function ManagerWorkspacePage() {
                                     </p>
                                   </div>
 
-                                  {/* Однотонные сплошные плашки с тёмным текстом того же цветового тона */}
+                                  {/* Авторские скошенные ячейки-ленты статусов клиента */}
                                   {isPublished ? (
-                                    <span className="shrink-0 rounded-[4px] bg-[#34D399] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#02291D] tabular-nums">
-                                      [ КП активно ]
-                                    </span>
+                                    <Badge variant="ebEmerald" className="text-[10px]">
+                                      КП активно
+                                    </Badge>
                                   ) : isDraft ? (
-                                    <span className="shrink-0 rounded-[4px] bg-[#E59837] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#261502] tabular-nums">
-                                      [ Черновик ]
-                                    </span>
+                                    <Badge variant="ebAmber" className="text-[10px]">
+                                      Черновик
+                                    </Badge>
                                   ) : (
-                                    <span className="shrink-0 rounded-[4px] bg-[#60A5FA] px-2 py-0.5 text-[10px] font-serif italic font-bold text-[#082242] tabular-nums">
-                                      [ Новый ]
-                                    </span>
+                                    <Badge variant="ebBlue" className="text-[10px]">
+                                      Новый
+                                    </Badge>
                                   )}
                                 </div>
 
@@ -438,9 +439,9 @@ export function ManagerWorkspacePage() {
                                     )}
                                   </span>
                                   {isSelected && (
-                                    <span className="rounded-[3px] bg-[#E5C378] px-1.5 py-0.5 text-[9px] font-serif italic font-bold text-[#241A04]">
+                                    <Badge variant="ebGold" className="text-[9px]">
                                       Выбран
-                                    </span>
+                                    </Badge>
                                   )}
                                 </div>
                               </div>
