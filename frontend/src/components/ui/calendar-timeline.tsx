@@ -41,20 +41,20 @@ export function CalendarTimeline({
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-[#8E95A0]" strokeWidth={1.5} />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[#D1D5DB]">
-            График участия по датам
+          <span className="font-serif italic uppercase text-xs font-semibold tracking-wider text-[#D1D5DB]">
+            ГРАФИК УЧАСТИЯ ПО ДАТАМ
           </span>
         </div>
 
         {hasConflict ? (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#28131E] text-[#F472B6] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#5E2242] tabular-nums">
+          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#28131E] text-[#F472B6] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#5E2242] tabular-nums font-serif italic">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            <span>{conflictDescription || "Обнаружено наложение дат"}</span>
+            <span>{conflictDescription || "ОБНАРУЖЕНО НАЛОЖЕНИЕ ДАТ"}</span>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] text-[#2DD4BF] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#165057] tabular-nums">
+          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] text-[#2DD4BF] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#165057] tabular-nums font-serif italic">
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#2DD4BF]" strokeWidth={2} />
-            <span>Календарь сверен: без накладок</span>
+            <span>КАЛЕНДАРЬ СВЕРЕН: БЕЗ НАКЛАДОК</span>
           </div>
         )}
       </div>
@@ -76,7 +76,7 @@ export function CalendarTimeline({
               key={ev.event_id}
               className="flex items-center gap-2.5 rounded-[6px] border border-[#262C35] bg-[#1A1E24] px-2.5 py-1.5"
             >
-              <div className="flex h-9 w-11 shrink-0 flex-col items-center justify-center rounded-[4px] border border-[#2D3540] bg-[#161B21] text-white tabular-nums">
+              <div className="flex h-9 w-11 shrink-0 flex-col items-center justify-center rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] text-white tabular-nums">
                 <span className="text-[11px] font-bold leading-none">
                   {cal.dayText}
                 </span>

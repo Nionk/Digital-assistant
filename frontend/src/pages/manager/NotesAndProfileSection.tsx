@@ -56,6 +56,14 @@ const DEMO_NOTE_PRESETS = [
 const QUICK_CITIES = ["Москва", "Санкт-Петербург", "Екатеринбург", "Казань", "Сочи"];
 const ALL_ROLES: ParticipationRole[] = ["delegate", "speaker", "sponsor"];
 
+const LOADING_PHRASES = [
+  "Подбираем предложения...",
+  "Анализируем профиль клиента...",
+  "Сверяем даты и проверяем календарь накладок...",
+  "Рассчитываем льготные тарифы Early Bird...",
+  "Еще немного, формируем варианты пакетов...",
+];
+
 export function NotesAndProfileSection({
   notes,
   onNotesChange,
@@ -70,20 +78,18 @@ export function NotesAndProfileSection({
 }: NotesAndProfileSectionProps) {
   const [newTagText, setNewTagText] = React.useState("");
   const [newCityText, setNewCityText] = React.useState("");
-  const [loadingStep, setLoadingStep] = React.useState(0);
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = React.useState(0);
 
-  // Анимация шагов во время работы ИИ-пайплайна (3–5 секунд)
+  // Живая ротация привлекательных фраз при подборе
   React.useEffect(() => {
     if (!isMatching) {
-      setLoadingStep(0);
+      setLoadingPhraseIndex(0);
       return;
     }
-    const t1 = setTimeout(() => setLoadingStep(1), 1100);
-    const t2 = setTimeout(() => setLoadingStep(2), 2400);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    const interval = setInterval(() => {
+      setLoadingPhraseIndex((prev) => (prev + 1) % LOADING_PHRASES.length);
+    }, 1100);
+    return () => clearInterval(interval);
   }, [isMatching]);
 
   const handleAddTheme = (e: React.FormEvent) => {
@@ -154,13 +160,13 @@ export function NotesAndProfileSection({
     <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm overflow-hidden">
       {/* Шапка блока Шага 01–03 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#60A5FA] px-2 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
             01
           </span>
-          <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+          <h2 className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
             Запрос клиента и аналитика задач
-          </span>
+          </h2>
           {hasMatchResult && isCollapsed && (
             <span className="hidden truncate text-xs text-[#8E95A0] md:inline max-w-[380px]">
               · «{notes.slice(0, 68)}...»
@@ -203,7 +209,7 @@ export function NotesAndProfileSection({
                   onClick={() => onNotesChange(preset.text)}
                   className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#38BDF8] hover:bg-[#161E28]"
                 >
-                  <span className="rounded-[3px] border border-[#7C4A19] bg-[#22160C] px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#E59837]">
+                  <span className="rounded-[3px] border border-[#7C4A19] bg-[#22160C] px-1.5 py-0.2 text-[9px] font-serif italic font-bold uppercase tracking-wider text-[#E59837]">
                     {preset.category}
                   </span>
                   <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
@@ -231,7 +237,7 @@ export function NotesAndProfileSection({
               size="md"
               disabled={isMatching || notes.trim().length < 10}
               onClick={onRunInitialMatch}
-              className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-all"
+              className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]"
             >
               {isMatching ? (
                 <>
@@ -249,30 +255,14 @@ export function NotesAndProfileSection({
         </div>
       )}
 
-      {/* Индикатор прогресса во время работы ИИ */}
+      {/* Круглый движущийся индикатор загрузки со сменяющимися фразами */}
       {isMatching && (
-        <div className="border-b border-border bg-sage-tint/40 px-4 py-3">
+        <div className="border-b border-[#21262F] bg-[#12161A] px-4 py-3">
           <div className="flex items-center gap-3">
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-pine" />
-            <div className="flex-1">
-              <div className="flex items-center justify-between text-xs font-medium text-pine">
-                <span>
-                  {loadingStep === 0 &&
-                    "Шаг 1/3: Извлечение целевой аудитории, ролей, географии и бюджета..."}
-                  {loadingStep === 1 &&
-                    "Шаг 2/3: Гибридный поиск (pgvector + FTS RRF) и сверка календаря без накладок..."}
-                  {loadingStep === 2 &&
-                    "Шаг 3/3: Расчет выгоды Early Bird и подготовка аргументов выбора площадок..."}
-                </span>
-                <span className="tabular-nums">{(loadingStep + 1) * 33}%</span>
-              </div>
-              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border">
-                <div
-                  className="h-full bg-pine transition-all duration-500"
-                  style={{ width: `${(loadingStep + 1) * 33.3}%` }}
-                />
-              </div>
-            </div>
+            <div className="h-5 w-5 shrink-0 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
+            <p className="font-serif italic text-xs font-medium text-[#E5C378] transition-all duration-300">
+              {LOADING_PHRASES[loadingPhraseIndex]}
+            </p>
           </div>
         </div>
       )}
@@ -282,7 +272,7 @@ export function NotesAndProfileSection({
         <div className="bg-[#161B22]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider tabular-nums">
+              <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-serif italic font-bold uppercase tracking-wider">
                 КРИТЕРИИ
               </span>
               <span className="text-xs font-semibold text-white">
@@ -308,21 +298,49 @@ export function NotesAndProfileSection({
           <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
             {/* Ячейка 1: Бюджет и кол-во событий */}
             <div className="p-3 bg-[#161B22]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                 1. Лимит бюджета (₽)
               </span>
-              <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="relative mt-1.5 flex items-center">
                 <input
                   type="number"
-                  step={10000}
+                  step={50000}
                   min={0}
                   value={Math.round(editableProfile.total_budget_max)}
                   onChange={(e) => {
                     const val = Math.max(0, Number(e.target.value) || 0);
                     onUpdateProfile((prev) => ({ ...prev, total_budget_max: val }));
                   }}
-                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
+                <div className="absolute right-1 flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateProfile((p) => ({
+                        ...p,
+                        total_budget_max: p.total_budget_max + 50000,
+                      }))
+                    }
+                    className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                    title="Увеличить на 50 000 ₽"
+                  >
+                    <ChevronUp className="h-2.5 w-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateProfile((p) => ({
+                        ...p,
+                        total_budget_max: Math.max(0, p.total_budget_max - 50000),
+                      }))
+                    }
+                    className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                    title="Уменьшить на 50 000 ₽"
+                  >
+                    <ChevronDown className="h-2.5 w-2.5" />
+                  </button>
+                </div>
               </div>
               <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Площадок в пакете:</span>
@@ -348,7 +366,7 @@ export function NotesAndProfileSection({
             {/* Ячейка 2: География и Онлайн */}
             <div className="p-3 bg-[#161B22]">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+                <span className="font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                   2. География
                 </span>
                 <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB]">
@@ -418,7 +436,7 @@ export function NotesAndProfileSection({
 
             {/* Ячейка 3: Период планирования */}
             <div className="p-3 bg-[#161B22]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                 3. Период календаря
               </span>
               <div className="mt-1.5 space-y-1.5">
@@ -455,7 +473,7 @@ export function NotesAndProfileSection({
 
             {/* Ячейка 4: Роли участия и спикерство */}
             <div className="p-3 bg-[#161B22]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                 4. Форматы участия
               </span>
               <div className="mt-1.5 flex flex-wrap gap-1">
@@ -507,7 +525,7 @@ export function NotesAndProfileSection({
 
             {/* Ячейка 5: Отраслевые темы и ЦА */}
             <div className="p-3 bg-[#161B22]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                 5. Темы, продукт и ЦА
               </span>
               <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
@@ -545,15 +563,12 @@ export function NotesAndProfileSection({
             </div>
           </div>
 
-          <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-1.5 flex items-center justify-between text-[11px] text-[#8E95A0]">
-            <span className="truncate">
-              Поисковый вектор (RRF):{" "}
-              <strong className="font-medium text-[#D1D5DB]">
-                {editableProfile.semantic_search_query}
-              </strong>
+          <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-2 flex items-center justify-end text-[11px] text-[#8E95A0]">
+            <span className="font-serif italic uppercase tracking-wider text-[10px] text-[#8E95A0] mr-2">
+              Ориентир бюджета:
             </span>
-            <span className="shrink-0 tabular-nums text-[#D1D5DB]">
-              Ориентир: {formatNumberCompact(editableProfile.total_budget_max)} ₽
+            <span className="tabular-nums font-semibold text-[#E5C378]">
+              {formatNumberCompact(editableProfile.total_budget_max)} ₽
             </span>
           </div>
         </div>

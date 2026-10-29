@@ -74,13 +74,13 @@ export function BundleConstructorSection({
       {/* Переключатель вариантов пакета (Шаг 05 «Сравнение вариантов») */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
-          <div className="flex items-center gap-2.5">
-            <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#60A5FA] px-2 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
+          <div className="flex items-baseline gap-2.5">
+            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
               02
             </span>
-            <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+            <h2 className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
               Сравнение вариантов и выбор тарифов
-            </span>
+            </h2>
           </div>
           <span className="text-[11px] text-[#8E95A0]">
             Выбор тарифа синхронно пересчитывает общую смету
@@ -127,15 +127,15 @@ export function BundleConstructorSection({
                 </div>
 
                 <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums">
-                  <span className="text-[#8E95A0]">
-                    Площадок: <strong className="text-white">{v.items.length}</strong>
+                  <span className="font-serif italic uppercase tracking-wider text-[11px] text-[#8E95A0]">
+                    ПЛОЩАДОК: <strong className="font-sans not-italic font-bold text-white">{v.items.length}</strong>
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-white">
                       {formatRub(v.total_actual_price)}
                     </span>
                     {v.total_savings > 0 && (
-                      <Badge variant="ebEmerald" className="text-[9px]">
+                      <Badge variant="ebEmerald" className="font-serif italic uppercase tracking-wider text-[9px]">
                         ВЫГОДА {formatRub(v.total_savings)}
                       </Badge>
                     )}
@@ -169,15 +169,15 @@ export function BundleConstructorSection({
 
       {/* Бонусный слот: Спецпроекты и партнёрские пакеты «По запросу» */}
       {bonusRows.length > 0 && (
-        <div className="rounded-card border border-border bg-surface/90 p-3.5 shadow-card">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
+        <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
+          <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[#21262F] pb-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-sage" strokeWidth={1.5} />
-              <span className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
-                Дополнительные возможности: спецпроекты и стенды «По запросу»
+              <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
+              <span className="font-serif italic uppercase text-xs font-semibold tracking-wider text-[#D1D5DB]">
+                ДОПОЛНИТЕЛЬНЫЕ ВОЗМОЖНОСТИ: СПЕЦПРОЕКТЫ И СТЕНДЫ «ПО ЗАПРОСУ»
               </span>
             </div>
-            <span className="text-[11px] text-ink-muted">
+            <span className="text-[11px] text-[#8E95A0]">
               Отметьте галочкой, чтобы включить в персональную витрину клиента
             </span>
           </div>
@@ -225,10 +225,14 @@ function EventBuilderRow({
   return (
     <div
       className={cn(
-        "rounded-[8px] border p-3.5 transition-all",
-        isIncluded
-          ? "border-[#262C35] bg-[#1A1E24] shadow-sm"
-          : "border-[#21262F] bg-[#14181D]/60 opacity-60"
+        "rounded-[8px] border p-3.5 transition-all duration-300 ease-in-out",
+        isBonusSlot
+          ? isIncluded
+            ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white opacity-100"
+            : "border-[#1D232A] bg-[#101317] text-[#9CA3AF] opacity-80 hover:opacity-100 hover:border-[#2D3540]"
+          : isIncluded
+            ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white"
+            : "border-[#21262F] bg-[#14181D]/60 opacity-60 text-[#8E95A0]"
       )}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -243,23 +247,21 @@ function EventBuilderRow({
                 ? "Включено в подборку клиента"
                 : "Включить мероприятие в подборку"
             }
-            className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-[#E5C378]"
+            className="h-4 w-4 shrink-0 self-center cursor-pointer rounded accent-[#E5C378]"
           />
 
-          {/* Календарный лист даты */}
+          {/* Календарный лист даты с золотой рамкой, увеличенной высотой и вертикальным центрированием */}
           <div
             className={cn(
-              "flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-[6px] border tabular-nums",
-              isIncluded
-                ? "border-[#2D3540] bg-[#161B21] text-white"
-                : "border-[#21262F] bg-[#12161A] text-[#8E95A0]"
+              "flex min-h-[64px] min-w-[62px] shrink-0 self-center flex-col items-center justify-center rounded-[6px] border border-[#7C5A20]/50 bg-[#161B21] px-2 py-2 tabular-nums shadow-inner transition-colors",
+              isIncluded ? "text-white" : "text-[#8E95A0]"
             )}
           >
-            <span className="text-xs font-bold leading-none">{cal.dayText}</span>
-            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider opacity-85">
+            <span className="text-sm font-bold leading-none">{cal.dayText}</span>
+            <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider opacity-85 leading-none">
               {cal.monthText}
             </span>
-            <span className="mt-0.5 text-[9px] opacity-70">{cal.durationText}</span>
+            <span className="mt-1 text-[9px] opacity-70 leading-none">{cal.durationText}</span>
           </div>
 
           {/* Основная информация о площадке */}
@@ -383,10 +385,10 @@ function EventBuilderRow({
             </div>
 
             {selectedTariff.savings > 0 ? (
-              <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[10px] font-bold text-[#34D399] tabular-nums">
-                выгода {formatRub(selectedTariff.savings)}
+              <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#34D399] tabular-nums">
+                ВЫГОДА {formatRub(selectedTariff.savings)}
                 {selectedTariff.early_bird_deadline
-                  ? ` до ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
+                  ? ` ДО ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
                   : ""}
               </span>
             ) : (
