@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useManagerEventsCatalog } from "@/api/queries";
 import type {
   ClientQueryExtracted,
   ParticipationRole,
@@ -79,9 +80,45 @@ export function NotesAndProfileSection({
   onRunInitialMatch,
   onRematchWithOverride,
 }: NotesAndProfileSectionProps) {
+  const { data: catalogData } = useManagerEventsCatalog(true);
   const [newTagText, setNewTagText] = React.useState("");
   const [newCityText, setNewCityText] = React.useState("");
   const [loadingPhraseIndex, setLoadingPhraseIndex] = React.useState(0);
+  const [isThemeSuggestionsOpen, setIsThemeSuggestionsOpen] = React.useState(false);
+  const themeInputRef = React.useRef<HTMLDivElement>(null);
+
+  // Все уникальные темы площадок из каталога
+  const allCatalogThemes = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const ev of catalogData?.events || []) {
+      for (const t of ev.themes) {
+        set.add(t);
+      }
+    }
+    return Array.from(set).sort();
+  }, [catalogData?.events]);
+
+  // Фильтрованные темы по текущему вводу
+  const matchingThemes = React.useMemo(() => {
+    const q = newTagText.trim().toLowerCase();
+    if (!q) return [];
+    const activeTags = editableProfile?.themes_keywords || [];
+    return allCatalogThemes
+      .filter((t) => !activeTags.includes(t) && t.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [allCatalogThemes, newTagText, editableProfile?.themes_keywords]);
+
+  // Закрытие выпадающего списка при клике вне
+  React.useEffect(() => {
+    if (!isThemeSuggestionsOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (themeInputRef.current && !themeInputRef.current.contains(e.target as Node)) {
+        setIsThemeSuggestionsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isThemeSuggestionsOpen]);
 
   // Живая ротация привлекательных фраз при подборе
   React.useEffect(() => {
@@ -95,9 +132,8 @@ export function NotesAndProfileSection({
     return () => clearInterval(interval);
   }, [isMatching]);
 
-  const handleAddTheme = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = newTagText.trim();
+  const addSpecificTheme = (tag: string) => {
+    const cleaned = tag.trim();
     if (!cleaned || !editableProfile) return;
     if (!editableProfile.themes_keywords.includes(cleaned)) {
       onUpdateProfile((prev) => ({
@@ -107,6 +143,12 @@ export function NotesAndProfileSection({
       }));
     }
     setNewTagText("");
+    setIsThemeSuggestionsOpen(false);
+  };
+
+  const handleAddTheme = (e: React.FormEvent) => {
+    e.preventDefault();
+    addSpecificTheme(newTagText);
   };
 
   const handleRemoveTheme = (tag: string) => {
@@ -527,7 +569,7 @@ export function NotesAndProfileSection({
             </div>
 
             {/* Ячейка 5: Отраслевые темы и ЦА */}
-            <div className="p-3 bg-[#161B22]">
+            <div className="p-3 bg-[#161B22] relative" ref={themeInputRef}>
               <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
                 5. Темы, продукт и ЦА
               </span>
@@ -548,20 +590,46 @@ export function NotesAndProfileSection({
                   </span>
                 ))}
               </div>
-              <form onSubmit={handleAddTheme} className="mt-1.5 flex gap-1">
+              <form onSubmit={handleAddTheme} className="mt-1.5 flex gap-1 relative">
                 <input
                   type="text"
                   value={newTagText}
-                  onChange={(e) => setNewTagText(e.target.value)}
+                  onFocus={() => setIsThemeSuggestionsOpen(true)}
+                  onChange={(e) => {
+                    setNewTagText(e.target.value);
+                    setIsThemeSuggestionsOpen(true);
+                  }}
                   placeholder="+ Добавить тему (КРТ, BIM...)"
                   className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
                 />
                 <button
                   type="submit"
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#E5C378] hover:text-[#E5C378] transition-colors"
+                  title="Добавить тему"
                 >
                   <Plus className="h-3 w-3" />
                 </button>
+
+                {isThemeSuggestionsOpen && matchingThemes.length > 0 && (
+                  <div className="absolute left-0 right-7 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-[6px] border border-[#7C5A20]/80 bg-[#12161A] p-1 shadow-2xl scrollbar-thin">
+                    <span className="block px-2 py-1 text-[10px] font-serif italic text-[#8E95A0] border-b border-[#21262F]">
+                      Подсказки из каталога:
+                    </span>
+                    <div className="mt-1 space-y-0.5">
+                      {matchingThemes.map((theme) => (
+                        <button
+                          key={theme}
+                          type="button"
+                          onClick={() => addSpecificTheme(theme)}
+                          className="flex w-full items-center justify-between rounded-[4px] px-2 py-1 text-left text-xs text-[#D1D5DB] transition-colors hover:bg-[#261E0F] hover:text-[#E5C378]"
+                        >
+                          <span className="truncate">{theme}</span>
+                          <span className="text-[10px] text-[#7C5A20] font-serif italic">+ выбрать</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </form>
             </div>
           </div>
