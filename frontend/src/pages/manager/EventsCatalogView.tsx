@@ -17,6 +17,10 @@ import { useManagerEventsCatalog } from "@/api/queries";
 import type { CatalogEventItemOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { CustomSelect } from "@/components/ui/custom-select";
+import {
+  SearchableMultiSelectPopover,
+  type MultiSelectOption,
+} from "@/components/ui/searchable-multi-select-popover";
 import { EventDetailsDrawer } from "./EventDetailsDrawer";
 import {
   FORMAT_LABELS,
@@ -54,8 +58,8 @@ export function EventsCatalogView() {
   const { data, isLoading } = useManagerEventsCatalog(true);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedFormat, setSelectedFormat] = React.useState<string>("all");
-  const [selectedCity, setSelectedCity] = React.useState<string>("all");
-  const [selectedTheme, setSelectedTheme] = React.useState<string>("all");
+  const [selectedCities, setSelectedCities] = React.useState<string[]>([]);
+  const [selectedThemes, setSelectedThemes] = React.useState<string[]>([]);
   const [sortBy, setSortBy] = React.useState<string>("date_asc");
   const [onlyEarlyBird, setOnlyEarlyBird] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
@@ -64,15 +68,25 @@ export function EventsCatalogView() {
 
   const events = data?.events || [];
 
-  const uniqueCities = React.useMemo(() => {
-    const set = new Set<string>();
+  const cityOptions = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    let onlineCount = 0;
     for (const ev of events) {
-      if (ev.city) set.add(ev.city);
+      if (ev.is_online) onlineCount++;
+      if (ev.city) {
+        counts.set(ev.city, (counts.get(ev.city) || 0) + 1);
+      }
     }
-    return Array.from(set);
+    const list: MultiSelectOption[] = [
+      { value: "online", label: "Онлайн", count: onlineCount },
+      ...Array.from(counts.entries())
+        .map(([city, count]) => ({ value: city, label: city, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+    ];
+    return list;
   }, [events]);
 
-  const uniqueThemes = React.useMemo(() => {
+  const themeMultiOptions = React.useMemo(() => {
     const map = new Map<string, number>();
     for (const ev of events) {
       for (const t of ev.themes) {
@@ -80,14 +94,9 @@ export function EventsCatalogView() {
       }
     }
     return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [events]);
-
-  const themeOptions = React.useMemo(() => [
-    { value: "all", label: `Все темы (${events.length})` },
-    ...uniqueThemes.map((t) => ({ value: t.name, label: `${t.name} (${t.count})` })),
-  ], [events.length, uniqueThemes]);
 
   const metrics = React.useMemo(() => {
     const total = events.length;
@@ -124,18 +133,16 @@ export function EventsCatalogView() {
       if (selectedFormat !== "all" && ev.event_format !== selectedFormat) {
         return false;
       }
-      if (selectedCity === "online" && !ev.is_online) {
-        return false;
+      if (selectedCities.length > 0) {
+        const matchesCity = selectedCities.some((c) => {
+          if (c === "online") return ev.is_online;
+          return ev.city === c;
+        });
+        if (!matchesCity) return false;
       }
-      if (
-        selectedCity !== "all" &&
-        selectedCity !== "online" &&
-        ev.city !== selectedCity
-      ) {
-        return false;
-      }
-      if (selectedTheme !== "all" && !ev.themes.includes(selectedTheme)) {
-        return false;
+      if (selectedThemes.length > 0) {
+        const matchesTheme = selectedThemes.some((t) => ev.themes.includes(t));
+        if (!matchesTheme) return false;
       }
       if (onlyEarlyBird && !ev.tariffs.some((t) => t.savings > 0)) {
         return false;
@@ -173,13 +180,20 @@ export function EventsCatalogView() {
       }
       return 0;
     });
-  }, [events, selectedFormat, selectedCity, selectedTheme, onlyEarlyBird, searchQuery, sortBy]);
+  }, [events, selectedFormat, selectedCities, selectedThemes, onlyEarlyBird, searchQuery, sortBy]);
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    selectedFormat !== "all" ||
+    selectedCities.length > 0 ||
+    selectedThemes.length > 0 ||
+    onlyEarlyBird;
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedFormat("all");
-    setSelectedCity("all");
-    setSelectedTheme("all");
+    setSelectedCities([]);
+    setSelectedThemes([]);
     setSortBy("date_asc");
     setOnlyEarlyBird(false);
   };
@@ -240,33 +254,35 @@ export function EventsCatalogView() {
               />
             </div>
 
-            {/* Селектор города */}
+            {/* Выдвижная панель выбора локации */}
             <div className="flex items-center gap-1.5">
               <span className="font-serif italic text-[11px] text-[#8E95A0]">
                 Локация:
               </span>
-              <CustomSelect
-                value={selectedCity}
-                onChange={(val) => setSelectedCity(String(val))}
-                options={[
-                  { value: "all", label: `Все города (${events.length})` },
-                  ...uniqueCities.map((city) => ({ value: city, label: city })),
-                  { value: "online", label: "Только Онлайн" },
-                ]}
-                buttonClassName="h-7 min-w-[130px] text-xs"
+              <SearchableMultiSelectPopover
+                label="Локация"
+                placeholder="Поиск города..."
+                options={cityOptions}
+                selectedValues={selectedCities}
+                onChange={setSelectedCities}
+                allSelectedLabel={`Все (${events.length})`}
+                popoverWidthClass="w-72"
               />
             </div>
 
-            {/* Выдвижное меню тематики площадок */}
+            {/* Выдвижная панель выбора тематики */}
             <div className="flex items-center gap-1.5">
               <span className="font-serif italic text-[11px] text-[#8E95A0]">
                 Тема:
               </span>
-              <CustomSelect
-                value={selectedTheme}
-                onChange={(val) => setSelectedTheme(String(val))}
-                options={themeOptions}
-                buttonClassName="h-7 min-w-[130px] text-xs"
+              <SearchableMultiSelectPopover
+                label="Тематика"
+                placeholder="Поиск темы (BIM, КРТ...)"
+                options={themeMultiOptions}
+                selectedValues={selectedThemes}
+                onChange={setSelectedThemes}
+                allSelectedLabel={`Все (${events.length})`}
+                popoverWidthClass="w-80"
               />
             </div>
 
@@ -303,6 +319,19 @@ export function EventsCatalogView() {
                 </span>
               )}
             </button>
+
+            {/* Быстрый сброс фильтров */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 rounded-[4px] px-2 py-1 text-xs font-serif italic text-[#8E95A0] hover:text-[#EF4444] transition-colors"
+                title="Сбросить все фильтры"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Сбросить фильтры</span>
+              </button>
+            )}
           </div>
 
           {/* Правая часть: счетчик и переключатель вида */}
