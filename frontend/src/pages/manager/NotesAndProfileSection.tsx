@@ -5,7 +5,6 @@ import {
   RotateCcw,
   ArrowRight,
   FileText,
-  Plus,
   X,
   Loader2,
 } from "lucide-react";
@@ -18,6 +17,10 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CustomSelect } from "@/components/ui/custom-select";
+import {
+  SearchableMultiSelectPopover,
+  type MultiSelectOption,
+} from "@/components/ui/searchable-multi-select-popover";
 import { ROLE_BADGE_LABELS, formatNumberCompact } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -81,44 +84,21 @@ export function NotesAndProfileSection({
   onRematchWithOverride,
 }: NotesAndProfileSectionProps) {
   const { data: catalogData } = useManagerEventsCatalog(true);
-  const [newTagText, setNewTagText] = React.useState("");
   const [newCityText, setNewCityText] = React.useState("");
   const [loadingPhraseIndex, setLoadingPhraseIndex] = React.useState(0);
-  const [isThemeSuggestionsOpen, setIsThemeSuggestionsOpen] = React.useState(false);
-  const themeInputRef = React.useRef<HTMLDivElement>(null);
 
-  // Все уникальные темы площадок из каталога
-  const allCatalogThemes = React.useMemo(() => {
-    const set = new Set<string>();
+  // Все уникальные темы площадок из каталога с количеством мероприятий
+  const catalogThemeOptions = React.useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<string, number>();
     for (const ev of catalogData?.events || []) {
       for (const t of ev.themes) {
-        set.add(t);
+        counts.set(t, (counts.get(t) || 0) + 1);
       }
     }
-    return Array.from(set).sort();
+    return Array.from(counts.entries())
+      .map(([theme, count]) => ({ value: theme, label: theme, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [catalogData?.events]);
-
-  // Фильтрованные темы по текущему вводу
-  const matchingThemes = React.useMemo(() => {
-    const q = newTagText.trim().toLowerCase();
-    if (!q) return [];
-    const activeTags = editableProfile?.themes_keywords || [];
-    return allCatalogThemes
-      .filter((t) => !activeTags.includes(t) && t.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [allCatalogThemes, newTagText, editableProfile?.themes_keywords]);
-
-  // Закрытие выпадающего списка при клике вне
-  React.useEffect(() => {
-    if (!isThemeSuggestionsOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (themeInputRef.current && !themeInputRef.current.contains(e.target as Node)) {
-        setIsThemeSuggestionsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isThemeSuggestionsOpen]);
 
   // Живая ротация привлекательных фраз при подборе
   React.useEffect(() => {
@@ -132,29 +112,28 @@ export function NotesAndProfileSection({
     return () => clearInterval(interval);
   }, [isMatching]);
 
-  const addSpecificTheme = (tag: string) => {
-    const cleaned = tag.trim();
-    if (!cleaned || !editableProfile) return;
-    if (!editableProfile.themes_keywords.includes(cleaned)) {
-      onUpdateProfile((prev) => ({
-        ...prev,
-        themes_keywords: [...prev.themes_keywords, cleaned],
-        semantic_search_query: `${prev.semantic_search_query} ${cleaned}`.trim(),
-      }));
-    }
-    setNewTagText("");
-    setIsThemeSuggestionsOpen(false);
+  const handleUpdateThemes = (newThemes: string[]) => {
+    if (!editableProfile) return;
+    onUpdateProfile((prev) => ({
+      ...prev,
+      themes_keywords: newThemes,
+      semantic_search_query: newThemes.join(" ").trim(),
+    }));
   };
 
-  const handleAddTheme = (e: React.FormEvent) => {
-    e.preventDefault();
-    addSpecificTheme(newTagText);
+  const handleCreateCustomTheme = (customTheme: string) => {
+    const trimmed = customTheme.trim();
+    if (!trimmed || !editableProfile) return;
+    if (!editableProfile.themes_keywords.includes(trimmed)) {
+      handleUpdateThemes([...editableProfile.themes_keywords, trimmed]);
+    }
   };
 
   const handleRemoveTheme = (tag: string) => {
     onUpdateProfile((prev) => ({
       ...prev,
       themes_keywords: prev.themes_keywords.filter((t) => t !== tag),
+      semantic_search_query: prev.themes_keywords.filter((t) => t !== tag).join(" ").trim(),
     }));
   };
 
@@ -569,68 +548,77 @@ export function NotesAndProfileSection({
             </div>
 
             {/* Ячейка 5: Отраслевые темы и ЦА */}
-            <div className="p-3 bg-[#161B22] relative" ref={themeInputRef}>
-              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
-                5. Темы, продукт и ЦА
-              </span>
-              <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
-                {editableProfile.themes_keywords.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-white"
-                  >
-                    <span>{tag}</span>
+            <div className="p-3 bg-[#161B22] relative flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+                    5. Темы, продукт и ЦА
+                  </span>
+                  {editableProfile.themes_keywords.length > 0 && (
+                    <span className="font-serif italic text-[10px] text-[#E5C378]">
+                      {editableProfile.themes_keywords.length} выбрано
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
+                  {editableProfile.themes_keywords.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-white"
+                    >
+                      <span>{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTheme(tag)}
+                        className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
+                        title="Удалить тему"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                  {editableProfile.themes_keywords.length === 0 && (
+                    <span className="text-[11px] font-serif italic text-[#6B7280]">
+                      Темы не выбраны
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <SearchableMultiSelectPopover
+                  label="Темы"
+                  placeholder="Поиск по каталогу или ввод новой..."
+                  options={catalogThemeOptions}
+                  selectedValues={editableProfile.themes_keywords}
+                  onChange={handleUpdateThemes}
+                  allowCustomCreation={true}
+                  onCreateCustom={handleCreateCustomTheme}
+                  align="right"
+                  popoverWidthClass="w-80 sm:w-96"
+                  triggerClassName="w-full justify-between h-6 px-2 text-[11px]"
+                  renderTriggerContent={({ isOpen }) => (
                     <button
                       type="button"
-                      onClick={() => handleRemoveTheme(tag)}
-                      className="text-[#8E95A0] hover:text-[#EF4444]"
+                      className={cn(
+                        "w-full flex h-6.5 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
+                        isOpen && "border-[#E5C378] text-[#E5C378] bg-[#161B21]"
+                      )}
                     >
-                      <X className="h-2.5 w-2.5" />
+                      <span className="truncate">
+                        + Выбрать темы ({catalogThemeOptions.length})
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-3 w-3 shrink-0 transition-transform duration-200",
+                          isOpen && "rotate-180 text-[#E5C378]"
+                        )}
+                      />
                     </button>
-                  </span>
-                ))}
-              </div>
-              <form onSubmit={handleAddTheme} className="mt-1.5 flex gap-1 relative">
-                <input
-                  type="text"
-                  value={newTagText}
-                  onFocus={() => setIsThemeSuggestionsOpen(true)}
-                  onChange={(e) => {
-                    setNewTagText(e.target.value);
-                    setIsThemeSuggestionsOpen(true);
-                  }}
-                  placeholder="+ Добавить тему (КРТ, BIM...)"
-                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+                  )}
                 />
-                <button
-                  type="submit"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#E5C378] hover:text-[#E5C378] transition-colors"
-                  title="Добавить тему"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-
-                {isThemeSuggestionsOpen && matchingThemes.length > 0 && (
-                  <div className="absolute left-0 right-7 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-[6px] border border-[#7C5A20]/80 bg-[#12161A] p-1 shadow-2xl scrollbar-thin">
-                    <span className="block px-2 py-1 text-[10px] font-serif italic text-[#8E95A0] border-b border-[#21262F]">
-                      Подсказки из каталога:
-                    </span>
-                    <div className="mt-1 space-y-0.5">
-                      {matchingThemes.map((theme) => (
-                        <button
-                          key={theme}
-                          type="button"
-                          onClick={() => addSpecificTheme(theme)}
-                          className="flex w-full items-center justify-between rounded-[4px] px-2 py-1 text-left text-xs text-[#D1D5DB] transition-colors hover:bg-[#261E0F] hover:text-[#E5C378]"
-                        >
-                          <span className="truncate">{theme}</span>
-                          <span className="text-[10px] text-[#7C5A20] font-serif italic">+ выбрать</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </form>
+              </div>
             </div>
           </div>
 
