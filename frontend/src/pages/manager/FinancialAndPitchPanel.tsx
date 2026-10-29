@@ -70,9 +70,9 @@ export function FinancialAndPitchPanel({
             </h3>
           </div>
           <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 select-none">
-            <Layers className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.5} />
-            <span className="font-serif italic text-[11px] text-[#8E95A0]">Площадок:</span>
-            <span className="inline-flex min-w-[24px] items-center justify-center rounded-[4px] bg-[#1E252E] px-1.5 py-0.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
+            <Layers className="h-3.5 w-3.5 text-[#E5C378] shrink-0" strokeWidth={1.5} />
+            <span className="font-serif italic text-[11px] leading-none text-[#8E95A0]">Площадок:</span>
+            <span className="inline-flex min-w-[24px] h-[18px] items-center justify-center rounded-[4px] bg-[#1E252E] px-1.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
               {summary.includedRows.length}
             </span>
           </div>
