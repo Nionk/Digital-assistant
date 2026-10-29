@@ -235,7 +235,7 @@ export function NotesAndProfileSection({
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
                 placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
-                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
+                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
               />
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -299,10 +299,10 @@ export function NotesAndProfileSection({
               type="button"
               disabled={isMatching}
               onClick={onRematchWithOverride}
-              className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] select-none cursor-pointer shadow-sm transition-colors duration-150 hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] disabled:opacity-50 disabled:cursor-not-allowed outline-none"
             >
-              <RotateCcw className="h-3 w-3 shrink-0 text-inherit transition-colors duration-150 group-hover:text-[#E5C378]" strokeWidth={2} />
-              <span className="transition-colors duration-150">Пересобрать пакеты</span>
+              <RotateCcw className="h-3 w-3 shrink-0 text-inherit transition-transform" strokeWidth={2} />
+              <span>Пересобрать пакеты</span>
             </button>
           </div>
 
@@ -322,7 +322,7 @@ export function NotesAndProfileSection({
                     const val = Math.max(0, Number(e.target.value) || 0);
                     onUpdateProfile((prev) => ({ ...prev, total_budget_max: val }));
                   }}
-                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <div className="absolute right-1 flex flex-col">
                   <button
@@ -439,7 +439,7 @@ export function NotesAndProfileSection({
                   value={newCityText}
                   onChange={(e) => setNewCityText(e.target.value)}
                   placeholder="+ Город..."
-                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
+                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
                 />
               </form>
             </div>
@@ -461,7 +461,7 @@ export function NotesAndProfileSection({
                         date_from: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
                   />
                 </div>
                 <div className="flex items-center justify-between gap-1 text-[11px]">
@@ -475,7 +475,7 @@ export function NotesAndProfileSection({
                         date_to: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
                   />
                 </div>
               </div>
@@ -560,7 +560,7 @@ export function NotesAndProfileSection({
                   value={newTagText}
                   onChange={(e) => setNewTagText(e.target.value)}
                   placeholder="+ Добавить тему (КРТ, BIM...)"
-                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
+                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
                 />
                 <button
                   type="submit"
