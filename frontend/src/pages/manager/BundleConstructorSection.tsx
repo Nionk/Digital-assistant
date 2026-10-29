@@ -72,17 +72,17 @@ export function BundleConstructorSection({
   return (
     <section className="space-y-3">
       {/* Переключатель вариантов пакета (Шаг 05 «Сравнение вариантов») */}
-      <div className="rounded-card border border-border bg-surface p-3.5 shadow-card">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border/80">
+      <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
           <div className="flex items-center gap-2.5">
-            <span className="rounded-tag bg-pine text-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
+            <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] text-[#60A5FA] px-2 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
               02
             </span>
-            <span className="font-serif text-sm font-semibold tracking-tight text-ink sm:text-[15px]">
+            <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
               Сравнение вариантов и выбор тарифов
             </span>
           </div>
-          <span className="text-[11px] text-ink-muted">
+          <span className="text-[11px] text-[#8E95A0]">
             Выбор тарифа синхронно пересчитывает общую смету
           </span>
         </div>
@@ -97,17 +97,17 @@ export function BundleConstructorSection({
                 type="button"
                 onClick={() => onSelectVariantGroup(v.bundle_group)}
                 className={cn(
-                  "flex flex-col justify-between rounded-control border p-3.5 text-left transition-all",
+                  "flex flex-col justify-between rounded-[8px] border p-3.5 text-left transition-all",
                   isActive
-                    ? "border-pine bg-pine/[0.04] shadow-sm ring-1 ring-pine/20"
-                    : "border-border bg-canvas/40 hover:border-border-strong hover:bg-canvas"
+                    ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
+                    : "border-[#262D35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span
                     className={cn(
                       "text-xs font-semibold",
-                      isActive ? "text-pine" : "text-ink"
+                      isActive ? "text-[#E5C378]" : "text-white"
                     )}
                   >
                     {v.bundle_group === 1
@@ -116,10 +116,10 @@ export function BundleConstructorSection({
                   </span>
                   <span
                     className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-tag border text-[10px]",
+                      "flex h-4 w-4 items-center justify-center rounded-[3px] border text-[10px]",
                       isActive
-                        ? "border-pine bg-pine text-white"
-                        : "border-border-strong bg-surface"
+                        ? "border-[#E5C378] bg-[#E5C378] text-[#0E1215]"
+                        : "border-[#262D35] bg-[#12161A]"
                     )}
                   >
                     {isActive && <Check className="h-2.5 w-2.5" strokeWidth={2.5} />}
@@ -127,15 +127,15 @@ export function BundleConstructorSection({
                 </div>
 
                 <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums">
-                  <span className="text-ink-muted">
-                    Площадок: <strong className="text-ink">{v.items.length}</strong>
+                  <span className="text-[#8E95A0]">
+                    Площадок: <strong className="text-white">{v.items.length}</strong>
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-ink">
+                    <span className="font-semibold text-white">
                       {formatRub(v.total_actual_price)}
                     </span>
                     {v.total_savings > 0 && (
-                      <Badge variant="novelSand" className="text-[9px]">
+                      <Badge variant="ebEmerald" className="text-[9px]">
                         ВЫГОДА {formatRub(v.total_savings)}
                       </Badge>
                     )}
@@ -225,10 +225,10 @@ function EventBuilderRow({
   return (
     <div
       className={cn(
-        "rounded-card border bg-surface p-3.5 transition-all",
+        "rounded-[8px] border p-3.5 transition-all",
         isIncluded
-          ? "border-border shadow-card"
-          : "border-border/60 bg-canvas/40 opacity-65"
+          ? "border-[#262C35] bg-[#1A1E24] shadow-sm"
+          : "border-[#21262F] bg-[#14181D]/60 opacity-60"
       )}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -243,16 +243,16 @@ function EventBuilderRow({
                 ? "Включено в подборку клиента"
                 : "Включить мероприятие в подборку"
             }
-            className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-pine"
+            className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-[#E5C378]"
           />
 
           {/* Календарный лист даты */}
           <div
             className={cn(
-              "flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-control border tabular-nums",
+              "flex h-12 w-14 shrink-0 flex-col items-center justify-center rounded-[6px] border tabular-nums",
               isIncluded
-                ? "border-pine/20 bg-pine text-white"
-                : "border-border bg-surface-muted text-ink-secondary"
+                ? "border-[#2D3540] bg-[#161B21] text-white"
+                : "border-[#21262F] bg-[#12161A] text-[#8E95A0]"
             )}
           >
             <span className="text-xs font-bold leading-none">{cal.dayText}</span>
@@ -264,15 +264,15 @@ function EventBuilderRow({
 
           {/* Основная информация о площадке */}
           <div className="min-w-0 flex-1">
-            {/* Мета-строка через точку (вместо овальных таблеток) */}
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
-              <span className="font-semibold text-ink-secondary">{formatName}</span>
+            {/* Мета-строка через точку */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#8E95A0]">
+              <span className="font-semibold text-[#D1D5DB]">{formatName}</span>
               <span>·</span>
-              <span className="inline-flex items-center gap-1 font-medium text-ink-secondary">
+              <span className="inline-flex items-center gap-1 font-medium text-[#D1D5DB]">
                 {item.is_online ? (
-                  <Globe className="h-3 w-3 text-sage" strokeWidth={1.5} />
+                  <Globe className="h-3 w-3 text-[#38BDF8]" strokeWidth={1.5} />
                 ) : (
-                  <MapPin className="h-3 w-3 text-ink-muted" strokeWidth={1.5} />
+                  <MapPin className="h-3 w-3 text-[#8E95A0]" strokeWidth={1.5} />
                 )}
                 {locationLabel}
               </span>
@@ -286,33 +286,33 @@ function EventBuilderRow({
                 </>
               )}
               {isBonusSlot && (
-                <Badge variant="novelEmerald" className="ml-1 text-[9px]">
+                <Badge variant="ebEmerald" className="ml-1 text-[9px]">
                   СПЕЦПРОЕКТ
                 </Badge>
               )}
             </div>
 
-            <h3 className="mt-1 font-serif text-[15px] font-semibold leading-snug text-ink">
+            <h3 className="mt-1 font-serif text-[15px] font-semibold leading-snug text-white">
               {item.canonical_title}
             </h3>
 
             {/* Темы строкой */}
             {item.themes.length > 0 && (
-              <p className="mt-0.5 text-[11px] text-ink-muted">
+              <p className="mt-0.5 text-[11px] text-[#8E95A0]">
                 Темы: {item.themes.join(" · ")}
               </p>
             )}
 
             {/* Блок «Аргументы выбора и целевая аудитория» (Слайд 04) с редактированием по клику */}
-            <div className="mt-2 rounded-control border-l-2 border-pine bg-canvas/70 pl-2.5 pr-2 py-1.5">
+            <div className="mt-2 rounded-[6px] border-l-2 border-[#E5C378] bg-[#161B21] pl-2.5 pr-2 py-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                   Аргументы выбора площадки и ЦА
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsEditingRationale((p) => !p)}
-                  className="inline-flex items-center gap-1 text-[11px] text-ink-muted hover:text-pine"
+                  className="inline-flex items-center gap-1 text-[11px] text-[#8E95A0] hover:text-[#E5C378]"
                 >
                   <Edit3 className="h-3 w-3" strokeWidth={1.5} />
                   <span>{isEditingRationale ? "Готово" : "Изменить"}</span>
@@ -324,12 +324,12 @@ function EventBuilderRow({
                   rows={2}
                   value={rationale}
                   onChange={(e) => onUpdateRationale(e.target.value)}
-                  className="mt-1 w-full rounded border border-border bg-surface p-1.5 text-xs text-ink focus:border-pine focus:outline-none"
+                  className="mt-1 w-full rounded border border-[#262D35] bg-[#12161A] p-1.5 text-xs text-white focus:border-[#38BDF8] focus:outline-none"
                 />
               ) : (
                 <p
                   onClick={() => setIsEditingRationale(true)}
-                  className="mt-0.5 cursor-pointer text-xs leading-relaxed text-ink-secondary hover:text-ink"
+                  className="mt-0.5 cursor-pointer text-xs leading-relaxed text-[#D1D5DB] hover:text-white"
                   title="Нажмите, чтобы отредактировать аргументацию для клиента"
                 >
                   {rationale}
@@ -340,17 +340,17 @@ function EventBuilderRow({
         </div>
 
         {/* Правая колонка: Выбор тарифа и расчёт выгоды Early Bird */}
-        <div className="flex shrink-0 flex-col justify-between gap-1.5 border-t border-border/70 pt-2.5 lg:w-[255px] lg:border-l lg:border-t-0 lg:pl-3.5 lg:pt-0">
+        <div className="flex shrink-0 flex-col justify-between gap-1.5 border-t border-[#262D35] pt-2.5 lg:w-[255px] lg:border-l lg:border-t-0 lg:pl-3.5 lg:pt-0">
           <div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-ink-muted">Тариф участия:</span>
+              <span className="font-medium text-[#8E95A0]">Тариф участия:</span>
               <Badge
                 variant={
                   selectedTariff.participation_role === "speaker"
-                    ? "novelSand"
+                    ? "ebGold"
                     : selectedTariff.participation_role === "sponsor"
-                      ? "novelGold"
-                      : "novelDark"
+                      ? "ebRose"
+                      : "ebBlue"
                 }
               >
                 {ROLE_BADGE_LABELS[selectedTariff.participation_role]}
@@ -360,10 +360,10 @@ function EventBuilderRow({
             <select
               value={selectedTariff.tariff_id}
               onChange={(e) => onChangeTariff(Number(e.target.value))}
-              className="mt-1.5 h-8 w-full rounded-control border border-border bg-canvas px-2 text-xs font-medium text-ink tabular-nums focus:border-pine focus:bg-surface focus:outline-none"
+              className="mt-1.5 h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-medium text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
             >
               {item.available_tariffs.map((t) => (
-                <option key={t.tariff_id} value={t.tariff_id}>
+                <option key={t.tariff_id} value={t.tariff_id} className="bg-[#161B21] text-white">
                   {t.tariff_name} — {formatRub(t.actual_price)}
                 </option>
               ))}
@@ -372,31 +372,31 @@ function EventBuilderRow({
 
           <div className="mt-1 flex items-baseline justify-between tabular-nums">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-bold text-ink">
+              <span className="text-sm font-bold text-white">
                 {formatRub(selectedTariff.actual_price)}
               </span>
               {selectedTariff.savings > 0 && selectedTariff.base_price && (
-                <span className="text-xs text-ink-faint line-through">
+                <span className="text-xs text-[#727985] line-through">
                   {formatRub(selectedTariff.base_price)}
                 </span>
               )}
             </div>
 
             {selectedTariff.savings > 0 ? (
-              <span className="text-[11px] font-semibold text-sage">
-                −{formatRub(selectedTariff.savings)}
+              <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[10px] font-bold text-[#34D399] tabular-nums">
+                выгода {formatRub(selectedTariff.savings)}
                 {selectedTariff.early_bird_deadline
                   ? ` до ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
                   : ""}
               </span>
             ) : (
-              <span className="text-[11px] text-ink-faint">Базовый тариф</span>
+              <span className="text-[11px] text-[#727985]">Базовый тариф</span>
             )}
           </div>
 
           {selectedTariff.included_benefits && (
             <p
-              className="truncate text-[11px] text-ink-muted"
+              className="truncate text-[11px] text-[#8E95A0]"
               title={selectedTariff.included_benefits}
             >
               {selectedTariff.included_benefits}
