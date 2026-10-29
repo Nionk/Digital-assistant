@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   MapPin,
@@ -68,10 +69,12 @@ export function EventDetailsDrawer({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-[9999] flex justify-end">
           {/* Полупрозрачный матовый фон */}
           <motion.div
             key="drawer-backdrop"
@@ -306,6 +309,7 @@ export function EventDetailsDrawer({
           </motion.aside>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -191,7 +191,7 @@ export function NotesAndProfileSection({
   };
 
   return (
-    <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm relative z-30">
+    <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm relative">
       {/* Шапка блока Шага 01–03 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5 rounded-t-[12px]">
         <div className="flex items-baseline gap-2.5 min-w-0">
