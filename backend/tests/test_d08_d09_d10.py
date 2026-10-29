@@ -381,6 +381,7 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         self.assertIn("<b>Реакция клиента", alert)
         self.assertIn("ГК &lt;Тест&gt;", alert)
         self.assertIn("Форум &amp; Выставка", alert)
+        self.assertIn("Этап 09", alert)
 
         esc_alert = format_escalation_alert("ГК <Тест>", "Форум & Выставка", "Вопрос <1>?")
         self.assertIn("Вопрос &lt;1&gt;?", esc_alert)
@@ -458,6 +459,13 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         dash_resp = await self.client.get("/api/manager/clients")
         self.assertEqual(dash_resp.status_code, 200)
         self.assertGreaterEqual(len(dash_resp.json()["burning_deadlines"]), 1)
+
+        catalog_resp = await self.client.get("/api/manager/events")
+        self.assertEqual(catalog_resp.status_code, 200)
+        cat_data = catalog_resp.json()
+        self.assertEqual(cat_data["total_count"], 3)
+        self.assertEqual(len(cat_data["events"]), 3)
+        self.assertGreaterEqual(len(cat_data["events"][0]["tariffs"]), 1)
 
         # Попытка привязать тариф #21 (от события #2) к событию #1 -> 400 Bad Request
         bad_resp = await self.client.put(

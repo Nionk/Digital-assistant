@@ -204,3 +204,35 @@ class PublishSelectionOut(BaseModel):
     public_showcase_url: str = Field(..., description="Относительный URL витрины для копирования (/s/{magic_token})")
     total_package_price: float = Field(..., description="Итоговая сумма утвержденного пакета")
     total_package_savings: float = Field(..., description="Суммарная экономия по раннему бронированию")
+
+
+# ============================================================================
+# 4. СХЕМЫ КАТАЛОГА МЕРОПРИЯТИЙ В КАБИНЕТЕ МЕНЕДЖЕРА (GET /api/manager/events)
+# ============================================================================
+
+class CatalogEventItemOut(BaseModel):
+    """Карточка мероприятия в базе отслеживаемых площадок менеджера."""
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: int = Field(..., description="ID события в таблице events")
+    canonical_title: str = Field(..., description="Официальное название мероприятия")
+    event_format: Literal["roundtable", "business_breakfast", "forum", "conference", "session"] = Field(
+        ..., description="Формат проведения"
+    )
+    city: str | None = Field(None, description="Город проведения (None для онлайн)")
+    is_online: bool = Field(False, description="Признак онлайн-мероприятия")
+    venue: str | None = Field(None, description="Площадка проведения или онлайн-платформа")
+    start_date: date = Field(..., description="Дата начала (YYYY-MM-DD)")
+    end_date: date = Field(..., description="Дата окончания (YYYY-MM-DD)")
+    summary: str = Field(..., description="Краткое описание и целевая аудитория площадки")
+    themes: list[str] = Field(default_factory=list, description="Отраслевые теги и направления")
+    tariffs: list[TariffOptionOut] = Field(
+        default_factory=list,
+        description="Доступные тарифы организатора и условия раннего бронирования"
+    )
+
+
+class ManagerEventsCatalogOut(BaseModel):
+    """Список всех активных мероприятий, отслеживаемых агентством."""
+    total_count: int = Field(..., description="Общее количество активных площадок в базе")
+    events: list[CatalogEventItemOut] = Field(default_factory=list, description="Список мероприятий с тарифами")
