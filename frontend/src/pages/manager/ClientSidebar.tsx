@@ -34,7 +34,7 @@ export function ClientSidebar({
   });
 
   return (
-    <aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface/80">
+    <div className="flex h-full w-full flex-col bg-surface">
       {/* Шапка колонки клиентов с кнопкой сворачивания */}
       <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 bg-surface">
         <div className="flex items-center gap-1.5">
@@ -150,7 +150,7 @@ export function ClientSidebar({
           })
         )}
       </div>
-    </aside>
+    </div>
   );
 }
 

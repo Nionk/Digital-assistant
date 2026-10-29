@@ -1,5 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
+import { AnimatePresence, motion } from "framer-motion";
 import { Building2, UserCheck, Compass, PanelLeftOpen } from "lucide-react";
 import {
   useManagerDashboard,
@@ -67,6 +68,16 @@ export function ManagerWorkspacePage() {
       selectClient(first.id, first.raw_manager_notes);
     }
   }, [clients, selectedClientId, selectClient]);
+
+  // Закрытие выдвижной панели клиентов по Escape
+  React.useEffect(() => {
+    if (isSidebarCollapsed) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") toggleSidebar();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSidebarCollapsed, toggleSidebar]);
 
   const activeClient =
     clients.find((c) => c.id === selectedClientId) || null;
@@ -246,50 +257,99 @@ export function ManagerWorkspacePage() {
           <EventsCatalogView />
         </main>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
-          {/* Левая колонка клиентов (сворачиваемая) */}
-          {!isSidebarCollapsed ? (
-            <ClientSidebar
-              clients={clients}
-              selectedClientId={selectedClientId}
-              searchQuery={clientSearchQuery}
-              onSearchChange={setClientSearchQuery}
-              onSelectClient={(c) => selectClient(c.id, c.raw_manager_notes)}
-              publishedByClientMap={publishedInfoByClient}
-              hasDraftInSessionMap={hasDraftInSessionMap}
-              onToggleSidebar={toggleSidebar}
-            />
-          ) : (
-            /* Кнопка «Развернуть список клиентов» строго под логотипом вне хедера с ровным выравниванием слева */
-            <div className="shrink-0 border-r border-border bg-surface/50 px-4 py-3">
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                className="group flex items-center gap-2 rounded-control border border-border bg-surface px-3 py-2 text-xs font-semibold text-ink shadow-sm transition-all hover:border-border-strong hover:bg-surface-muted"
-                title="Развернуть список клиентов"
-              >
-                <PanelLeftOpen className="h-4 w-4 text-pine transition-transform group-hover:scale-110" strokeWidth={1.75} />
-                <span>Развернуть список клиентов</span>
-                <span className="rounded-tag bg-surface-muted px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary tabular-nums">
-                  {clients.length}
-                </span>
-              </button>
-            </div>
-          )}
+        <div className="relative flex flex-1 overflow-hidden">
+          {/* Выдвижная панель со списком клиентов (Slide-over drawer слева) */}
+          <AnimatePresence>
+            {!isSidebarCollapsed && (
+              <>
+                {/* Полупрозрачный матовый бэкдроп для быстрого закрытия кликом вне панели */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={toggleSidebar}
+                  className="fixed inset-0 top-14 z-40 bg-ink/30 backdrop-blur-[1px]"
+                />
 
-          {/* Основная рабочая область выбранного клиента */}
+                {/* Плавно выдвигающаяся панель выбора клиентов */}
+                <motion.aside
+                  initial={{ x: "-100%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: "-100%" }}
+                  transition={{ type: "spring", stiffness: 350, damping: 33 }}
+                  className="fixed top-14 bottom-0 left-0 z-50 flex w-[295px] flex-col border-r border-border bg-surface shadow-2xl"
+                >
+                  <ClientSidebar
+                    clients={clients}
+                    selectedClientId={selectedClientId}
+                    searchQuery={clientSearchQuery}
+                    onSearchChange={setClientSearchQuery}
+                    onSelectClient={(c) => {
+                      selectClient(c.id, c.raw_manager_notes);
+                    }}
+                    publishedByClientMap={publishedInfoByClient}
+                    hasDraftInSessionMap={hasDraftInSessionMap}
+                    onToggleSidebar={toggleSidebar}
+                  />
+                </motion.aside>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* Основная рабочая область менеджера на всю ширину (в свернутом состоянии отображается только кнопка) */}
           <main className="flex-1 overflow-y-auto p-4 lg:p-5 scrollbar-thin">
-            {isDashboardLoading ? (
-              <div className="flex h-64 items-center justify-center rounded-card border border-border bg-surface text-sm text-ink-muted">
-                Загрузка рабочего пространства менеджера...
+            <div className="mx-auto max-w-[1440px] space-y-4">
+              {/* Верхняя строка под хедером: кнопка «Список клиентов» строго под логотипом */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="group inline-flex items-center gap-2 rounded-control border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-sm transition-all hover:border-border-strong hover:bg-surface-muted hover:shadow"
+                  title="Выбрать компанию клиента"
+                >
+                  <PanelLeftOpen className="h-4 w-4 text-pine transition-transform group-hover:scale-110" strokeWidth={1.75} />
+                  <span>Список клиентов</span>
+                  <span className="rounded-tag bg-novel-sand px-1.5 py-0.2 text-[10px] font-bold text-[#2A2213] tabular-nums border border-novel-sandBorder">
+                    {clients.length}
+                  </span>
+                </button>
+
+                {activeClient && (
+                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                    <span>Путь клиента:</span>
+                    <span className="rounded-badge bg-canvas border border-border px-2 py-0.5 font-medium text-ink-secondary">
+                      {activeMatchResult
+                        ? activeMagicToken
+                          ? "Этап 07 · Согласование с клиентом"
+                          : "Этап 05–06 · Сравнение и рекомендация"
+                        : "Этап 01–04 · Запрос и подбор возможностей"}
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : !activeClient ? (
-              <div className="flex h-64 items-center justify-center rounded-card border border-border bg-surface text-sm text-ink-muted">
-                Выберите компанию клиента в списке слева
-              </div>
-            ) : (
-              <div className="mx-auto max-w-[1440px] space-y-4">
-                {/* Компактная шапка активного клиента */}
+
+              {isDashboardLoading ? (
+                <div className="flex h-64 items-center justify-center rounded-card border border-border bg-surface text-sm text-ink-muted">
+                  Загрузка рабочего пространства менеджера...
+                </div>
+              ) : !activeClient ? (
+                <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-card border border-border bg-surface p-6 text-center shadow-card">
+                  <p className="text-sm font-medium text-ink">
+                    Клиент не выбран
+                  </p>
+                  <button
+                    type="button"
+                    onClick={toggleSidebar}
+                    className="inline-flex items-center gap-2 rounded-control bg-pine px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                    <span>Выбрать компанию из списка</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Компактная шапка активного клиента */}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-card">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-control bg-pine/10 text-pine">
@@ -423,9 +483,10 @@ export function ManagerWorkspacePage() {
                     )}
                   </div>
                 </div>
-              </div>
+              </>
             )}
-          </main>
+          </div>
+        </main>
         </div>
       )}
     </div>

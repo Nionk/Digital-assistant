@@ -135,7 +135,7 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
   currentProducer: PRODUCER_PROFILES[0],
   isProducerModalOpen: false,
   workspaceMode: "matching",
-  isSidebarCollapsed: false,
+  isSidebarCollapsed: true,
   selectedClientId: null,
   clientSearchQuery: "",
 
