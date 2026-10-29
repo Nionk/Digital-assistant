@@ -274,7 +274,7 @@ function EventBuilderRow({
               <span>·</span>
               <span className="inline-flex items-center gap-1 font-medium text-[#D1D5DB]">
                 {item.is_online ? (
-                  <Globe className="h-3 w-3 text-[#38BDF8]" strokeWidth={1.5} />
+                  <Globe className="h-3 w-3 text-[#529E85]" strokeWidth={1.5} />
                 ) : (
                   <MapPin className="h-3 w-3 text-[#8E95A0]" strokeWidth={1.5} />
                 )}
