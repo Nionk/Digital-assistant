@@ -30,6 +30,21 @@ const MONTHS_SHORT_UPPER = [
   "ДЕК",
 ];
 
+const MONTHS_SHORT_LOWER = [
+  "янв.",
+  "фев.",
+  "мар.",
+  "апр.",
+  "мая",
+  "июн.",
+  "июл.",
+  "авг.",
+  "сент.",
+  "окт.",
+  "нояб.",
+  "дек.",
+];
+
 export const FORMAT_LABELS: Record<string, string> = {
   roundtable: "Круглый стол",
   business_breakfast: "Деловой завтрак",
@@ -142,6 +157,7 @@ export function formatDateRange(startIso: string, endIso: string): string {
 export function formatCalendarBadge(startIso: string, endIso: string): {
   dayText: string;
   monthText: string;
+  monthShortLabel: string;
   durationText: string;
 } {
   const start = parseIsoDate(startIso);
@@ -149,6 +165,7 @@ export function formatCalendarBadge(startIso: string, endIso: string): {
   const sDay = start.getDate();
   const eDay = end.getDate();
   const monthText = MONTHS_SHORT_UPPER[start.getMonth()] || "НОЯ";
+  const monthShortLabel = MONTHS_SHORT_LOWER[start.getMonth()] || "нояб.";
 
   const diffDays = Math.max(
     1,
@@ -165,7 +182,7 @@ export function formatCalendarBadge(startIso: string, endIso: string): {
   else if (diffDays >= 2 && diffDays <= 4) durationText = `${diffDays} дня`;
   else durationText = `${diffDays} дней`;
 
-  return { dayText, monthText, durationText };
+  return { dayText, monthText, monthShortLabel, durationText };
 }
 
 export function getDaysUntil(deadlineIso: string | null | undefined): number | null {
