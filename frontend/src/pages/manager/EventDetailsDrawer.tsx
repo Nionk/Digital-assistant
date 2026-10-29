@@ -281,36 +281,26 @@ export function EventDetailsDrawer({
               </div>
             </div>
 
-            {/* 3. Подвал шторки */}
-            <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex items-center justify-between gap-3">
+            {/* 3. Подвал шторки: лаконичное целевое действие */}
+            <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex items-center justify-center">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleCopySummary}
-                className="border-[#262D35] bg-[#161B21] text-xs text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] transition-colors"
+                className="w-full h-9 border-[#7C5A20]/60 bg-[#1E190E] text-xs font-serif italic text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] transition-all"
               >
                 {copied ? (
                   <>
                     <Check className="h-3.5 w-3.5 text-[#34D399]" />
-                    <span>Скопировано в буфер</span>
+                    <span>Описание скопировано в буфер</span>
                   </>
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5 text-[#E5C378]" />
-                    <span>Скопировать описание</span>
+                    <span>Скопировать описание площадки и тарифов</span>
                   </>
                 )}
-              </Button>
-
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={onClose}
-                className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold text-xs"
-              >
-                Закрыть шторку
               </Button>
             </div>
           </motion.aside>
