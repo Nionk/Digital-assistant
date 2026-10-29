@@ -61,13 +61,10 @@ export function ManagerWorkspacePage() {
 
   // Состояние выпадающего меню списка клиентов (стиль Early Bird Popover)
   const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
-  const [flashClientsBtn, setFlashClientsBtn] = React.useState(false);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
 
   const handleToggleClientsDropdown = () => {
-    setFlashClientsBtn(true);
     setIsClientsDropdownOpen((prev) => !prev);
-    setTimeout(() => setFlashClientsBtn(false), 120);
   };
 
   React.useEffect(() => {
@@ -295,11 +292,10 @@ export function ManagerWorkspacePage() {
                     type="button"
                     onClick={handleToggleClientsDropdown}
                     className={cn(
-                      "group relative flex items-center gap-2 rounded-[8px] border bg-[#12161A] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150",
+                      "group relative flex items-center gap-2 rounded-[8px] border bg-[#12161A] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer shadow-sm transition-colors duration-150 outline-none",
                       isClientsDropdownOpen
                         ? "border-[#E5C378] bg-[#1A2128] text-white shadow-[0_0_10px_rgba(229,195,120,0.25)]"
-                        : "border-[#262D35] text-[#D1D5DB] hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.15)]",
-                      flashClientsBtn && "scale-[0.98] ring-1 ring-[#E5C378]"
+                        : "border-[#262D35] text-[#D1D5DB] hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-white"
                     )}
                     title="Выбрать компанию клиента"
                   >
@@ -357,7 +353,7 @@ export function ManagerWorkspacePage() {
                             value={clientSearchQuery}
                             onChange={(e) => setClientSearchQuery(e.target.value)}
                             placeholder="Поиск компании или контакта..."
-                            className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#161B21] pl-10 pr-3.5 text-sm text-white placeholder:text-[#8E95A0] shadow-inner transition-all duration-150 ease-out hover:border-[#4B5565] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:bg-[#1A2027] focus:ring-1 focus:ring-[#E5C378]/30"
+                            className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#161B21] pl-10 pr-3.5 text-sm text-white placeholder:text-[#8E95A0] shadow-inner transition-colors duration-150 ease-out hover:border-[#4B5565] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:bg-[#1A2027] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
                           />
                         </div>
 
