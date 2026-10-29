@@ -99,7 +99,7 @@ export function BundleConstructorSection({
                 type="button"
                 onClick={() => onSelectVariantGroup(v.bundle_group)}
                 className={cn(
-                  "flex flex-col justify-between rounded-[8px] border p-3.5 text-left transition-all",
+                  "flex flex-col justify-between rounded-[8px] border p-3.5 text-left transition-colors duration-150 outline-none focus-visible:outline-none",
                   isActive
                     ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
                     : "border-[#262D35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"

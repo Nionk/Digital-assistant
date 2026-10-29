@@ -75,8 +75,8 @@ export function CustomSelect<T extends number | string = number | string>({
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          "flex items-center justify-between gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-xs font-medium text-white tabular-nums transition-all duration-150 ease-out select-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none active:outline-none",
-          "hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30",
+          "flex items-center justify-between gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-xs font-medium text-white tabular-nums transition-colors duration-200 ease-out select-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none active:outline-none",
+          "hover:border-[#E5C378] focus:border-[#E5C378]",
           isOpen && "border-[#E5C378] ring-1 ring-[#E5C378]/30",
           disabled && "cursor-not-allowed opacity-50",
           buttonClassName
@@ -116,19 +116,18 @@ export function CustomSelect<T extends number | string = number | string>({
                     setIsOpen(false);
                   }}
                   className={cn(
-                    "group flex items-center justify-between gap-2 rounded-[4px] px-2.5 py-1.5 text-xs cursor-pointer select-none transition-colors duration-100",
-                    // При наведении — сплошной золотой фон и чёрный текст
-                    "hover:bg-[#E5C378] hover:text-[#0E1215] hover:font-semibold",
+                    "group flex items-center justify-between gap-2 rounded-[4px] px-2.5 py-1.5 text-xs font-medium cursor-pointer select-none transition-colors duration-150",
+                    // При наведении — сплошной золотой фон и тёмный текст, без скачков жирности шрифта
                     isSelected
-                      ? "bg-[#1E252E] text-white font-medium"
-                      : "text-[#D1D5DB]"
+                      ? "bg-[#1E252E] text-[#E5C378]"
+                      : "text-[#D1D5DB] hover:bg-[#E5C378] hover:text-[#0E1215]"
                   )}
                 >
-                  <span className="truncate group-hover:text-[#0E1215]">
+                  <span className="truncate text-inherit">
                     {option.label}
                   </span>
                   {option.subLabel && (
-                    <span className="shrink-0 text-[10px] text-[#8E95A0] group-hover:text-[#0E1215]/80 tabular-nums">
+                    <span className="shrink-0 text-[10px] text-inherit opacity-80 tabular-nums">
                       {option.subLabel}
                     </span>
                   )}
