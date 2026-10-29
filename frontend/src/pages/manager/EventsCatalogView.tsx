@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useManagerEventsCatalog } from "@/api/queries";
 import { Badge } from "@/components/ui/badge";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   FORMAT_LABELS,
   ROLE_BADGE_LABELS,
@@ -124,19 +125,16 @@ export function EventsCatalogView() {
             <span className="text-[11px] font-medium text-ink-muted">
               Локация:
             </span>
-            <select
+            <CustomSelect
               value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value)}
-              className="h-7 rounded-badge border border-border bg-canvas px-2 text-xs text-ink focus:border-pine focus:outline-none"
-            >
-              <option value="all">Все города ({events.length})</option>
-              {uniqueCities.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-              <option value="online">Только Онлайн</option>
-            </select>
+              onChange={(val) => setSelectedCity(String(val))}
+              options={[
+                { value: "all", label: `Все города (${events.length})` },
+                ...uniqueCities.map((city) => ({ value: city, label: city })),
+                { value: "online", label: "Только Онлайн" },
+              ]}
+              buttonClassName="h-7 min-w-[130px]"
+            />
           </div>
         </div>
       </div>

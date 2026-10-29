@@ -15,6 +15,7 @@ import type {
 } from "@/store/useManagerStore";
 import { CalendarTimeline } from "@/components/ui/calendar-timeline";
 import { Badge } from "@/components/ui/badge";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   FORMAT_LABELS,
   ROLE_BADGE_LABELS,
@@ -366,17 +367,16 @@ function EventBuilderRow({
               </Badge>
             </div>
 
-            <select
+            <CustomSelect
               value={selectedTariff.tariff_id}
-              onChange={(e) => onChangeTariff(Number(e.target.value))}
-              className="mt-1.5 h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-medium text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
-            >
-              {item.available_tariffs.map((t) => (
-                <option key={t.tariff_id} value={t.tariff_id} className="bg-[#161B21] text-white">
-                  {t.tariff_name} — {formatRub(t.actual_price)}
-                </option>
-              ))}
-            </select>
+              onChange={(newId) => onChangeTariff(Number(newId))}
+              options={item.available_tariffs.map((t) => ({
+                value: t.tariff_id,
+                label: `${t.tariff_name} — ${formatRub(t.actual_price)}`,
+              }))}
+              className="mt-1.5 w-full"
+              buttonClassName="w-full h-8"
+            />
           </div>
 
           <div className="mt-1.5 flex flex-col gap-1 tabular-nums">
