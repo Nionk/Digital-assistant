@@ -133,5 +133,48 @@
     scrollbar-width: thin;
     scrollbar-color: #A88238 #0E1216;
   }
+
+  /* Уведомления Sonner: крестик закрытия и защита от наложения на текст */
+  [data-sonner-toast] {
+    padding-right: 44px !important;
+  }
+
+  [data-sonner-toast] [data-content] {
+    padding-right: 6px !important;
+  }
+
+  [data-sonner-toast] [data-close-button] {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    left: auto !important;
+    transform: none !important;
+    opacity: 0.9 !important;
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 4px !important;
+    background: #1E252E !important;
+    border: 1px solid #7C5A20 !important;
+    color: #E5C378 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  [data-sonner-toast] [data-close-button]:hover {
+    opacity: 1 !important;
+    background: #2A1F10 !important;
+    border-color: #E5C378 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 0 8px rgba(229, 195, 120, 0.35) !important;
+  }
+
+  [data-sonner-toast] [data-close-button] svg {
+    width: 13px !important;
+    height: 13px !important;
+    stroke: currentColor !important;
+  }
 }
 
