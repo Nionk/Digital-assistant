@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "jina-embeddings-v3"
     EMBEDDING_DIM: int = 1024
 
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_MANAGER_CHAT_ID: int = 0
+
     @property
     def jina_token(self) -> str | None:
         """
