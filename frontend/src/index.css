@@ -20,6 +20,15 @@
     --terracotta-tint: #28131E;
   }
 
+  /* Глобальное подавление белого цвета в кольцах Tailwind и подсветки тапа */
+  *,
+  ::before,
+  ::after {
+    --tw-ring-offset-color: transparent !important;
+    --tw-ring-offset-width: 0px !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   html {
     color-scheme: dark;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -36,13 +45,13 @@
     overflow-x: hidden;
   }
 
-  /* Подавление системных белых вспышек при тапе/клике на контролы */
+  /* Полное подавление браузерных белых контуров (outline) и вспышек при любых состояниях */
   input,
   textarea,
   select,
   button {
-    -webkit-tap-highlight-color: transparent;
-    outline: none;
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none !important;
   }
 
   input:focus,
@@ -52,8 +61,13 @@
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible,
-  button:focus-visible {
+  button:focus-visible,
+  input:active,
+  textarea:active,
+  select:active,
+  button:active {
     outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   /* Тёмный вид иконки календаря в input[type="date"] */

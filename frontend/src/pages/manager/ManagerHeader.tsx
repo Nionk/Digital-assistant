@@ -30,7 +30,6 @@ export function ManagerHeader({
   eventsCount = 15,
 }: ManagerHeaderProps) {
   const [isDeadlinesOpen, setIsDeadlinesOpen] = React.useState(false);
-  const [flashTab, setFlashTab] = React.useState<ManagerWorkspaceMode | null>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const currentProducer = useManagerStore((s) => s.currentProducer);
@@ -48,14 +47,6 @@ export function ManagerHeader({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isDeadlinesOpen]);
 
-  const handleSelectMode = (mode: ManagerWorkspaceMode) => {
-    setFlashTab(mode);
-    onModeChange(mode);
-    setTimeout(() => {
-      setFlashTab(null);
-    }, 200);
-  };
-
   return (
     <header className="sticky top-0 z-30 flex h-[67px] shrink-0 items-center justify-between border-b border-[#1A2026] bg-[#0E1215] px-4 sm:px-6 shadow-sm relative">
       {/* Тонкая неоново-голубая линия в цвет куба логотипа, отделяющая хедер от основного блока */}
@@ -65,7 +56,7 @@ export function ManagerHeader({
       <div className="flex items-center">
         <button
           type="button"
-          onClick={() => handleSelectMode("matching")}
+          onClick={() => onModeChange("matching")}
           className="flex items-center transition-opacity hover:opacity-90 focus:outline-none"
           title="СКАРТ.AI — Подбор клиентам"
         >
@@ -82,13 +73,12 @@ export function ManagerHeader({
         {/* Вкладка: Подбор клиентам */}
         <button
           type="button"
-          onClick={() => handleSelectMode("matching")}
+          onClick={() => onModeChange("matching")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-all duration-150",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-150 outline-none",
             workspaceMode === "matching"
               ? "bg-[#1A2128] text-white shadow-sm"
-              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white",
-            flashTab === "matching" && "scale-[0.98] ring-1 ring-[#E5C378]"
+              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white"
           )}
         >
           <Layers
@@ -111,13 +101,12 @@ export function ManagerHeader({
         {/* Вкладка: База площадок */}
         <button
           type="button"
-          onClick={() => handleSelectMode("catalog")}
+          onClick={() => onModeChange("catalog")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-all duration-150",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-150 outline-none",
             workspaceMode === "catalog"
               ? "bg-[#1A2128] text-white shadow-sm"
-              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white",
-            flashTab === "catalog" && "scale-[0.98] ring-1 ring-[#E5C378]"
+              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white"
           )}
         >
           <Database
