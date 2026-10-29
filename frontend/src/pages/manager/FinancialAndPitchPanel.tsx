@@ -56,7 +56,7 @@ export function FinancialAndPitchPanel({
   };
 
   return (
-    <div className="sticky top-[72px] space-y-3">
+    <div className="sticky top-[80px] space-y-3">
       {/* 1. Темно-хвойный финансовый блок (в стиле Фото 3 «You've saved...» + Слайд 05 и 10) */}
       <div className="rounded-card bg-pine p-4 text-white shadow-elevated">
         <div className="flex items-center justify-between border-b border-white/15 pb-2.5">
