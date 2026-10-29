@@ -1,8 +1,6 @@
 import * as React from "react";
 import {
   Flame,
-  PanelLeftClose,
-  PanelLeftOpen,
   Layers,
   Database,
   Clock,
@@ -12,13 +10,15 @@ import type { BurningDeadlineOut } from "@/api/types";
 import { useManagerStore, type ManagerWorkspaceMode } from "@/store/useManagerStore";
 import { formatDateShort, formatRub, getDaysUntil } from "@/lib/formatters";
 import { ProducerProfileModal } from "@/components/ui/producer-profile-modal";
+import logoPhoto from "@/assets/images/logo-photo.png";
+import logoText from "@/assets/images/logo-text.png";
 import { cn } from "@/lib/utils";
 
 interface ManagerHeaderProps {
   workspaceMode: ManagerWorkspaceMode;
   onModeChange: (mode: ManagerWorkspaceMode) => void;
-  isSidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
   burningDeadlines: BurningDeadlineOut[];
   eventsCount?: number;
 }
@@ -26,8 +26,6 @@ interface ManagerHeaderProps {
 export function ManagerHeader({
   workspaceMode,
   onModeChange,
-  isSidebarCollapsed,
-  onToggleSidebar,
   burningDeadlines,
   eventsCount,
 }: ManagerHeaderProps) {
@@ -51,40 +49,25 @@ export function ManagerHeader({
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-      {/* Левая группа: сворачивание колонки клиентов + логотип */}
-      <div className="flex items-center gap-3">
-        {workspaceMode === "matching" && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            title={
-              isSidebarCollapsed
-                ? "Развернуть список клиентов"
-                : "Свернуть список клиентов"
-            }
-            className="flex h-8 w-8 items-center justify-center rounded-control border border-border bg-canvas/70 text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink"
-          >
-            {isSidebarCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" strokeWidth={1.5} />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
-            )}
-          </button>
-        )}
-
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-badge bg-pine text-xs font-bold tracking-wider text-white">
-            СК
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight text-ink">
-              СКАРТ
-            </span>
-            <span className="hidden text-xs text-ink-muted sm:inline">
-              · Сопровождение отраслевых мероприятий
-            </span>
-          </div>
-        </div>
+      {/* Левая группа: Логотип СКАРТ (фото + надпись). Клик ведет на страницу «подбор клиентам». Без лишних уточнений */}
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => onModeChange("matching")}
+          className="group flex items-center gap-2.5 transition-opacity hover:opacity-85 focus:outline-none"
+          title="Подбор клиентам"
+        >
+          <img
+            src={logoPhoto}
+            alt="СКАРТ логотип"
+            className="h-8 w-auto object-contain shrink-0"
+          />
+          <img
+            src={logoText}
+            alt="СКАРТ"
+            className="h-5 sm:h-5.5 w-auto object-contain shrink-0"
+          />
+        </button>
       </div>
 
       {/* Центральный переключатель режима */}
