@@ -61,15 +61,15 @@ export function FinancialAndPitchPanel({
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 text-white shadow-sm">
         <div className="flex items-center justify-between border-b border-[#21262F] pb-2.5">
           <div>
-            <span className="font-serif italic font-semibold uppercase tracking-widest text-[11px] text-[#8E95A0]">
-              СВОДКА КОММЕРЧЕСКОГО ПРЕДЛОЖЕНИЯ
+            <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
+              Сводка коммерческого предложения
             </span>
-            <h3 className="font-serif text-base font-semibold text-white">
+            <h3 className="font-serif text-base font-semibold text-white mt-0.5">
               {companyName}
             </h3>
           </div>
-          <span className="rounded-[4px] border border-[#2B3545] bg-[#12161A] px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#D1D5DB] tabular-nums">
-            ПЛОЩАДОК: <span className="font-sans not-italic">{summary.includedRows.length}</span>
+          <span className="rounded-[4px] bg-[#94A3B8] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#0F172A] tabular-nums">
+            Площадок: <span className="font-sans not-italic font-bold">{summary.includedRows.length}</span>
           </span>
         </div>
 
@@ -102,10 +102,10 @@ export function FinancialAndPitchPanel({
         {summary.totalSavings > 0 && (
           <div className="mt-3 rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-2.5">
             <div className="flex items-center justify-between tabular-nums">
-              <span className="font-serif italic uppercase tracking-wider text-xs font-semibold text-[#D1D5DB]">
-                ВЫГОДА ПО СПЕЦТАРИФАМ:
+              <span className="font-serif italic text-xs font-semibold text-[#D1D5DB]">
+                Выгода по спецтарифам:
               </span>
-              <span className="rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-2 py-0.5 font-serif italic uppercase tracking-wider text-[10px] font-bold text-[#34D399]">
+              <span className="rounded-[4px] bg-[#34D399] px-2 py-0.5 font-serif italic text-[10px] font-bold text-[#02291D]">
                 −{formatRub(summary.totalSavings)}{" "}
                 {savingsPct > 0 ? `(${savingsPct}%)` : ""}
               </span>
@@ -166,9 +166,9 @@ export function FinancialAndPitchPanel({
             <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
               03
             </span>
-            <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
               Персональное обращение к клиенту
-            </span>
+            </h2>
           </div>
 
           <button

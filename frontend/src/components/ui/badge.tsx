@@ -8,51 +8,51 @@ import { cn } from "@/lib/utils";
  * чёткая тонкая граница и моноширинный трекинг без размытых нейросетевых пилюль.
  */
 const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-[10px] font-serif italic font-bold tracking-wider uppercase transition-colors select-none tabular-nums",
+  "inline-flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-[10px] font-serif italic font-bold tracking-normal transition-colors select-none tabular-nums",
   {
     variants: {
       variant: {
-        // Ряды стилей Early Bird / Novel.AI (четкие матовые ячейки с границами)
+        // Однотонный плотный фон с четким тёмным текстом того же цветового тона (без CAPS LOCK)
         ebEmerald:
-          "bg-[#0E241E] text-[#34D399] border border-[#1E5241]",
+          "bg-[#34D399] text-[#02291D] border-transparent font-bold",
         ebAmber:
-          "bg-[#22160C] text-[#E59837] border border-[#7C4A19]",
+          "bg-[#E59837] text-[#261502] border-transparent font-bold",
         ebTeal:
-          "bg-[#0B2528] text-[#2DD4BF] border border-[#165057]",
+          "bg-[#2DD4BF] text-[#042824] border-transparent font-bold",
         ebGold:
-          "bg-[#261E0F] text-[#E5C378] border border-[#6B531E]",
+          "bg-[#E5C378] text-[#241A04] border-transparent font-bold",
         ebBlue:
-          "bg-[#101D2C] text-[#60A5FA] border border-[#1E3B5C]",
+          "bg-[#60A5FA] text-[#082242] border-transparent font-bold",
         ebRose:
-          "bg-[#28131E] text-[#F472B6] border border-[#5E2242]",
+          "bg-[#F472B6] text-[#3B0716] border-transparent font-bold",
         ebSlate:
-          "bg-[#161B22] text-[#D1D5DB] border border-[#2B3545]",
+          "bg-[#94A3B8] text-[#0F172A] border-transparent font-bold",
 
         // Novel.AI классика
         novelWhite:
           "bg-white text-[#0E1215] border border-white/20 font-semibold shadow-xs",
         novelSand:
-          "bg-[#261E0F] text-[#E5C378] border border-[#6B531E]",
+          "bg-[#E5C378] text-[#241A04] border-transparent font-bold",
         novelGold:
-          "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]",
+          "bg-[#E5C378] text-[#241A04] border-transparent font-bold",
         novelDark:
           "bg-[#161B22] text-white border border-[#2B3545]",
         novelEmerald:
-          "bg-[#0E241E] text-[#34D399] border border-[#1E5241]",
+          "bg-[#34D399] text-[#02291D] border-transparent font-bold",
         novelWine:
-          "bg-[#28131E] text-[#F472B6] border border-[#5E2242]",
+          "bg-[#F472B6] text-[#3B0716] border-transparent font-bold",
 
         // Совместимость с системными темами
         neutral:
-          "bg-[#161B22] text-[#D1D5DB] border border-[#262D35]",
+          "bg-[#94A3B8] text-[#0F172A] border-transparent font-bold",
         surface:
           "bg-[#1A1E24] text-[#D1D5DB] border border-[#262D35]",
         pine:
-          "bg-[#0E241E] text-[#34D399] border border-[#1E5241]",
+          "bg-[#34D399] text-[#02291D] border-transparent font-bold",
         sage:
-          "bg-[#0B2528] text-[#2DD4BF] border border-[#165057]",
+          "bg-[#2DD4BF] text-[#042824] border-transparent font-bold",
         terracotta:
-          "bg-[#22160C] text-[#E59837] border border-[#7C4A19]",
+          "bg-[#E59837] text-[#261502] border-transparent font-bold",
         darkSubtle:
           "bg-[#161B22] text-[#8E95A0] border border-[#2A313C]",
       },

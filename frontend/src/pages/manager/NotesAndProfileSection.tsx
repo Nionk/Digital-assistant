@@ -9,6 +9,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import type {
   ClientQueryExtracted,
   ParticipationRole,
@@ -164,7 +165,7 @@ export function NotesAndProfileSection({
           <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
             01
           </span>
-          <h2 className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+          <h2 className="font-serif italic text-sm font-semibold tracking-tight text-[#E5C378] sm:text-[15px]">
             Запрос клиента и аналитика задач
           </h2>
           {hasMatchResult && isCollapsed && (
@@ -193,67 +194,78 @@ export function NotesAndProfileSection({
         </div>
       </div>
 
-      {/* Раскрываемая область ввода конспекта установочной встречи */}
-      {(!isCollapsed || !hasMatchResult) && (
-        <div className="p-4 border-b border-[#21262F] bg-[#161B22]">
-          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-            <label className="text-xs font-semibold text-[#D1D5DB]">
-              Конспект установочной встречи с клиентом:
-            </label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-[#727985]">Готовые кейсы:</span>
-              {DEMO_NOTE_PRESETS.map((preset) => (
-                <button
-                  key={preset.category}
+      {/* Раскрываемая область ввода конспекта установочной встречи с плавной анимацией */}
+      <AnimatePresence initial={false}>
+        {(!isCollapsed || !hasMatchResult) && (
+          <motion.div
+            key="brief-content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 border-b border-[#21262F] bg-[#161B22]">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-[#D1D5DB]">
+                  Конспект установочной встречи с клиентом:
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-[#727985]">Готовые кейсы:</span>
+                  {DEMO_NOTE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.category}
+                      type="button"
+                      onClick={() => onNotesChange(preset.text)}
+                      className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#38BDF8] hover:bg-[#161E28]"
+                    >
+                      <span className="rounded-[3px] bg-[#E59837] px-1.5 py-0.2 text-[9px] font-serif italic font-bold text-[#261502]">
+                        {preset.category}
+                      </span>
+                      <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
+                      <span className="text-[#8E95A0]">· {preset.budget}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(e) => onNotesChange(e.target.value)}
+                placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
+                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
+              />
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] text-[#8E95A0]">
+                  Система автоматически извлечет параметры, проверит пересечения дат и рассчитает 2 пакета с учетом скидок Early Bird.
+                </p>
+                <Button
                   type="button"
-                  onClick={() => onNotesChange(preset.text)}
-                  className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#38BDF8] hover:bg-[#161E28]"
+                  variant="primary"
+                  size="md"
+                  disabled={isMatching || notes.trim().length < 10}
+                  onClick={onRunInitialMatch}
+                  className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]"
                 >
-                  <span className="rounded-[3px] border border-[#7C4A19] bg-[#22160C] px-1.5 py-0.2 text-[9px] font-serif italic font-bold uppercase tracking-wider text-[#E59837]">
-                    {preset.category}
-                  </span>
-                  <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
-                  <span className="text-[#8E95A0]">· {preset.budget}</span>
-                </button>
-              ))}
+                  {isMatching ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-[#0E1215]" />
+                      <span>Формируем подборку...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Подобрать варианты пакетов</span>
+                      <ArrowRight className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
-
-          <textarea
-            rows={3}
-            value={notes}
-            onChange={(e) => onNotesChange(e.target.value)}
-            placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
-            className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
-          />
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] text-[#8E95A0]">
-              Система автоматически извлечет параметры, проверит пересечения дат и рассчитает 2 пакета с учетом скидок Early Bird.
-            </p>
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              disabled={isMatching || notes.trim().length < 10}
-              onClick={onRunInitialMatch}
-              className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]"
-            >
-              {isMatching ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin text-[#0E1215]" />
-                  <span>Формируем подборку...</span>
-                </>
-              ) : (
-                <>
-                  <span>Подобрать варианты пакетов</span>
-                  <ArrowRight className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Круглый движущийся индикатор загрузки со сменяющимися фразами */}
       {isMatching && (
@@ -272,8 +284,8 @@ export function NotesAndProfileSection({
         <div className="bg-[#161B22]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
-              <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-serif italic font-bold uppercase tracking-wider">
-                КРИТЕРИИ
+              <span className="rounded-[4px] bg-[#94A3B8] px-1.5 py-0.5 text-[9px] font-serif italic font-bold text-[#0F172A]">
+                Критерии
               </span>
               <span className="text-xs font-semibold text-white">
                 Параметры отбора площадок
@@ -352,7 +364,7 @@ export function NotesAndProfileSection({
                       target_events_count: Number(e.target.value) || 3,
                     }))
                   }
-                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-xs font-semibold text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
                 >
                   {[1, 2, 3, 4, 5].map((n) => (
                     <option key={n} value={n} className="bg-[#161B21] text-white">
@@ -512,7 +524,7 @@ export function NotesAndProfileSection({
                           : prev.required_roles,
                     }));
                   }}
-                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-xs font-semibold text-white tabular-nums transition-all duration-150 ease-out hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none cursor-pointer"
                 >
                   {[0, 1, 2, 3].map((n) => (
                     <option key={n} value={n} className="bg-[#161B21] text-white">

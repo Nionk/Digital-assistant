@@ -40,21 +40,21 @@ export function CalendarTimeline({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-[#8E95A0]" strokeWidth={1.5} />
-          <span className="font-serif italic uppercase text-xs font-semibold tracking-wider text-[#D1D5DB]">
-            ГРАФИК УЧАСТИЯ ПО ДАТАМ
+          <Calendar className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
+          <span className="font-serif italic text-xs font-semibold tracking-wide text-[#E5C378]">
+            График участия по датам
           </span>
         </div>
 
         {hasConflict ? (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#28131E] text-[#F472B6] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#5E2242] tabular-nums font-serif italic">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            <span>{conflictDescription || "ОБНАРУЖЕНО НАЛОЖЕНИЕ ДАТ"}</span>
+          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#F472B6] text-[#3B0716] px-2.5 py-0.5 text-[10px] font-bold font-serif italic tabular-nums">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+            <span>{conflictDescription || "Обнаружено наложение дат"}</span>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] text-[#2DD4BF] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#165057] tabular-nums font-serif italic">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#2DD4BF]" strokeWidth={2} />
-            <span>КАЛЕНДАРЬ СВЕРЕН: БЕЗ НАКЛАДОК</span>
+          <div className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#34D399] text-[#02291D] px-2.5 py-0.5 text-[10px] font-bold font-serif italic tabular-nums">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#02291D]" strokeWidth={2.5} />
+            <span>Календарь сверен: без накладок</span>
           </div>
         )}
       </div>
