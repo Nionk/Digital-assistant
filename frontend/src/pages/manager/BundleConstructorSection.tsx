@@ -227,11 +227,11 @@ function EventBuilderRow({
   return (
     <div
       className={cn(
-        "rounded-[8px] border p-3.5 transition-all duration-300 ease-in-out",
+        "rounded-[8px] border p-3.5 transition-all duration-200 ease-in-out hover:border-[#3A4553]",
         isBonusSlot
           ? isIncluded
             ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white opacity-100"
-            : "border-[#1D232A] bg-[#101317] text-[#9CA3AF] opacity-80 hover:opacity-100 hover:border-[#2D3540]"
+            : "border-[#1D232A] bg-[#101317] text-[#9CA3AF] opacity-80 hover:opacity-100 hover:border-[#3A4553]"
           : isIncluded
             ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white"
             : "border-[#21262F] bg-[#14181D]/60 opacity-60 text-[#8E95A0]"
@@ -334,7 +334,7 @@ function EventBuilderRow({
                   rows={2}
                   value={rationale}
                   onChange={(e) => onUpdateRationale(e.target.value)}
-                  className="mt-1 w-full rounded border border-[#262D35] bg-[#12161A] p-1.5 text-xs text-white focus:border-[#38BDF8] focus:outline-none"
+                  className="mt-1 w-full rounded border border-[#262D35] bg-[#12161A] p-1.5 text-xs text-white focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
                 />
               ) : (
                 <p

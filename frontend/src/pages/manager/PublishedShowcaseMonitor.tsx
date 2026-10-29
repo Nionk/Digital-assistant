@@ -56,7 +56,10 @@ export function PublishedShowcaseMonitor({
     <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#21262F] pb-3">
         <div className="flex items-center gap-2.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#34D399] animate-pulse" />
+          <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#34D399] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#34D399]" />
+          </span>
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-[4px] bg-[#94A3B8] text-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold font-serif italic">
@@ -97,7 +100,13 @@ export function PublishedShowcaseMonitor({
             )}
           </div>
 
-          <Button type="button" variant="outline" size="sm" onClick={handleCopy} className="border-[#262D35] bg-[#12161A] text-white hover:bg-[#1A2128]">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCopy}
+            className="border-[#262D35] bg-[#12161A] text-white hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1A2128] transition-colors"
+          >
             {copied ? (
               <>
                 <Check className="h-3.5 w-3.5 text-[#34D399]" />

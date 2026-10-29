@@ -74,7 +74,7 @@ export function CalendarTimeline({
           return (
             <div
               key={ev.event_id}
-              className="flex items-center gap-2.5 rounded-[6px] border border-[#262C35] bg-[#1A1E24] px-2.5 py-1.5"
+              className="flex items-center gap-2.5 rounded-[6px] border border-[#262C35] bg-[#1A1E24] px-2.5 py-1.5 transition-colors duration-150 hover:border-[#38414F]"
             >
               <div className="flex h-9 w-11 shrink-0 flex-col items-center justify-center rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] text-white tabular-nums">
                 <span className="text-[11px] font-bold leading-none">

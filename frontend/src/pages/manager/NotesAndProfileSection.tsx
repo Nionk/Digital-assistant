@@ -181,7 +181,7 @@ export function NotesAndProfileSection({
             <button
               type="button"
               onClick={() => onToggleCollapsed(!isCollapsed)}
-              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-colors hover:border-[#38414F] hover:bg-[#1E252E] hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-colors hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-[#E5C378]"
             >
               <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
               <span>{isCollapsed ? "Развернуть бриф" : "Свернуть бриф"}</span>
@@ -218,7 +218,7 @@ export function NotesAndProfileSection({
                       key={preset.category}
                       type="button"
                       onClick={() => onNotesChange(preset.text)}
-                      className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#38BDF8] hover:bg-[#161E28]"
+                      className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#E5C378] hover:bg-[#161E28]"
                     >
                       <span className="rounded-[3px] bg-[#E59837] px-1.5 py-0.2 text-[9px] font-serif italic font-bold text-[#261502]">
                         {preset.category}
@@ -235,7 +235,7 @@ export function NotesAndProfileSection({
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
                 placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
-                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
+                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
               />
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -322,7 +322,7 @@ export function NotesAndProfileSection({
                     const val = Math.max(0, Number(e.target.value) || 0);
                     onUpdateProfile((prev) => ({ ...prev, total_budget_max: val }));
                   }}
-                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <div className="absolute right-1 flex flex-col">
                   <button
@@ -389,7 +389,7 @@ export function NotesAndProfileSection({
                         include_online: e.target.checked,
                       }))
                     }
-                    className="h-3 w-3 rounded accent-[#38BDF8]"
+                    className="h-3 w-3 rounded accent-[#E5C378]"
                   />
                   <span>+ Онлайн</span>
                 </label>
@@ -406,7 +406,7 @@ export function NotesAndProfileSection({
                       className={cn(
                         "rounded-[4px] border px-1.5 py-0.5 text-[11px] transition-colors",
                         active
-                          ? "border-[#38BDF8] bg-[#121E2C] text-[#60A5FA] font-medium"
+                          ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-medium"
                           : "border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
                       )}
                     >
@@ -419,7 +419,7 @@ export function NotesAndProfileSection({
                   .map((customCity) => (
                     <span
                       key={customCity}
-                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#38BDF8] bg-[#121E2C] px-1.5 py-0.5 text-[11px] font-medium text-[#60A5FA]"
+                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#E5C378] bg-[#261E0F] px-1.5 py-0.5 text-[11px] font-medium text-[#E5C378]"
                     >
                       {customCity}
                       <button
@@ -439,7 +439,7 @@ export function NotesAndProfileSection({
                   value={newCityText}
                   onChange={(e) => setNewCityText(e.target.value)}
                   placeholder="+ Город..."
-                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
+                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
                 />
               </form>
             </div>
@@ -461,7 +461,7 @@ export function NotesAndProfileSection({
                         date_from: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
                   />
                 </div>
                 <div className="flex items-center justify-between gap-1 text-[11px]">
@@ -475,7 +475,7 @@ export function NotesAndProfileSection({
                         date_to: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
                   />
                 </div>
               </div>
@@ -560,11 +560,11 @@ export function NotesAndProfileSection({
                   value={newTagText}
                   onChange={(e) => setNewTagText(e.target.value)}
                   placeholder="+ Добавить тему (КРТ, BIM...)"
-                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
+                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
                 />
                 <button
                   type="submit"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#38BDF8] hover:text-white"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#E5C378] hover:text-[#E5C378] transition-colors"
                 >
                   <Plus className="h-3 w-3" />
                 </button>

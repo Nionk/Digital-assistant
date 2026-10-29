@@ -85,7 +85,7 @@ export function EventsCatalogView() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Поиск по названию, КРТ, ИЖС, BIM..."
-              className="h-9 w-full rounded-control border border-border bg-canvas pl-9 pr-3 text-xs text-ink placeholder:text-ink-faint focus:border-pine focus:bg-surface focus:outline-none"
+              className="h-9 w-full rounded-control border border-border bg-canvas pl-9 pr-3 text-xs text-ink placeholder:text-ink-faint focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
             />
           </div>
         </div>
