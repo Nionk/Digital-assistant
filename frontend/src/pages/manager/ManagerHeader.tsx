@@ -84,31 +84,27 @@ export function ManagerHeader({
           type="button"
           onClick={() => handleSelectMode("matching")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-colors duration-200",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-all duration-150",
             workspaceMode === "matching"
-              ? "bg-[#1A2128] text-white"
-              : "bg-transparent text-[#8E95A0]",
-            // Эффект нажатия при клике
+              ? "bg-[#1A2128] text-white shadow-sm"
+              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white",
             flashTab === "matching" && "scale-[0.98] ring-1 ring-[#E5C378]"
           )}
         >
-          {/* Плавный золотой слой наведения (GPU composited, абсолютно без вспышек при наведении и уходе курсора) */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] opacity-0 shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-opacity duration-200 ease-out group-hover:opacity-100"
-          />
-
           <Layers
-            className="relative z-10 h-3.5 w-3.5 shrink-0 transition-colors duration-200 text-inherit group-hover:text-[#0E1215]"
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-colors duration-150",
+              workspaceMode === "matching" ? "text-[#E5C378]" : "text-[#8E95A0] group-hover:text-[#E5C378]"
+            )}
             strokeWidth={1.75}
           />
-          <span className="relative z-10 transition-colors duration-200 text-inherit group-hover:text-[#0E1215]">
+          <span className="transition-colors duration-150">
             Подбор клиентам
           </span>
 
           {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
           {workspaceMode === "matching" && (
-            <span className="absolute bottom-0 left-0 right-0 z-20 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
           )}
         </button>
 
@@ -117,31 +113,27 @@ export function ManagerHeader({
           type="button"
           onClick={() => handleSelectMode("catalog")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-colors duration-200",
+            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden transition-all duration-150",
             workspaceMode === "catalog"
-              ? "bg-[#1A2128] text-white"
-              : "bg-transparent text-[#8E95A0]",
-            // Эффект нажатия при клике
+              ? "bg-[#1A2128] text-white shadow-sm"
+              : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white",
             flashTab === "catalog" && "scale-[0.98] ring-1 ring-[#E5C378]"
           )}
         >
-          {/* Плавный золотой слой наведения */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] opacity-0 shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-opacity duration-200 ease-out group-hover:opacity-100"
-          />
-
           <Database
-            className="relative z-10 h-3.5 w-3.5 shrink-0 transition-colors duration-200 text-inherit group-hover:text-[#0E1215]"
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-colors duration-150",
+              workspaceMode === "catalog" ? "text-[#E5C378]" : "text-[#8E95A0] group-hover:text-[#E5C378]"
+            )}
             strokeWidth={1.75}
           />
-          <span className="relative z-10 transition-colors duration-200 text-inherit group-hover:text-[#0E1215]">
+          <span className="transition-colors duration-150">
             База площадок
           </span>
           <span
             className={cn(
-              "relative z-10 rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-200",
-              "group-hover:bg-[#0E1215]/20 group-hover:text-[#0E1215]"
+              "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
+              "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
             )}
           >
             {eventsCount}
@@ -149,7 +141,7 @@ export function ManagerHeader({
 
           {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
           {workspaceMode === "catalog" && (
-            <span className="absolute bottom-0 left-0 right-0 z-20 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
           )}
         </button>
       </nav>
