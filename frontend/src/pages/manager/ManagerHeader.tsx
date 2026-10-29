@@ -93,10 +93,16 @@ export function ManagerHeader({
             Подбор клиентам
           </span>
 
-          {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
-          {workspaceMode === "matching" && (
-            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
-          )}
+          {/* Золотая светящаяся линия подчеркивания: плавно расходится от центра к краям */}
+          <span
+            className={cn(
+              "absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]",
+              "transform origin-center transition-all duration-300 ease-out",
+              workspaceMode === "matching"
+                ? "scale-x-100 opacity-100"
+                : "scale-x-0 opacity-0 pointer-events-none"
+            )}
+          />
         </button>
 
         {/* Вкладка: База площадок */}
@@ -129,10 +135,16 @@ export function ManagerHeader({
             {eventsCount}
           </span>
 
-          {/* Золотая светящаяся линия подчеркивания в активном состоянии */}
-          {workspaceMode === "catalog" && (
-            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
-          )}
+          {/* Золотая светящаяся линия подчеркивания: плавно расходится от центра к краям */}
+          <span
+            className={cn(
+              "absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]",
+              "transform origin-center transition-all duration-300 ease-out",
+              workspaceMode === "catalog"
+                ? "scale-x-100 opacity-100"
+                : "scale-x-0 opacity-0 pointer-events-none"
+            )}
+          />
         </button>
       </nav>
 

@@ -56,15 +56,9 @@ export function PublishedShowcaseMonitor({
     <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#21262F] pb-3">
         <div className="flex items-center gap-2.5">
-          <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#34D399] opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#34D399]" />
-          </span>
+          <span className="text-[#34D399] text-xs select-none">✦</span>
           <div>
             <div className="flex items-center gap-2">
-              <Badge variant="ebSlate" className="text-[9px]">
-                Live статус
-              </Badge>
               <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
                 Мониторинг согласования витрины
               </h2>

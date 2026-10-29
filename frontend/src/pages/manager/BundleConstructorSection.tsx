@@ -84,9 +84,6 @@ export function BundleConstructorSection({
               Сравнение вариантов и выбор тарифов
             </h2>
           </div>
-          <span className="text-[11px] text-[#8E95A0]">
-            Выбор тарифа синхронно пересчитывает общую смету
-          </span>
         </div>
 
         {/* Сегментированные вкладки Вариант №1 / Вариант №2 */}
@@ -179,9 +176,6 @@ export function BundleConstructorSection({
                 Дополнительные возможности: спецпроекты и стенды «По запросу»
               </span>
             </div>
-            <span className="text-[11px] text-[#8E95A0]">
-              Отметьте плюсиком, чтобы включить в персональную витрину клиента
-            </span>
           </div>
 
           <div className="space-y-2">
