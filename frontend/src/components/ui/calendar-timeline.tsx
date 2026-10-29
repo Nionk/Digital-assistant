@@ -1,5 +1,4 @@
-import { CheckCircle2, AlertTriangle, Calendar, MapPin, Globe } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Calendar, MapPin, Globe } from "lucide-react";
 import {
   checkDateConflicts,
   formatCalendarBadge,
@@ -48,15 +47,24 @@ export function CalendarTimeline({
         </div>
 
         {hasConflict ? (
-          <Badge variant="ebRose">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-            <span>{conflictDescription || "Обнаружено наложение дат"}</span>
-          </Badge>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#6E2A34] bg-[#2A151C]/80 px-2.5 py-0.5 text-xs select-none">
+            <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#FB7185] opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#FB7185]" />
+            </span>
+            <span className="font-serif italic text-[11px] font-medium text-[#FDA4AF]">
+              {conflictDescription || "Обнаружено наложение дат"}
+            </span>
+          </div>
         ) : (
-          <Badge variant="ebEmerald">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#02291D]" strokeWidth={2.5} />
-            <span>Календарь сверен: без накладок</span>
-          </Badge>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#1E5241]/80 bg-[#0E241E]/80 px-2.5 py-0.5 text-xs select-none shadow-[0_0_10px_rgba(52,211,153,0.12)]">
+            <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#34D399] shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+            </span>
+            <span className="font-serif italic text-[11px] font-medium text-[#6EE7B7]">
+              Календарь сверен · без накладок
+            </span>
+          </div>
         )}
       </div>
 
