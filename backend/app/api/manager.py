@@ -24,6 +24,7 @@ from app.schemas.manager import (
     TariffOptionOut,
 )
 from app.services.matcher import build_tariff_option, run_client_matching_pipeline
+from app.services.profiler import extract_profile_heuristic
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +35,7 @@ DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
 
 def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) -> MatchResponseOut:
     """Резервный ответ для прогона контрактных тестов D-05 при остановленном контейнере PostgreSQL."""
-    profile = payload.override_profile or ClientQueryExtracted(
-        cities=["Москва", "Санкт-Петербург"],
-        include_online=True,
-        date_from=datetime.date(2026, 11, 1),
-        date_to=datetime.date(2026, 12, 31),
-        total_budget_max=400000.0,
-        target_events_count=3,
-        preferred_formats=["roundtable", "business_breakfast", "conference"],
-        required_roles=["delegate", "speaker"],
-        min_speaker_events=1,
-        themes_keywords=["КРТ", "урбанистика", "девелопмент"],
-        semantic_search_query="комплексное развитие территорий КРТ урбанистика девелопмент",
-    )
+    profile = payload.override_profile or extract_profile_heuristic(payload.raw_manager_notes)
     t_speaker = TariffOptionOut(
         tariff_id=501,
         tariff_name="Пакет «Спикер круглого стола»",
@@ -89,12 +78,12 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         venue="Отель Континенталь",
         start_date=datetime.date(2026, 11, 24),
         end_date=datetime.date(2026, 11, 24),
-        themes=["КРТ", "девелопмент"],
+        themes=["КРТ", "девелопмент", "строительство"],
         recommended_tariff=t_speaker,
         available_tariffs=[t_speaker, t_delegate],
-        ai_rationale="Прямое попадание в запрос на выступление спикером по теме КРТ.",
+        ai_rationale="Прямое попадание в запрос на выступление спикером по теме КРТ и строительства в Москве.",
     )
-    item_2 = BundleEventItemOut(
+    item_2_spb = BundleEventItemOut(
         event_id=102,
         canonical_title="Деловой завтрак Коммерсантъ: Урбанистика и мастер-планирование",
         event_format="business_breakfast",
@@ -108,38 +97,87 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         available_tariffs=[t_delegate],
         ai_rationale="Профильная площадка в Санкт-Петербурге в рамках бюджета.",
     )
+    item_3_msk = BundleEventItemOut(
+        event_id=103,
+        canonical_title="Строительный форум РБК: Девелопмент и инженерия 2026",
+        event_format="forum",
+        city="Москва",
+        is_online=False,
+        venue="ЦВК Экспоцентр",
+        start_date=datetime.date(2026, 12, 10),
+        end_date=datetime.date(2026, 12, 10),
+        themes=["строительство", "девелопмент"],
+        recommended_tariff=t_delegate,
+        available_tariffs=[t_speaker, t_delegate],
+        ai_rationale="Флагманская строительная площадка в Москве без пересечений по датам.",
+    )
     bonus_item = BundleEventItemOut(
         event_id=105,
         canonical_title="Всероссийский саммит девелоперов: Стратегии развития 2027",
         event_format="forum",
-        city=None,
-        is_online=True,
-        venue="Платформа трансляции РБК",
+        city="Москва" if not profile.include_online else None,
+        is_online=profile.include_online,
+        venue="Платформа трансляции РБК" if profile.include_online else "Конгресс-центр ЦМТ, Москва",
         start_date=datetime.date(2026, 12, 18),
         end_date=datetime.date(2026, 12, 18),
-        themes=["стратегии", "девелопмент"],
+        themes=["стратегии", "девелопмент", "строительство"],
         recommended_tariff=t_on_req,
         available_tariffs=[t_on_req],
-        ai_rationale="Флагманский онлайн-саммит с тарифом по индивидуальному запросу.",
+        ai_rationale="Флагманский саммит с тарифом по индивидуальному запросу.",
     )
+
+    available_demo_items = [
+        it for it in [item_1, item_2_spb, item_3_msk]
+        if not profile.cities or it.city in profile.cities
+    ]
+
+    if not available_demo_items:
+        return MatchResponseOut(
+            selection_id=10,
+            client_id=client_id,
+            extracted_profile=profile,
+            bundle_variants=[],
+            bonus_on_request_items=[],
+            generated_pitch_text=(
+                f"По вашему запросу (город: {', '.join(profile.cities) if profile.cities else 'любой'}) "
+                "не найдено подходящих мероприятий в базе агентства."
+            ),
+        )
+
+    allow_spb = not profile.cities or "Санкт-Петербург" in profile.cities
+    allow_msk = not profile.cities or "Москва" in profile.cities
+
+    items_v1: list[BundleEventItemOut] = []
+    if allow_msk:
+        items_v1.append(item_1)
+    if allow_spb:
+        items_v1.append(item_2_spb)
+    elif allow_msk and len(items_v1) < 2:
+        items_v1.append(item_3_msk)
+
+    v1_price = sum(it.recommended_tariff.actual_price or 0.0 for it in items_v1)
+    v1_base = sum(it.recommended_tariff.base_price or 0.0 for it in items_v1)
+    v1_savings = sum(it.recommended_tariff.savings or 0.0 for it in items_v1)
+
     v1 = BundleVariantOut(
         bundle_group=1,
-        bundle_title="Вариант 1: Максимальный охват тем",
-        items=[item_1, item_2],
-        total_actual_price=210000.0,
-        total_base_price=250000.0,
-        total_savings=40000.0,
-        earliest_deadline=datetime.date(2026, 11, 15),
+        bundle_title=f"Вариант 1: Максимальный охват тем ({len(items_v1)} события)",
+        items=items_v1,
+        total_actual_price=v1_price,
+        total_base_price=v1_base,
+        total_savings=v1_savings,
+        earliest_deadline=datetime.date(2026, 11, 15) if v1_savings > 0 else None,
         is_over_budget_tolerance=False,
     )
+    second_item = items_v1[0] if items_v1 else item_1
     v2 = BundleVariantOut(
         bundle_group=2,
         bundle_title="Вариант 2: Оптимальный по экономии бюджета",
-        items=[item_2],
-        total_actual_price=75000.0,
-        total_base_price=90000.0,
-        total_savings=15000.0,
-        earliest_deadline=datetime.date(2026, 11, 20),
+        items=[second_item],
+        total_actual_price=second_item.recommended_tariff.actual_price or 0.0,
+        total_base_price=second_item.recommended_tariff.base_price or 0.0,
+        total_savings=second_item.recommended_tariff.savings or 0.0,
+        earliest_deadline=datetime.date(2026, 11, 20) if (second_item.recommended_tariff.savings or 0.0) > 0 else None,
         is_over_budget_tolerance=False,
     )
     return MatchResponseOut(
@@ -150,7 +188,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         bonus_on_request_items=[bonus_item],
         generated_pitch_text=(
             "Добрый день! По итогам нашего обсуждения подготовили для вашей компании "
-            "персональную программу участия на ноябрь–декабрь по темам КРТ и урбанистики "
+            "персональную программу участия на ноябрь–декабрь "
             "стоимостью 210 000 ₽ (экономия Early Bird — 40 000 ₽ при бронировании до 15.11.2026)."
         ),
     )
@@ -312,6 +350,11 @@ async def match_events_for_client(
     except HTTPException:
         raise
     except OSError as exc:
+        if isinstance(exc, TimeoutError):
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"Превышено время ожидания внешнего ИИ-шлюза: {exc}",
+            ) from exc
         logger.warning("БД недоступна при вызове /match, возвращается контрактный фолбэк: %s", exc)
         return _build_offline_demo_match_response(client_id, payload)
     except Exception as exc:
@@ -449,7 +492,6 @@ async def publish_selection(
     )
 
 
-
 @router.get(
     "/events",
     response_model=ManagerEventsCatalogOut,
@@ -464,7 +506,7 @@ async def get_manager_events_catalog(
     db: AsyncSession = Depends(get_async_session),
 ) -> ManagerEventsCatalogOut:
     """
-    Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинете менеджера.
+    Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинета менеджера.
     """
     today = datetime.date.today()
     events_out: list[CatalogEventItemOut] = []
