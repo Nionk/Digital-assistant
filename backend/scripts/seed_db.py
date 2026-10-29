@@ -29,7 +29,7 @@ DEFAULT_MANAGER_DATA = {
     "email": "manager@skart.ru",
     "full_name": "Анна Соколова (Ведущий менеджер сопровождения)",
     "password": "scart_manager_2026",
-    "telegram_chat_id": 123456789,
+    "telegram_chat_id": 1857783105,
 }
 
 TEST_CLIENTS_DATA = [

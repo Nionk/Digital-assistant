@@ -5,6 +5,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+DUMMY_SEED_CHAT_IDS = {None, "", 0, "0", 123456789, "123456789"}
+
 
 def escape_html(value: str | None) -> str:
     """Безопасное экранирование пользовательских строк для Telegram parse_mode='HTML'."""
@@ -30,8 +32,21 @@ def format_reaction_alert(
         cleaned = comment.strip()
         lines.append(f"Комментарий: <i>{escape_html(cleaned)}</i>")
         lower_c = cleaned.lower()
-        if any(kw in lower_c for kw in ("сопровожден", "спикер", "знакомств", "встреч", "интерактив", "стенд", "деловая игра")):
-            lines.append("<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>")
+        if any(
+            kw in lower_c
+            for kw in (
+                "сопровожден",
+                "спикер",
+                "знакомств",
+                "встреч",
+                "интерактив",
+                "стенд",
+                "деловая игра",
+            )
+        ):
+            lines.append(
+                "<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>"
+            )
     return "\n".join(lines)
 
 
@@ -55,10 +70,14 @@ async def send_manager_alert(
 ) -> bool:
     """
     Асинхронно отправляет сообщение менеджеру в Telegram Bot API по его telegram_chat_id
-    (с фолбэком на глобальный TELEGRAM_MANAGER_CHAT_ID из настроек).
+    (с фолбэком на глобальный TELEGRAM_MANAGER_CHAT_ID из настроек, если в БД стоит тестовый стаб 123456789).
     Если токен или chat_id не заданы, логирует сообщение в режиме [TELEGRAM MOCK] и возвращает True.
     """
-    target_chat_id = chat_id if chat_id not in (None, "", 0, "0") else settings.TELEGRAM_MANAGER_CHAT_ID
+    target_chat_id = (
+        chat_id
+        if chat_id not in DUMMY_SEED_CHAT_IDS
+        else settings.TELEGRAM_MANAGER_CHAT_ID
+    )
     bot_token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
 
     if not bot_token or not target_chat_id:
@@ -66,19 +85,29 @@ async def send_manager_alert(
         return True
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
-        "chat_id": target_chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-    }
+
+    async def _post_message(cid: int | str) -> httpx.Response:
+        payload = {
+            "chat_id": cid,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            return await client.post(url, json=payload)
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code != 200:
-                logger.error("Ошибка Telegram API (%s): %s", resp.status_code, resp.text)
-                return False
-            return True
+        resp = await _post_message(target_chat_id)
+        if (
+            resp.status_code != 200
+            and settings.TELEGRAM_MANAGER_CHAT_ID
+            and str(target_chat_id) != str(settings.TELEGRAM_MANAGER_CHAT_ID)
+        ):
+            resp = await _post_message(settings.TELEGRAM_MANAGER_CHAT_ID)
+
+        if resp.status_code != 200:
+            logger.error("Ошибка Telegram API (%s): %s", resp.status_code, resp.text)
+            return False
+        return True
     except Exception as exc:
         logger.error("Сетевая ошибка при отправке в Telegram: %s", exc)
         return False
