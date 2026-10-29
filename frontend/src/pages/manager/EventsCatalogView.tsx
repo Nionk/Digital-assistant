@@ -11,6 +11,7 @@ import {
   LayoutList,
   LayoutGrid,
   ChevronRight,
+  ArrowUpDown,
 } from "lucide-react";
 import { useManagerEventsCatalog } from "@/api/queries";
 import type { CatalogEventItemOut } from "@/api/types";
@@ -34,17 +35,28 @@ const FORMAT_OPTIONS = [
   { value: "session", label: "Сессии" },
 ];
 
+const SORT_OPTIONS = [
+  { value: "date_asc", label: "Ближайшие по дате" },
+  { value: "date_desc", label: "Поздние по дате" },
+  { value: "price_asc", label: "Сначала доступные (по цене)" },
+  { value: "price_desc", label: "Сначала премиальные (по цене)" },
+  { value: "savings_desc", label: "Выгода Early Bird" },
+];
+
 /**
  * База площадок (реестр отраслевых мероприятий) в кабинете менеджера.
  * Организована по принципу Progressive Disclosure:
  * 1. Легковесный, неутомительный реестр (таблица / карточки) для быстрого сканирования.
- * 2. Детальная боковая шторка по клику на событие для углубленного изучения тарифов.
+ * 2. Выпадающие фильтры по формату, локации, тематике и сортировке.
+ * 3. Детальная боковая шторка по клику на событие для углубленного изучения тарифов.
  */
 export function EventsCatalogView() {
   const { data, isLoading } = useManagerEventsCatalog(true);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedFormat, setSelectedFormat] = React.useState<string>("all");
   const [selectedCity, setSelectedCity] = React.useState<string>("all");
+  const [selectedTheme, setSelectedTheme] = React.useState<string>("all");
+  const [sortBy, setSortBy] = React.useState<string>("date_asc");
   const [onlyEarlyBird, setOnlyEarlyBird] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
   const [selectedEventForDrawer, setSelectedEventForDrawer] =
@@ -60,6 +72,23 @@ export function EventsCatalogView() {
     return Array.from(set);
   }, [events]);
 
+  const uniqueThemes = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ev of events) {
+      for (const t of ev.themes) {
+        map.set(t, (map.get(t) || 0) + 1);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [events]);
+
+  const themeOptions = React.useMemo(() => [
+    { value: "all", label: `Все темы (${events.length})` },
+    ...uniqueThemes.map((t) => ({ value: t.name, label: `${t.name} (${t.count})` })),
+  ], [events.length, uniqueThemes]);
+
   const metrics = React.useMemo(() => {
     const total = events.length;
     const online = events.filter((e) => e.is_online).length;
@@ -69,41 +98,6 @@ export function EventsCatalogView() {
     ).length;
     return { total, online, offline, earlyBird };
   }, [events]);
-
-  const filteredEvents = React.useMemo(() => {
-    return events.filter((ev) => {
-      if (selectedFormat !== "all" && ev.event_format !== selectedFormat) {
-        return false;
-      }
-      if (selectedCity === "online" && !ev.is_online) {
-        return false;
-      }
-      if (
-        selectedCity !== "all" &&
-        selectedCity !== "online" &&
-        ev.city !== selectedCity
-      ) {
-        return false;
-      }
-      if (onlyEarlyBird && !ev.tariffs.some((t) => t.savings > 0)) {
-        return false;
-      }
-      const q = searchQuery.trim().toLowerCase();
-      if (!q) return true;
-      return (
-        ev.canonical_title.toLowerCase().includes(q) ||
-        ev.summary.toLowerCase().includes(q) ||
-        ev.themes.some((t) => t.toLowerCase().includes(q))
-      );
-    });
-  }, [events, selectedFormat, selectedCity, onlyEarlyBird, searchQuery]);
-
-  const handleResetFilters = () => {
-    setSearchQuery("");
-    setSelectedFormat("all");
-    setSelectedCity("all");
-    setOnlyEarlyBird(false);
-  };
 
   const getEventMinPrice = (ev: CatalogEventItemOut): number | null => {
     return ev.tariffs.reduce<number | null>((acc, t) => {
@@ -123,6 +117,71 @@ export function EventsCatalogView() {
       }
     }
     return { savings: max, deadline };
+  };
+
+  const filteredEvents = React.useMemo(() => {
+    const list = events.filter((ev) => {
+      if (selectedFormat !== "all" && ev.event_format !== selectedFormat) {
+        return false;
+      }
+      if (selectedCity === "online" && !ev.is_online) {
+        return false;
+      }
+      if (
+        selectedCity !== "all" &&
+        selectedCity !== "online" &&
+        ev.city !== selectedCity
+      ) {
+        return false;
+      }
+      if (selectedTheme !== "all" && !ev.themes.includes(selectedTheme)) {
+        return false;
+      }
+      if (onlyEarlyBird && !ev.tariffs.some((t) => t.savings > 0)) {
+        return false;
+      }
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        ev.canonical_title.toLowerCase().includes(q) ||
+        ev.summary.toLowerCase().includes(q) ||
+        ev.themes.some((t) => t.toLowerCase().includes(q))
+      );
+    });
+
+    return list.sort((a, b) => {
+      if (sortBy === "date_asc") {
+        return a.start_date.localeCompare(b.start_date);
+      }
+      if (sortBy === "date_desc") {
+        return b.start_date.localeCompare(a.start_date);
+      }
+      if (sortBy === "price_asc") {
+        const pA = getEventMinPrice(a) ?? Infinity;
+        const pB = getEventMinPrice(b) ?? Infinity;
+        return pA - pB;
+      }
+      if (sortBy === "price_desc") {
+        const pA = getEventMinPrice(a) ?? -1;
+        const pB = getEventMinPrice(b) ?? -1;
+        return pB - pA;
+      }
+      if (sortBy === "savings_desc") {
+        const sA = getEventMaxSavings(a).savings;
+        const sB = getEventMaxSavings(b).savings;
+        return sB - sA;
+      }
+      return 0;
+    });
+  }, [events, selectedFormat, selectedCity, selectedTheme, onlyEarlyBird, searchQuery, sortBy]);
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setSelectedFormat("all");
+    setSelectedCity("all");
+    setSelectedTheme("all");
+    setSortBy("date_asc");
+    setOnlyEarlyBird(false);
   };
 
   return (
@@ -165,7 +224,7 @@ export function EventsCatalogView() {
           </div>
         </div>
 
-        {/* Интерактивная строка фильтрации: Формат, Локация, Early Bird и Вид */}
+        {/* Интерактивная строка фильтрации: Формат, Локация, Тематика, Сортировка, Early Bird и Вид */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-[#21262F] pt-2.5 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             {/* Селектор формата */}
@@ -177,7 +236,7 @@ export function EventsCatalogView() {
                 value={selectedFormat}
                 onChange={(val) => setSelectedFormat(String(val))}
                 options={FORMAT_OPTIONS}
-                buttonClassName="h-7 min-w-[130px] text-xs"
+                buttonClassName="h-7 min-w-[120px] text-xs"
               />
             </div>
 
@@ -194,7 +253,34 @@ export function EventsCatalogView() {
                   ...uniqueCities.map((city) => ({ value: city, label: city })),
                   { value: "online", label: "Только Онлайн" },
                 ]}
-                buttonClassName="h-7 min-w-[140px] text-xs"
+                buttonClassName="h-7 min-w-[130px] text-xs"
+              />
+            </div>
+
+            {/* Выдвижное меню тематики площадок */}
+            <div className="flex items-center gap-1.5">
+              <span className="font-serif italic text-[11px] text-[#8E95A0]">
+                Тема:
+              </span>
+              <CustomSelect
+                value={selectedTheme}
+                onChange={(val) => setSelectedTheme(String(val))}
+                options={themeOptions}
+                buttonClassName="h-7 min-w-[130px] text-xs"
+              />
+            </div>
+
+            {/* Меню многофакторной сортировки */}
+            <div className="flex items-center gap-1.5">
+              <span className="font-serif italic text-[11px] text-[#8E95A0] inline-flex items-center gap-1">
+                <ArrowUpDown className="h-3 w-3 text-inherit opacity-75" />
+                <span>Сортировка:</span>
+              </span>
+              <CustomSelect
+                value={sortBy}
+                onChange={(val) => setSortBy(String(val))}
+                options={SORT_OPTIONS}
+                buttonClassName="h-7 min-w-[155px] text-xs"
               />
             </div>
 
@@ -275,7 +361,7 @@ export function EventsCatalogView() {
             Мероприятия по заданным фильтрам не найдены
           </h3>
           <p className="mx-auto mt-1.5 max-w-md font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
-            Попробуйте смягчить критерии поиска (сбросить формат или отключить фильтр Early Bird)
+            Попробуйте смягчить критерии поиска (сбросить тему, формат или отключить фильтр Early Bird)
           </p>
           <button
             type="button"
