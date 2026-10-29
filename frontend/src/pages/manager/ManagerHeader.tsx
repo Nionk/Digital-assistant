@@ -202,8 +202,15 @@ export function ManagerHeader({
                             <p className="text-[13px] font-medium leading-snug text-white">
                               {item.event_title}
                             </p>
-                            <Badge variant="ebEmerald" className="text-[11px]">
-                              Выгода {formatRub(item.potential_savings)}
+                            <Badge variant="ebEmerald" className="shrink-0 py-1 px-3">
+                              <span className="flex flex-col items-center leading-tight">
+                                <span className="text-[9px] uppercase tracking-wider opacity-90 font-semibold">
+                                  Выгода
+                                </span>
+                                <span className="whitespace-nowrap font-bold text-xs">
+                                  {formatRub(item.potential_savings)}
+                                </span>
+                              </span>
                             </Badge>
                           </div>
                           <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
