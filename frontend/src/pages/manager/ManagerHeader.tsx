@@ -154,65 +154,55 @@ export function ManagerHeader({
             <ChevronDown className="h-3.5 w-3.5 text-[#7E8794]" strokeWidth={1.75} />
           </button>
 
-          {/* Выпадающий список дедлайнов в темной стилистике */}
+          {/* Выпадающий список дедлайнов точно по макету (media_1793287754782_2088a7c6.jpg) */}
           {isDeadlinesOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-card border border-[#262D35] bg-[#11161B] p-4 shadow-2xl z-50 text-white">
-              <div className="flex items-center justify-between border-b border-[#262D35] pb-2.5">
+            <div className="absolute right-0 mt-2 w-[340px] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-white">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                     Контроль условий Early Bird
                   </h3>
-                  <p className="mt-0.5 text-[11px] text-[#8E95A0]">
+                  <p className="mt-1 text-xs text-[#727985]">
                     Ближайшие даты истечения льготных тарифов организаторов
                   </p>
                 </div>
-                <span className="rounded-tag bg-[#5C1D24] text-white px-2 py-0.5 text-[11px] font-bold border border-[#7A2430] tabular-nums">
-                  {burningDeadlines.length} активных
+                <span className="shrink-0 rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-2.5 py-1 text-[11px] font-bold text-[#E59837] tracking-wider tabular-nums">
+                  [ {burningDeadlines.length} АКТИВНЫХ ]
                 </span>
               </div>
+
+              <div className="border-b border-[#21262F] my-3.5" />
 
               {burningDeadlines.length === 0 ? (
                 <p className="py-4 text-center text-xs text-[#8E95A0]">
                   Нет горящих дедлайнов на ближайшие дни
                 </p>
               ) : (
-                <div className="mt-2.5 max-h-72 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="max-h-[380px] space-y-2.5 overflow-y-auto pr-1 scrollbar-thin">
                   {burningDeadlines.map((item) => {
                     const daysLeft = getDaysUntil(item.early_bird_deadline);
-                    const isUrgent = daysLeft !== null && daysLeft <= 3;
 
                     return (
                       <div
                         key={item.event_id}
-                        className="rounded-control border border-[#262D35] bg-[#161B21] p-2.5 transition-colors hover:border-[#38414D]"
+                        className="rounded-[8px] border border-[#262C35] bg-[#1A1E24] p-3 transition-colors hover:border-[#38414F] hover:bg-[#1E232B]"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-medium leading-snug text-white">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-[13px] font-medium leading-snug text-white">
                             {item.event_title}
                           </p>
-                          <span className="shrink-0 rounded-tag bg-[#1E3A2F] text-[#6EE7B7] px-1.5 py-0.5 text-[10px] font-bold border border-[#144A39] tabular-nums">
+                          <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[11px] font-medium text-[#34D399] tabular-nums">
                             выгода {formatRub(item.potential_savings)}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#8E95A0] tabular-nums">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="h-3 w-3" strokeWidth={1.5} />
+                        <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 text-[#8E95A0]" strokeWidth={1.5} />
                             Дедлайн: {formatDateShort(item.early_bird_deadline)}
                           </span>
-                          {daysLeft !== null && (
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isUrgent ? "text-[#F87171]" : "text-[#D1D5DB]"
-                              )}
-                            >
-                              {daysLeft === 0
-                                ? "Истекает сегодня"
-                                : daysLeft === 1
-                                  ? "Остался 1 день"
-                                  : `Осталось дн.: ${daysLeft}`}
-                            </span>
-                          )}
+                          <span>
+                            Осталось дн.: {daysLeft ?? "—"}
+                          </span>
                         </div>
                       </div>
                     );
