@@ -54,6 +54,7 @@ class EvaluatedCombo:
     is_over_budget_tolerance: bool
     roles_strictly_matched: bool = True
     has_date_conflict: bool = False
+    matched_speaker_count: int = 0
 
 
 class EventRationaleLLMItem(BaseModel):
@@ -162,6 +163,26 @@ def build_default_rationale(
     }.get(tariff.participation_role, "профильное участие")
     loc = "онлайн-формате" if event.is_online else f"г. {event.city}"
     return f"Приоритетная площадка по направлениям ({themes_str}) в {loc}: обеспечивает {role_label}."
+
+
+def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
+    """Проверяет строгое соответствие мероприятия географическому фильтру клиента."""
+    if profile.cities:
+        if profile.include_online:
+            return (ev.city in profile.cities) or bool(ev.is_online)
+        return (ev.city in profile.cities) and not bool(ev.is_online)
+    if not profile.include_online:
+        return not bool(ev.is_online)
+    return True
+
+
+def _matches_date_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
+    """Проверяет попадание мероприятия в календарный диапазон клиента."""
+    if profile.date_from is not None and ev.start_date < profile.date_from:
+        return False
+    if profile.date_to is not None and ev.end_date > profile.date_to:
+        return False
+    return True
 
 
 # ============================================================================
@@ -276,11 +297,17 @@ async def get_scored_candidates(
     """
     Собирает кандидатов с тарифами.
     1. Сначала выполняет строгий поиск с проверкой дат, городов и доступных числовых тарифов.
-    2. Добирает события из расширенного RRF-пула (с весом x0.85) для обеспечения:
-       - фолбэка при жестких ограничениях клиента;
-       - наполнения бонусного слота 'Цена по запросу' (base_price IS NULL).
+    2. Добирает события из расширенного RRF-пула со строгим соблюдением географии (`profile.cities`),
+       чтобы события из других городов никогда не подмешивались в пакет, когда в выбранном городе есть площадки.
     """
-    query_vec = await get_embedding(profile.semantic_search_query)
+    try:
+        query_vec = await get_embedding(profile.semantic_search_query)
+    except Exception as exc:
+        logger.warning("Embedding API fallback triggered (%s): %s", type(exc).__name__, exc)
+        dim = settings.EMBEDDING_DIM
+        val = 1.0 / (dim ** 0.5)
+        query_vec = [val] * dim
+
     fts_query_str = build_fts_or_query(profile)
 
     strict_rows = await fetch_hybrid_rrf_candidates(
@@ -293,9 +320,13 @@ async def get_scored_candidates(
         limit=15,
     )
 
-    events_map: dict[int, tuple[Event, float]] = {ev.id: (ev, score) for ev, score in strict_rows}
+    events_map: dict[int, tuple[Event, float]] = {
+        ev.id: (ev, score)
+        for ev, score in strict_rows
+        if _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile)
+    }
 
-    # Добираем из расширенного поиска (чтобы захватить чисто 'По запросу' события и фолбэк-кандидаты)
+    # Добираем из расширенного поиска (чтобы захватить чисто 'По запросу' события в ТОМ ЖЕ городе и периоде)
     relaxed_rows = await fetch_hybrid_rrf_candidates(
         session=session,
         profile=profile,
@@ -305,11 +336,31 @@ async def get_scored_candidates(
         strict_filters=False,
         limit=20,
     )
+
+    # Шаг 2А: события в запрошенном городе и периоде (например, форумы с тарифом 'По запросу')
     for ev, score in relaxed_rows:
-        if ev.id not in events_map:
-            events_map[ev.id] = (ev, score * 0.85)
+        if ev.id not in events_map and _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile):
+            events_map[ev.id] = (ev, score * 0.90)
         if len(events_map) >= 20:
             break
+
+    # Шаг 2Б: если в запрошенный период дат событий меньше target_events_count, ослабляем даты, но СТРОГО сохраняем город
+    if len(events_map) < profile.target_events_count:
+        for ev, score in relaxed_rows:
+            if ev.id not in events_map and _matches_location_filter(ev, profile):
+                events_map[ev.id] = (ev, score * 0.80)
+            if len(events_map) >= 20:
+                break
+
+    # Шаг 2В: аварийный фолбэк ТОЛЬКО если клиент НЕ ограничивал поиск конкретными городами (profile.cities пуст).
+    # Если клиент явно указал конкретный город (например, Санкт-Петербург), а в базе подходящих площадок нет,
+    # мы СТРОГО не подмешиваем события других городов, чтобы не дезинформировать менеджера и клиента.
+    if not events_map and not profile.cities:
+        for ev, score in relaxed_rows:
+            if ev.id not in events_map:
+                events_map[ev.id] = (ev, score * 0.70)
+            if len(events_map) >= 20:
+                break
 
     if not events_map:
         return []
@@ -345,7 +396,7 @@ async def get_scored_candidates(
                 if any(kw.lower() in t.lower() or t.lower() in kw.lower() for kw in profile.themes_keywords)
             )
             if matched_kw > 0:
-                bonus += min(0.004, matched_kw * 0.0015)
+                bonus += min(0.006, matched_kw * 0.002)
 
         priced_t = [t for t in all_t if t.actual_price is not None]
         on_req_t = [t for t in all_t if t.actual_price is None]
@@ -468,6 +519,7 @@ def evaluate_candidate_tuple(
 
         base_rrf_sum = sum(c.rrf_score for c in combo)
         is_over_tolerance = total_actual > budget_max
+        speaker_count = sum(1 for t in chosen_tariffs if t.participation_role == "speaker")
 
         valid_evaluations.append(
             EvaluatedCombo(
@@ -481,6 +533,7 @@ def evaluate_candidate_tuple(
                 is_over_budget_tolerance=is_over_tolerance,
                 roles_strictly_matched=strict_roles_ok,
                 has_date_conflict=date_conflict,
+                matched_speaker_count=speaker_count,
             )
         )
 
@@ -520,7 +573,7 @@ def build_bundles(
 
     for k in range(target_k, 0, -1):
         for combo_tuple in itertools.combinations(priced_pool, k):
-            # Сначала пробуем строгое соблюдение ролей и непересечение дат
+            # 1. Сначала пробуем строгое соблюдение ролей и непересечение дат
             evals = evaluate_candidate_tuple(
                 combo=combo_tuple,
                 min_speaker_events=profile.min_speaker_events,
@@ -529,7 +582,17 @@ def build_bundles(
                 check_dates=True,
                 allow_role_fallback=False,
             )
-            # Если строгая комбинация невозможна, пробуем мягкий фолбэк ролей
+            # 2. Если строгая комбинация ролей невозможна, ослабляем роль, СОХРАНЯЯ запрет пересечения дат
+            if not evals:
+                evals = evaluate_candidate_tuple(
+                    combo=combo_tuple,
+                    min_speaker_events=profile.min_speaker_events,
+                    required_roles=list(profile.required_roles),
+                    budget_max=budget,
+                    check_dates=True,
+                    allow_role_fallback=True,
+                )
+            # 3. Только если все очные события пересекаются по датам, допускаем фолбэк дат
             if not evals:
                 evals = evaluate_candidate_tuple(
                     combo=combo_tuple,
@@ -551,13 +614,15 @@ def build_bundles(
 
     # Сортировочный ключ приоритета:
     # 1. Строгое соблюдение ролей (speaker/delegate)
-    # 2. Отсутствие конфликта дат
-    # 3. Максимальный суммарный RRF-рейтинг
-    # 4. Максимальная скидка Early Bird
-    # 5. Меньшая итоговая стоимость
+    # 2. Число фактически подобранных спикерских слотов (matched_speaker_count)
+    # 3. Отсутствие конфликта дат
+    # 4. Максимальный суммарный RRF-рейтинг
+    # 5. Максимальная скидка Early Bird
+    # 6. Меньшая итоговая стоимость
     def _v1_sort_key(x: EvaluatedCombo):
         return (
             x.roles_strictly_matched,
+            x.matched_speaker_count,
             not x.has_date_conflict,
             round(x.combo_score, 6),
             x.total_savings,
@@ -575,7 +640,7 @@ def build_bundles(
     # Аварийная страховка (Уровень 4): если бюджет клиента экстремально мал, берем самый дешевый пакет
     if not selected_variants and all_fallback_combos:
         all_fallback_combos.sort(
-            key=lambda x: (x.total_actual_price, -int(x.roles_strictly_matched), -x.combo_score)
+            key=lambda x: (x.total_actual_price, -int(x.roles_strictly_matched), -x.matched_speaker_count, -x.combo_score)
         )
         cheapest = all_fallback_combos[0]
         cheapest.is_over_budget_tolerance = True
@@ -609,6 +674,7 @@ def build_bundles(
         cheaper_alternatives.sort(
             key=lambda x: (
                 not x.has_date_conflict,
+                x.matched_speaker_count,
                 x.total_savings,
                 round(variant_1.total_actual_price - x.total_actual_price, 2),
                 round(x.combo_score, 6),
@@ -631,6 +697,7 @@ def build_bundles(
                 key=lambda x: (
                     not x.has_date_conflict,
                     x.roles_strictly_matched,
+                    x.matched_speaker_count,
                     round(x.combo_score, 6),
                     -x.total_actual_price,
                 ),
@@ -643,7 +710,10 @@ def build_bundles(
     bonus_pairs: list[tuple[ScoredEventCandidate, TariffOptionOut]] = []
     for cand in candidates:
         if cand.on_request_tariffs and cand.event.id not in v1_event_ids:
-            bonus_pairs.append((cand, cand.on_request_tariffs[0]))
+            # Если клиент просил спикерство, предпочитаем on_request-тариф с ролью speaker
+            on_req_speaker = [t for t in cand.on_request_tariffs if t.participation_role == "speaker"]
+            chosen_on_req = on_req_speaker[0] if (profile.min_speaker_events > 0 and on_req_speaker) else cand.on_request_tariffs[0]
+            bonus_pairs.append((cand, chosen_on_req))
             if len(bonus_pairs) >= 2:
                 break
 
@@ -651,7 +721,9 @@ def build_bundles(
         used_bonus_ids = {c.event.id for c, _ in bonus_pairs}
         for cand in candidates:
             if cand.on_request_tariffs and cand.event.id not in used_bonus_ids:
-                bonus_pairs.append((cand, cand.on_request_tariffs[0]))
+                on_req_speaker = [t for t in cand.on_request_tariffs if t.participation_role == "speaker"]
+                chosen_on_req = on_req_speaker[0] if (profile.min_speaker_events > 0 and on_req_speaker) else cand.on_request_tariffs[0]
+                bonus_pairs.append((cand, chosen_on_req))
                 if len(bonus_pairs) >= 2:
                     break
 
@@ -733,7 +805,11 @@ async def generate_pitch_and_rationales(
     }
 
     if not selected_variants:
-        return rationales_map, "По вашему запросу не найдено подходящих пакетных предложений."
+        city_clause = f" (город: {', '.join(profile.cities)})" if profile.cities else ""
+        return (
+            rationales_map,
+            f"По вашему запросу{city_clause} не найдено подходящих пакетных предложений в базе знаний агентства. Рекомендуется скорректировать параметры отбора или добавить новые площадки.",
+        )
 
     v1 = selected_variants[0]
     fallback_pitch = build_fallback_pitch(client_name, profile, v1)
@@ -796,7 +872,7 @@ async def generate_pitch_and_rationales(
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                max_retries=2,
+                max_retries=1,
                 extra_body={"reasoning": {"effort": "low"}},
             ),
             timeout=25.0,
@@ -967,4 +1043,3 @@ async def run_client_matching_pipeline(
         bonus_on_request_items=bonus_items_out,
         generated_pitch_text=pitch_text,
     )
-
