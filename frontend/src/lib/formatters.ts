@@ -100,12 +100,12 @@ export function formatRub(amount: number | null | undefined): string {
     return "Бесплатно";
   }
   const rounded = Math.round(amount);
-  return `${rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₽`;
+  return `${rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0")}\u00A0₽`;
 }
 
 export function formatNumberCompact(amount: number): string {
   const rounded = Math.round(amount);
-  return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
 }
 
 function parseIsoDate(iso: string): Date {
