@@ -295,26 +295,20 @@ export function ManagerWorkspacePage() {
                     type="button"
                     onClick={handleToggleClientsDropdown}
                     className={cn(
-                      "group relative flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden shadow-sm transition-colors duration-200",
+                      "group relative flex items-center gap-2 rounded-[8px] border bg-[#12161A] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150",
                       isClientsDropdownOpen
-                        ? "bg-[#1A2128] text-white border-[#38414F]"
-                        : "text-[#D1D5DB]",
+                        ? "border-[#E5C378] bg-[#1A2128] text-white shadow-[0_0_10px_rgba(229,195,120,0.25)]"
+                        : "border-[#262D35] text-[#D1D5DB] hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.15)]",
                       flashClientsBtn && "scale-[0.98] ring-1 ring-[#E5C378]"
                     )}
                     title="Выбрать компанию клиента"
                   >
-                    {/* Плавный золотой слой наведения (без вспышек при наведении и уходе курсора) */}
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] opacity-0 shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-opacity duration-200 ease-out group-hover:opacity-100"
-                    />
-
-                    <PanelLeftOpen className="relative z-10 h-4 w-4 text-inherit transition-colors duration-200 shrink-0 group-hover:text-[#0E1215]" strokeWidth={1.75} />
-                    <span className="relative z-10 transition-colors duration-200 group-hover:text-[#0E1215]">Список клиентов</span>
+                    <PanelLeftOpen className="h-4 w-4 shrink-0 transition-colors duration-150 text-inherit group-hover:text-[#E5C378]" strokeWidth={1.75} />
+                    <span className="transition-colors duration-150">Список клиентов</span>
                     <span
                       className={cn(
-                        "relative z-10 rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-200",
-                        "group-hover:bg-[#0E1215]/20 group-hover:text-[#0E1215]"
+                        "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
+                        "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
                       )}
                     >
                       {clients.length}
@@ -322,7 +316,7 @@ export function ManagerWorkspacePage() {
 
                     {/* Золотая светящаяся линия подчеркивания в открытом/активном состоянии */}
                     {isClientsDropdownOpen && (
-                      <span className="absolute bottom-0 left-0 right-0 z-20 h-[2.5px] rounded-b-[8px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
+                      <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-b-[8px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] shadow-[0_0_10px_rgba(229,195,120,0.75)]" />
                     )}
                   </button>
 
@@ -476,16 +470,10 @@ export function ManagerWorkspacePage() {
                   <button
                     type="button"
                     onClick={handleToggleClientsDropdown}
-                    className="group relative inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-4 py-2 text-xs font-semibold text-white overflow-hidden transition-colors duration-200"
+                    className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-4 py-2 text-xs font-semibold text-white transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-[#E5C378] hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
-                    />
-                    <PanelLeftOpen className="relative z-10 h-4 w-4 transition-colors duration-200 group-hover:text-[#0E1215]" />
-                    <span className="relative z-10 transition-colors duration-200 group-hover:text-[#0E1215]">
-                      Выбрать компанию из списка
-                    </span>
+                    <PanelLeftOpen className="h-4 w-4" />
+                    <span>Выбрать компанию из списка</span>
                   </button>
                 </div>
               ) : (
