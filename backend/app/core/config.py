@@ -6,10 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
-    
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def resolve_db_host(cls, v: str) -> str:
@@ -24,17 +25,17 @@ class Settings(BaseSettings):
             except (socket.gaierror, OSError):
                 return v.replace("@db:", "@localhost:")
         return v
-    
+
     # Security
     SECRET_KEY: str = "super_secret_key_for_jwt_change_me_in_production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    
+
     # LLM Gateway
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.ru-openrouter.ru/v1"
     LLM_MODEL: str = "deepseek/deepseek-chat"
-    
+
     # Embedding & Jina Gateway
     JINA_API_KEY: str | None = None
     EMBEDDING_API_KEY: str = ""
@@ -42,8 +43,20 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "jina-embeddings-v3"
     EMBEDDING_DIM: int = 1024
 
+    # Telegram Bot API Alerts
     TELEGRAM_BOT_TOKEN: str = ""
-    TELEGRAM_MANAGER_CHAT_ID: int = 0
+    TELEGRAM_MANAGER_CHAT_ID: int | None = None
+
+    @field_validator("TELEGRAM_MANAGER_CHAT_ID", mode="before")
+    @classmethod
+    def parse_telegram_chat_id(cls, v: object) -> int | None:
+        """Безопасный парсинг chat_id (поддерживает пустую строку в .env и 0 как отсутствие ID)."""
+        if v is None or v == "" or v == 0 or v == "0":
+            return None
+        try:
+            return int(str(v).strip())
+        except (ValueError, TypeError):
+            return None
 
     @property
     def jina_token(self) -> str | None:
@@ -63,5 +76,5 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-settings = Settings()
 
+settings = Settings()
