@@ -4,21 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: "#F6F5F0",
+        canvas: "#111417",
         surface: {
-          DEFAULT: "#FFFFFF",
-          muted: "#EFECE6",
-          hover: "#F3F1EB",
+          DEFAULT: "#161B22",
+          muted: "#1A2028",
+          hover: "#1E2530",
         },
         border: {
-          DEFAULT: "#E5E3DC",
-          strong: "#D2CFC5",
+          DEFAULT: "#262D35",
+          strong: "#38414F",
         },
         ink: {
-          DEFAULT: "#18181B",
-          secondary: "#4A4843",
-          muted: "#686660",
-          faint: "#9A978E",
+          DEFAULT: "#F3F4F6",
+          secondary: "#D1D5DB",
+          muted: "#8E95A0",
+          faint: "#636B78",
         },
         pine: {
           DEFAULT: "#16382C",

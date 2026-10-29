@@ -34,15 +34,15 @@ export function ClientSidebar({
   });
 
   return (
-    <div className="flex h-full w-full flex-col bg-surface">
+    <div className="flex h-full w-full flex-col bg-[#0E1116] text-white">
       {/* Шапка колонки клиентов с кнопкой сворачивания */}
-      <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 bg-surface">
+      <div className="flex items-center justify-between border-b border-[#21262F] px-3.5 py-2.5 bg-[#0E1116]">
         <div className="flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5 text-pine" strokeWidth={1.75} />
-          <span className="text-xs font-bold uppercase tracking-wider text-ink">
+          <Users className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.75} />
+          <span className="text-xs font-bold uppercase tracking-wider text-[#8E95A0]">
             Клиенты
           </span>
-          <span className="rounded-tag bg-surface-muted px-1.5 py-0.2 text-[10px] font-bold text-ink-secondary tabular-nums">
+          <span className="rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-1.5 py-0.2 text-[10px] font-bold text-[#E59837] tabular-nums">
             {filtered.length}
           </span>
         </div>
@@ -51,7 +51,7 @@ export function ClientSidebar({
             type="button"
             onClick={onToggleSidebar}
             title="Свернуть список клиентов"
-            className="flex h-7 w-7 items-center justify-center rounded-control border border-border bg-canvas/70 text-ink-secondary transition-colors hover:border-border-strong hover:bg-surface-muted hover:text-ink"
+            className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#161B21] text-[#8E95A0] transition-colors hover:border-[#38414F] hover:bg-[#1E232B] hover:text-white"
           >
             <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
@@ -59,10 +59,10 @@ export function ClientSidebar({
       </div>
 
       {/* Поиск по клиентам */}
-      <div className="border-b border-border p-3">
+      <div className="border-b border-[#21262F] p-3">
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint"
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#727985]"
             strokeWidth={1.5}
           />
           <input
@@ -70,15 +70,15 @@ export function ClientSidebar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Поиск компании..."
-            className="h-8 w-full rounded-control border border-border bg-canvas pl-8 pr-2.5 text-xs text-ink placeholder:text-ink-faint focus:border-pine focus:bg-surface focus:outline-none"
+            className="h-8 w-full rounded-[6px] border border-[#262C35] bg-[#161B21] pl-8 pr-2.5 text-xs text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:bg-[#1A2027] focus:outline-none"
           />
         </div>
       </div>
 
       {/* Список карточек клиентов */}
-      <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-4 scrollbar-thin">
+      <div className="flex-1 space-y-1.5 overflow-y-auto px-2 pb-4 scrollbar-thin">
         {filtered.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-ink-muted">
+          <p className="px-2 py-6 text-center text-xs text-[#8E95A0]">
             Компании не найдены
           </p>
         ) : (
@@ -98,10 +98,10 @@ export function ClientSidebar({
                 type="button"
                 onClick={() => onSelectClient(client)}
                 className={cn(
-                  "group flex w-full flex-col gap-1 rounded-control border px-3 py-2.5 text-left transition-all",
+                  "group flex w-full flex-col gap-1 rounded-[8px] border px-3 py-2.5 text-left transition-all",
                   isSelected
-                    ? "border-pine bg-pine/5 shadow-sm"
-                    : "border-transparent bg-transparent hover:border-border hover:bg-canvas/80"
+                    ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
+                    : "border-[#262C35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -109,14 +109,14 @@ export function ClientSidebar({
                     <Building2
                       className={cn(
                         "h-3.5 w-3.5 shrink-0",
-                        isSelected ? "text-pine" : "text-ink-muted"
+                        isSelected ? "text-[#E5C378]" : "text-[#8E95A0]"
                       )}
                       strokeWidth={1.5}
                     />
                     <span
                       className={cn(
                         "truncate text-xs font-semibold",
-                        isSelected ? "text-pine" : "text-ink"
+                        isSelected ? "text-white" : "text-[#D1D5DB]"
                       )}
                     >
                       {client.company_name}
@@ -125,22 +125,22 @@ export function ClientSidebar({
 
                   {/* Индикатор статуса подборки */}
                   {isPublished ? (
-                    <Badge variant="novelSand" className="text-[9px]">
-                      КП АКТИВНО
+                    <Badge variant="ebEmerald" className="text-[9px]">
+                      [ КП АКТИВНО ]
                     </Badge>
                   ) : isDraft ? (
-                    <Badge variant="novelGold" className="text-[9px]">
-                      ЧЕРНОВИК
+                    <Badge variant="ebAmber" className="text-[9px]">
+                      [ ЧЕРНОВИК ]
                     </Badge>
                   ) : (
-                    <Badge variant="darkSubtle" className="text-[9px]">
-                      НОВЫЙ
+                    <Badge variant="ebSlate" className="text-[9px]">
+                      [ НОВЫЙ ]
                     </Badge>
                   )}
                 </div>
 
                 {client.contact_person && (
-                  <div className="flex items-center gap-1 text-[11px] text-ink-muted">
+                  <div className="flex items-center gap-1 text-[11px] text-[#8E95A0]">
                     <UserCheck className="h-3 w-3 shrink-0 opacity-75" strokeWidth={1.5} />
                     <span className="truncate">{client.contact_person}</span>
                   </div>

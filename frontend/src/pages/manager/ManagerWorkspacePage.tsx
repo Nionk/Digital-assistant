@@ -1,7 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { AnimatePresence, motion } from "framer-motion";
-import { Building2, UserCheck, Compass, PanelLeftOpen } from "lucide-react";
+import { Building2, UserCheck, Compass, PanelLeftOpen, Search } from "lucide-react";
 import {
   useManagerDashboard,
   useManagerEventsCatalog,
@@ -12,8 +11,8 @@ import {
   computeClientFinancialSummary,
   useManagerStore,
 } from "@/store/useManagerStore";
+import { cn } from "@/lib/utils";
 import { ManagerHeader } from "./ManagerHeader";
-import { ClientSidebar } from "./ClientSidebar";
 import { NotesAndProfileSection } from "./NotesAndProfileSection";
 import { BundleConstructorSection } from "./BundleConstructorSection";
 import { FinancialAndPitchPanel } from "./FinancialAndPitchPanel";
@@ -31,7 +30,6 @@ export function ManagerWorkspacePage() {
   const state = useManagerStore();
   const {
     workspaceMode,
-    isSidebarCollapsed,
     selectedClientId,
     clientSearchQuery,
     notesByClient,
@@ -42,7 +40,6 @@ export function ManagerWorkspacePage() {
     pitchTextByClient,
     publishedInfoByClient,
     setWorkspaceMode,
-    toggleSidebar,
     selectClient,
     setClientSearchQuery,
     setClientNotes,
@@ -61,6 +58,45 @@ export function ManagerWorkspacePage() {
   const clients = dashboard?.clients || [];
   const burningDeadlines = dashboard?.burning_deadlines || [];
 
+  // Состояние выпадающего меню списка клиентов (стиль Early Bird Popover)
+  const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
+  const [flashClientsBtn, setFlashClientsBtn] = React.useState(false);
+  const clientDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const handleToggleClientsDropdown = () => {
+    setFlashClientsBtn(true);
+    setIsClientsDropdownOpen((prev) => !prev);
+    setTimeout(() => setFlashClientsBtn(false), 200);
+  };
+
+  React.useEffect(() => {
+    if (!isClientsDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
+        setIsClientsDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsClientsDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isClientsDropdownOpen]);
+
+  const filteredClients = React.useMemo(() => {
+    const q = clientSearchQuery.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter(
+      (c) =>
+        c.company_name.toLowerCase().includes(q) ||
+        (c.contact_person || "").toLowerCase().includes(q)
+    );
+  }, [clients, clientSearchQuery]);
+
   // Автовыбор первого клиента при загрузке дашборда
   React.useEffect(() => {
     if (selectedClientId === null && clients.length > 0) {
@@ -68,16 +104,6 @@ export function ManagerWorkspacePage() {
       selectClient(first.id, first.raw_manager_notes);
     }
   }, [clients, selectedClientId, selectClient]);
-
-  // Закрытие выдвижной панели клиентов по Escape
-  React.useEffect(() => {
-    if (isSidebarCollapsed) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") toggleSidebar();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSidebarCollapsed, toggleSidebar]);
 
   const activeClient =
     clients.find((c) => c.id === selectedClientId) || null;
@@ -258,90 +284,187 @@ export function ManagerWorkspacePage() {
         </main>
       ) : (
         <div className="relative flex flex-1 overflow-hidden">
-          {/* Выдвижная панель со списком клиентов (Slide-over drawer слева) */}
-          <AnimatePresence>
-            {!isSidebarCollapsed && (
-              <>
-                {/* Полупрозрачный матовый бэкдроп для быстрого закрытия кликом вне панели */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={toggleSidebar}
-                  className="fixed inset-0 top-[67px] z-40 bg-ink/30 backdrop-blur-[1px]"
-                />
-
-                {/* Плавно выдвигающаяся панель выбора клиентов */}
-                <motion.aside
-                  initial={{ x: "-100%" }}
-                  animate={{ x: 0 }}
-                  exit={{ x: "-100%" }}
-                  transition={{ type: "spring", stiffness: 350, damping: 33 }}
-                  className="fixed top-[67px] bottom-0 left-0 z-50 flex w-[295px] flex-col border-r border-border bg-surface shadow-2xl"
-                >
-                  <ClientSidebar
-                    clients={clients}
-                    selectedClientId={selectedClientId}
-                    searchQuery={clientSearchQuery}
-                    onSearchChange={setClientSearchQuery}
-                    onSelectClient={(c) => {
-                      selectClient(c.id, c.raw_manager_notes);
-                    }}
-                    publishedByClientMap={publishedInfoByClient}
-                    hasDraftInSessionMap={hasDraftInSessionMap}
-                    onToggleSidebar={toggleSidebar}
-                  />
-                </motion.aside>
-              </>
-            )}
-          </AnimatePresence>
-
-          {/* Основная рабочая область менеджера на всю ширину (в свернутом состоянии отображается только кнопка) */}
+          {/* Основная рабочая область менеджера на всю ширину */}
           <main className="flex-1 overflow-y-auto p-4 lg:p-5 scrollbar-thin">
             <div className="mx-auto max-w-[1440px] space-y-4">
               {/* Верхняя строка под хедером: кнопка «Список клиентов» строго под логотипом */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={toggleSidebar}
-                  className="group inline-flex items-center gap-2 rounded-control border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-sm transition-all hover:border-border-strong hover:bg-surface-muted hover:shadow"
-                  title="Выбрать компанию клиента"
-                >
-                  <PanelLeftOpen className="h-4 w-4 text-pine transition-transform group-hover:scale-110" strokeWidth={1.75} />
-                  <span>Список клиентов</span>
-                  <span className="rounded-tag bg-novel-sand px-1.5 py-0.2 text-[10px] font-bold text-[#2A2213] tabular-nums border border-novel-sandBorder">
-                    {clients.length}
-                  </span>
-                </button>
-
-                {activeClient && (
-                  <div className="flex items-center gap-2 text-xs text-ink-muted">
-                    <span>Путь клиента:</span>
-                    <span className="rounded-badge bg-canvas border border-border px-2 py-0.5 font-medium text-ink-secondary">
-                      {activeMatchResult
-                        ? activeMagicToken
-                          ? "Этап 07 · Согласование с клиентом"
-                          : "Этап 05–06 · Сравнение и рекомендация"
-                        : "Этап 01–04 · Запрос и подбор возможностей"}
+              <div className="flex items-center justify-between gap-3">
+                <div className="relative inline-block" ref={clientDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={handleToggleClientsDropdown}
+                    className={cn(
+                      "group relative flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-3.5 py-1.5 text-xs font-medium transition-all duration-200 select-none cursor-pointer overflow-hidden shadow-sm",
+                      isClientsDropdownOpen
+                        ? "bg-[#1A2128] text-white border-[#38414F]"
+                        : "text-[#D1D5DB]",
+                      // Золотой перелив при наведении (текст и иконка становятся черными)
+                      "hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215] hover:font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]",
+                      // Эффект вспышки при клике
+                      flashClientsBtn && "scale-[0.98] brightness-150 ring-1 ring-[#E5C378]"
+                    )}
+                    title="Выбрать компанию клиента"
+                  >
+                    <PanelLeftOpen className="h-4 w-4 text-inherit transition-transform shrink-0" strokeWidth={1.75} />
+                    <span>Список клиентов</span>
+                    <span
+                      className={cn(
+                        "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors",
+                        "group-hover:bg-[#0E1215]/20 group-hover:text-[#0E1215]"
+                      )}
+                    >
+                      {clients.length}
                     </span>
-                  </div>
-                )}
+
+                    {/* Золотая светящаяся линия подчеркивания в открытом/активном состоянии */}
+                    {isClientsDropdownOpen && (
+                      <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#E5C378] to-transparent shadow-[0_0_8px_rgba(229,195,120,0.7)]" />
+                    )}
+                  </button>
+
+                  {/* Выпадающее меню в стиле Early Bird Popover (media_1793287754782_2088a7c6.jpg) */}
+                  {isClientsDropdownOpen && (
+                    <div className="absolute left-0 mt-2 w-[340px] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+                            ВЫБОР КЛИЕНТА
+                          </h3>
+                          <p className="mt-1 text-xs text-[#727985]">
+                            Активные компании и согласование пакетов
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-2.5 py-1 text-[11px] font-bold text-[#E59837] tracking-wider tabular-nums">
+                          [ {clients.length} КОМПАНИИ ]
+                        </span>
+                      </div>
+
+                      <div className="border-b border-[#21262F] my-3.5" />
+
+                      {/* Поиск компании */}
+                      <div className="relative mb-3">
+                        <Search
+                          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#727985]"
+                          strokeWidth={1.75}
+                        />
+                        <input
+                          type="text"
+                          value={clientSearchQuery}
+                          onChange={(e) => setClientSearchQuery(e.target.value)}
+                          placeholder="Поиск компании или контакта..."
+                          className="h-8.5 w-full rounded-[8px] border border-[#262C35] bg-[#161B21] pl-9 pr-3 text-xs text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:bg-[#1A2027] focus:outline-none transition-colors"
+                        />
+                      </div>
+
+                      {/* Список карточек клиентов в ячейках #1A1E24 */}
+                      {filteredClients.length === 0 ? (
+                        <p className="py-6 text-center text-xs text-[#8E95A0]">
+                          Компании не найдены
+                        </p>
+                      ) : (
+                        <div className="max-h-[360px] space-y-2.5 overflow-y-auto pr-1 scrollbar-thin">
+                          {filteredClients.map((client) => {
+                            const isSelected = client.id === selectedClientId;
+                            const isPublished =
+                              Boolean(publishedInfoByClient[client.id]) ||
+                              client.latest_selection_status === "published";
+                            const isDraft =
+                              !isPublished &&
+                              (Boolean(hasDraftInSessionMap[client.id]) ||
+                                client.latest_selection_status === "draft");
+
+                            return (
+                              <div
+                                key={client.id}
+                                onClick={() => {
+                                  selectClient(
+                                    client.id,
+                                    notesByClient[client.id] ?? client.raw_manager_notes
+                                  );
+                                  setIsClientsDropdownOpen(false);
+                                }}
+                                className={cn(
+                                  "rounded-[8px] border p-3 transition-colors cursor-pointer select-none",
+                                  isSelected
+                                    ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
+                                    : "border-[#262C35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0 flex items-center gap-2">
+                                    <Building2
+                                      className={cn(
+                                        "h-4 w-4 shrink-0",
+                                        isSelected ? "text-[#E5C378]" : "text-[#8E95A0]"
+                                      )}
+                                      strokeWidth={1.75}
+                                    />
+                                    <p
+                                      className={cn(
+                                        "truncate text-[13px] font-medium leading-snug",
+                                        isSelected ? "text-white font-semibold" : "text-[#F3F4F6]"
+                                      )}
+                                    >
+                                      {client.company_name}
+                                    </p>
+                                  </div>
+
+                                  {/* Строгие статусные ячейки Novel.AI */}
+                                  {isPublished ? (
+                                    <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[10px] font-bold text-[#34D399] tracking-wider tabular-nums">
+                                      [ КП АКТИВНО ]
+                                    </span>
+                                  ) : isDraft ? (
+                                    <span className="shrink-0 rounded-[4px] border border-[#7C4A19] bg-[#22160C]/90 px-2 py-0.5 text-[10px] font-bold text-[#E59837] tracking-wider tabular-nums">
+                                      [ ЧЕРНОВИК ]
+                                    </span>
+                                  ) : (
+                                    <span className="shrink-0 rounded-[4px] border border-[#2B3545] bg-[#161B22]/90 px-2 py-0.5 text-[10px] font-bold text-[#8E95A0] tracking-wider tabular-nums">
+                                      [ НОВЫЙ ]
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
+                                  <span className="inline-flex items-center gap-1.5 truncate">
+                                    {client.contact_person ? (
+                                      <>
+                                        <UserCheck className="h-3.5 w-3.5 text-[#8E95A0] shrink-0" strokeWidth={1.5} />
+                                        <span className="truncate">{client.contact_person}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-[#636B78]">Контакт не указан</span>
+                                    )}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#E5C378]">
+                                      ВЫБРАН
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {isDashboardLoading ? (
-                <div className="flex h-64 items-center justify-center rounded-card border border-border bg-surface text-sm text-ink-muted">
+                <div className="flex h-64 items-center justify-center rounded-[12px] border border-[#262D35] bg-[#161B22] text-sm text-[#8E95A0]">
                   Загрузка рабочего пространства менеджера...
                 </div>
               ) : !activeClient ? (
-                <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-card border border-border bg-surface p-6 text-center shadow-card">
-                  <p className="text-sm font-medium text-ink">
+                <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] p-6 text-center shadow-card">
+                  <p className="text-sm font-medium text-white">
                     Клиент не выбран
                   </p>
                   <button
                     type="button"
-                    onClick={toggleSidebar}
-                    className="inline-flex items-center gap-2 rounded-control bg-pine px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                    onClick={handleToggleClientsDropdown}
+                    className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-gradient-to-r hover:from-[#D4AF37] hover:via-[#E5C378] hover:to-[#D4AF37] hover:text-[#0E1215]"
                   >
                     <PanelLeftOpen className="h-4 w-4" />
                     <span>Выбрать компанию из списка</span>
@@ -350,40 +473,40 @@ export function ManagerWorkspacePage() {
               ) : (
                 <>
                   {/* Компактная шапка активного клиента */}
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-card">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-control bg-pine/10 text-pine">
-                      <Building2 className="h-4 w-4" strokeWidth={1.75} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h1 className="text-base font-semibold text-ink">
-                          {activeClient.company_name}
-                        </h1>
-                        {activeClient.contact_person && (
-                          <span className="inline-flex items-center gap-1 text-xs text-ink-muted">
-                            · <UserCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            {activeClient.contact_person}
-                          </span>
-                        )}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-4 py-3 shadow-md">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#2D3540] bg-[#12161A] text-[#38BDF8]">
+                        <Building2 className="h-4 w-4" strokeWidth={1.75} />
                       </div>
-                      <p className="text-[11px] text-ink-muted">
-                        Формирование календаря отраслевых мероприятий, расчет взносов и подготовка спикеров
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h1 className="text-base font-semibold text-white">
+                            {activeClient.company_name}
+                          </h1>
+                          {activeClient.contact_person && (
+                            <span className="inline-flex items-center gap-1 text-xs text-[#8E95A0]">
+                              · <UserCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              {activeClient.contact_person}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#8E95A0]">
+                          Формирование календаря отраслевых мероприятий, расчет взносов и подготовка спикеров
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-[#8E95A0]">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">Путь клиента:</span>
+                      <span className="rounded-[4px] border border-[#262D35] bg-[#1A1E24] px-2.5 py-0.5 text-xs font-medium text-[#D1D5DB] tabular-nums">
+                        {activeMatchResult
+                          ? activeMagicToken
+                            ? "Этап 07 · Согласование с клиентом"
+                            : "Этап 05–06 · Сравнение и рекомендация"
+                          : "Этап 01–04 · Запрос и подбор возможностей"}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 text-xs text-ink-muted">
-                    <span>Путь клиента:</span>
-                    <span className="rounded-badge bg-canvas border border-border px-2 py-0.5 font-medium text-ink-secondary">
-                      {activeMatchResult
-                        ? activeMagicToken
-                          ? "Этап 07 · Согласование с клиентом"
-                          : "Этап 05–06 · Сравнение и рекомендация"
-                        : "Этап 01–04 · Запрос и подбор возможностей"}
-                    </span>
-                  </div>
-                </div>
 
                 {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}
                 {activeMagicToken && (

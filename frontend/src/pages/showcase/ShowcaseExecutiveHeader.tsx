@@ -81,11 +81,11 @@ export function ShowcaseExecutiveHeader({
           <div className="flex flex-col justify-between rounded-card border border-border bg-canvas/55 p-5 sm:p-6 lg:col-span-7">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 rounded-tag bg-novel-dark text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-border">
+                <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#161B22] text-[#D1D5DB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#2B3545]">
                   ПЕРСОНАЛЬНАЯ СЕЛЕКЦИЯ
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-tag bg-novel-sand text-[#282112] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
-                  <CalendarCheck className="h-3 w-3 text-[#644B1D]" strokeWidth={2} />
+                <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] text-[#2DD4BF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#165057]">
+                  <CalendarCheck className="h-3 w-3 text-[#2DD4BF]" strokeWidth={2} />
                   КАЛЕНДАРЬ БЕЗ НАКЛАДОК
                 </span>
               </div>

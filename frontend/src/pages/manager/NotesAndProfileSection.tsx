@@ -151,18 +151,18 @@ export function NotesAndProfileSection({
   };
 
   return (
-    <section className="rounded-card border border-border bg-surface shadow-card overflow-hidden">
+    <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm overflow-hidden">
       {/* Шапка блока Шага 01–03 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-canvas/60 px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="rounded-tag bg-pine text-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
+          <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#60A5FA] px-2 py-0.5 text-[10px] font-bold tracking-wider tabular-nums">
             01
           </span>
-          <span className="font-serif text-sm font-semibold tracking-tight text-ink sm:text-[15px]">
+          <span className="font-serif text-sm font-semibold tracking-tight text-white sm:text-[15px]">
             Запрос клиента и аналитика задач
           </span>
           {hasMatchResult && isCollapsed && (
-            <span className="hidden truncate text-xs text-ink-muted md:inline max-w-[380px]">
+            <span className="hidden truncate text-xs text-[#8E95A0] md:inline max-w-[380px]">
               · «{notes.slice(0, 68)}...»
             </span>
           )}
@@ -173,7 +173,7 @@ export function NotesAndProfileSection({
             <button
               type="button"
               onClick={() => onToggleCollapsed(!isCollapsed)}
-              className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-colors hover:border-[#38414F] hover:bg-[#1E252E] hover:text-white"
             >
               <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
               <span>{isCollapsed ? "Развернуть бриф" : "Свернуть бриф"}</span>
@@ -189,25 +189,25 @@ export function NotesAndProfileSection({
 
       {/* Раскрываемая область ввода конспекта установочной встречи */}
       {(!isCollapsed || !hasMatchResult) && (
-        <div className="p-4 border-b border-border/80 bg-surface">
+        <div className="p-4 border-b border-[#21262F] bg-[#161B22]">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-            <label className="text-xs font-semibold text-ink-secondary">
+            <label className="text-xs font-semibold text-[#D1D5DB]">
               Конспект установочной встречи с клиентом:
             </label>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-ink-faint">Готовые кейсы:</span>
+              <span className="text-[11px] font-medium text-[#727985]">Готовые кейсы:</span>
               {DEMO_NOTE_PRESETS.map((preset) => (
                 <button
                   key={preset.category}
                   type="button"
                   onClick={() => onNotesChange(preset.text)}
-                  className="inline-flex items-center gap-1.5 rounded-badge border border-border bg-canvas/80 px-2 py-0.5 text-[11px] transition-all hover:border-pine/50 hover:bg-surface"
+                  className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#38BDF8] hover:bg-[#161E28]"
                 >
-                  <span className="rounded-tag bg-novel-sand px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#342812]">
+                  <span className="rounded-[3px] border border-[#7C4A19] bg-[#22160C] px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#E59837]">
                     {preset.category}
                   </span>
-                  <span className="text-ink-secondary font-medium">{preset.focus}</span>
-                  <span className="text-ink-faint">· {preset.budget}</span>
+                  <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
+                  <span className="text-[#8E95A0]">· {preset.budget}</span>
                 </button>
               ))}
             </div>
@@ -218,11 +218,11 @@ export function NotesAndProfileSection({
             value={notes}
             onChange={(e) => onNotesChange(e.target.value)}
             placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
-            className="w-full rounded-control border border-border bg-canvas/40 p-3 text-sm leading-relaxed text-ink placeholder:text-ink-faint focus:border-pine focus:bg-surface focus:outline-none"
+            className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
           />
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] text-ink-muted">
+            <p className="text-[11px] text-[#8E95A0]">
               Система автоматически извлечет параметры, проверит пересечения дат и рассчитает 2 пакета с учетом скидок Early Bird.
             </p>
             <Button
@@ -231,16 +231,17 @@ export function NotesAndProfileSection({
               size="md"
               disabled={isMatching || notes.trim().length < 10}
               onClick={onRunInitialMatch}
+              className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] transition-all"
             >
               {isMatching ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin text-[#0E1215]" />
                   <span>Формируем подборку...</span>
                 </>
               ) : (
                 <>
                   <span>Подобрать варианты пакетов</span>
-                  <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
+                  <ArrowRight className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
                 </>
               )}
             </Button>
@@ -278,16 +279,16 @@ export function NotesAndProfileSection({
 
       {/* Строгая 5-ячеечная табличная строка параметров в стиле Novel.AI */}
       {editableProfile && (
-        <div className="bg-surface">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-2 bg-surface-muted/40">
+        <div className="bg-[#161B22]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
             <div className="flex items-center gap-2">
-              <span className="rounded-tag bg-novel-dark text-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+              <span className="rounded-[4px] border border-[#2B3545] bg-[#161B22] text-[#D1D5DB] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider tabular-nums">
                 КРИТЕРИИ
               </span>
-              <span className="text-xs font-semibold text-ink">
+              <span className="text-xs font-semibold text-white">
                 Параметры отбора площадок
               </span>
-              <span className="hidden sm:inline text-[11px] text-ink-muted">
+              <span className="hidden sm:inline text-[11px] text-[#8E95A0]">
                 · Ручная калибровка параметров поиска
               </span>
             </div>
@@ -297,16 +298,17 @@ export function NotesAndProfileSection({
               size="xs"
               disabled={isMatching}
               onClick={onRematchWithOverride}
+              className="border-[#262D35] bg-[#161B21] text-xs text-white hover:border-[#E5C378] hover:text-[#E5C378]"
             >
               <RotateCcw className="h-3 w-3" strokeWidth={1.75} />
               <span>Пересобрать пакеты</span>
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
+          <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
             {/* Ячейка 1: Бюджет и кол-во событий */}
-            <div className="p-3">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            <div className="p-3 bg-[#161B22]">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                 1. Лимит бюджета (₽)
               </span>
               <div className="mt-1.5 flex items-center gap-1.5">
@@ -319,10 +321,10 @@ export function NotesAndProfileSection({
                     const val = Math.max(0, Number(e.target.value) || 0);
                     onUpdateProfile((prev) => ({ ...prev, total_budget_max: val }));
                   }}
-                  className="h-7 w-full rounded-badge border border-border bg-canvas px-2 text-xs font-semibold text-ink tabular-nums focus:border-pine focus:bg-surface focus:outline-none"
+                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
                 />
               </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] text-ink-muted">
+              <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Площадок в пакете:</span>
                 <select
                   value={editableProfile.target_events_count}
@@ -332,10 +334,10 @@ export function NotesAndProfileSection({
                       target_events_count: Number(e.target.value) || 3,
                     }))
                   }
-                  className="rounded border border-border bg-canvas px-1.5 py-0.5 text-xs font-semibold text-ink tabular-nums focus:border-pine focus:outline-none"
+                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
                 >
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
+                    <option key={n} value={n} className="bg-[#161B21] text-white">
                       {n}
                     </option>
                   ))}
@@ -344,12 +346,12 @@ export function NotesAndProfileSection({
             </div>
 
             {/* Ячейка 2: География и Онлайн */}
-            <div className="p-3">
+            <div className="p-3 bg-[#161B22]">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                   2. География
                 </span>
-                <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-ink-secondary">
+                <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB]">
                   <input
                     type="checkbox"
                     checked={editableProfile.include_online}
@@ -359,7 +361,7 @@ export function NotesAndProfileSection({
                         include_online: e.target.checked,
                       }))
                     }
-                    className="h-3 w-3 rounded accent-pine"
+                    className="h-3 w-3 rounded accent-[#38BDF8]"
                   />
                   <span>+ Онлайн</span>
                 </label>
@@ -374,10 +376,10 @@ export function NotesAndProfileSection({
                       type="button"
                       onClick={() => handleToggleCity(city)}
                       className={cn(
-                        "rounded-badge border px-1.5 py-0.5 text-[11px] transition-colors",
+                        "rounded-[4px] border px-1.5 py-0.5 text-[11px] transition-colors",
                         active
-                          ? "border-pine bg-pine text-white font-medium"
-                          : "border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
+                          ? "border-[#38BDF8] bg-[#121E2C] text-[#60A5FA] font-medium"
+                          : "border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
                       )}
                     >
                       {city === "Санкт-Петербург" ? "СПб" : city}
@@ -389,7 +391,7 @@ export function NotesAndProfileSection({
                   .map((customCity) => (
                     <span
                       key={customCity}
-                      className="inline-flex items-center gap-1 rounded-badge border border-pine bg-pine px-1.5 py-0.5 text-[11px] font-medium text-white"
+                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#38BDF8] bg-[#121E2C] px-1.5 py-0.5 text-[11px] font-medium text-[#60A5FA]"
                     >
                       {customCity}
                       <button
@@ -409,19 +411,19 @@ export function NotesAndProfileSection({
                   value={newCityText}
                   onChange={(e) => setNewCityText(e.target.value)}
                   placeholder="+ Город..."
-                  className="h-6 w-full rounded border border-border bg-canvas px-1.5 text-[11px] text-ink placeholder:text-ink-faint focus:border-pine focus:outline-none"
+                  className="h-6 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
                 />
               </form>
             </div>
 
             {/* Ячейка 3: Период планирования */}
-            <div className="p-3">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            <div className="p-3 bg-[#161B22]">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                 3. Период календаря
               </span>
               <div className="mt-1.5 space-y-1.5">
                 <div className="flex items-center justify-between gap-1 text-[11px]">
-                  <span className="text-ink-muted">С:</span>
+                  <span className="text-[#8E95A0]">С:</span>
                   <input
                     type="date"
                     value={editableProfile.date_from || ""}
@@ -431,11 +433,11 @@ export function NotesAndProfileSection({
                         date_from: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded border border-border bg-canvas px-1.5 text-[11px] text-ink tabular-nums focus:border-pine focus:outline-none"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
                   />
                 </div>
                 <div className="flex items-center justify-between gap-1 text-[11px]">
-                  <span className="text-ink-muted">По:</span>
+                  <span className="text-[#8E95A0]">По:</span>
                   <input
                     type="date"
                     value={editableProfile.date_to || ""}
@@ -445,15 +447,15 @@ export function NotesAndProfileSection({
                         date_to: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded border border-border bg-canvas px-1.5 text-[11px] text-ink tabular-nums focus:border-pine focus:outline-none"
+                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {/* Ячейка 4: Роли участия и спикерство */}
-            <div className="p-3">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            <div className="p-3 bg-[#161B22]">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                 4. Форматы участия
               </span>
               <div className="mt-1.5 flex flex-wrap gap-1">
@@ -465,10 +467,10 @@ export function NotesAndProfileSection({
                       type="button"
                       onClick={() => handleToggleRole(role)}
                       className={cn(
-                        "rounded-badge border px-1.5 py-0.5 text-[11px] transition-colors",
+                        "rounded-[4px] border px-1.5 py-0.5 text-[11px] transition-colors",
                         active
-                          ? "border-pine bg-pine text-white font-medium"
-                          : "border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
+                          ? "border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-medium"
+                          : "border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
                       )}
                     >
                       {ROLE_BADGE_LABELS[role]}
@@ -477,7 +479,7 @@ export function NotesAndProfileSection({
                 })}
               </div>
 
-              <div className="mt-2 flex items-center justify-between text-[11px] text-ink-muted">
+              <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Мин. докладов спикером:</span>
                 <select
                   value={editableProfile.min_speaker_events}
@@ -492,10 +494,10 @@ export function NotesAndProfileSection({
                           : prev.required_roles,
                     }));
                   }}
-                  className="rounded border border-border bg-canvas px-1.5 py-0.5 text-xs font-semibold text-ink tabular-nums focus:border-pine focus:outline-none"
+                  className="rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums focus:border-[#38BDF8] focus:outline-none"
                 >
                   {[0, 1, 2, 3].map((n) => (
-                    <option key={n} value={n}>
+                    <option key={n} value={n} className="bg-[#161B21] text-white">
                       {n}
                     </option>
                   ))}
@@ -504,21 +506,21 @@ export function NotesAndProfileSection({
             </div>
 
             {/* Ячейка 5: Отраслевые темы и ЦА */}
-            <div className="p-3">
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            <div className="p-3 bg-[#161B22]">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                 5. Темы, продукт и ЦА
               </span>
               <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
                 {editableProfile.themes_keywords.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-badge border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-ink"
+                    className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-white"
                   >
                     <span>{tag}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveTheme(tag)}
-                      className="text-ink-muted hover:text-terracotta"
+                      className="text-[#8E95A0] hover:text-[#EF4444]"
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -531,11 +533,11 @@ export function NotesAndProfileSection({
                   value={newTagText}
                   onChange={(e) => setNewTagText(e.target.value)}
                   placeholder="+ Добавить тему (КРТ, BIM...)"
-                  className="h-6 flex-1 rounded border border-border bg-canvas px-1.5 text-[11px] text-ink placeholder:text-ink-faint focus:border-pine focus:outline-none"
+                  className="h-6 flex-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-canvas text-ink-secondary hover:bg-surface-muted"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#38BDF8] hover:text-white"
                 >
                   <Plus className="h-3 w-3" />
                 </button>
@@ -543,14 +545,14 @@ export function NotesAndProfileSection({
             </div>
           </div>
 
-          <div className="border-t border-border/60 bg-canvas/40 px-4 py-1.5 flex items-center justify-between text-[11px] text-ink-muted">
+          <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-1.5 flex items-center justify-between text-[11px] text-[#8E95A0]">
             <span className="truncate">
               Поисковый вектор (RRF):{" "}
-              <strong className="font-medium text-ink-secondary">
+              <strong className="font-medium text-[#D1D5DB]">
                 {editableProfile.semantic_search_query}
               </strong>
             </span>
-            <span className="shrink-0 tabular-nums">
+            <span className="shrink-0 tabular-nums text-[#D1D5DB]">
               Ориентир: {formatNumberCompact(editableProfile.total_budget_max)} ₽
             </span>
           </div>

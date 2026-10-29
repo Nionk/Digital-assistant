@@ -142,12 +142,12 @@ export function ShowcaseEventCard({
             </span>
 
             {isInterested && (
-              <span className="inline-flex items-center gap-1 rounded-tag bg-novel-emerald px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm border border-[#144A39]">
+              <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#2DD4BF] border border-[#165057] shadow-sm">
                 <Check className="h-3 w-3" strokeWidth={2.5} />В ПЛАНЕ УЧАСТИЯ
               </span>
             )}
             {isRejected && (
-              <span className="inline-flex items-center gap-1 rounded-tag bg-novel-wine px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm border border-[#7A2430]">
+              <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#28131E] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#F472B6] shadow-sm border border-[#5E2242]">
                 ЗАПРОШЕНА ЗАМЕНА
               </span>
             )}
@@ -203,10 +203,10 @@ export function ShowcaseEventCard({
                 <Badge
                   variant={
                     item.participation_role === "speaker"
-                      ? "novelSand"
+                      ? "ebGold"
                       : item.participation_role === "sponsor"
-                        ? "novelGold"
-                        : "novelDark"
+                        ? "ebRose"
+                        : "ebBlue"
                   }
                 >
                   {ROLE_BADGE_LABELS[item.participation_role]}
@@ -230,12 +230,12 @@ export function ShowcaseEventCard({
               </div>
 
               {item.savings > 0 ? (
-                <Badge variant="novelSand" className="text-[9px]">
+                <span className="shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E]/90 px-2 py-0.5 text-[10px] font-bold text-[#34D399] tabular-nums">
                   ВЫГОДА {formatRub(item.savings)}
                   {item.early_bird_deadline
                     ? ` до ${formatDateShort(item.early_bird_deadline).slice(0, 5)}`
                     : ""}
-                </Badge>
+                </span>
               ) : (
                 <span className="text-[11px] text-ink-muted">
                   Фиксированный взнос
