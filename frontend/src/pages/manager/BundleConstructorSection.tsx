@@ -334,7 +334,7 @@ function EventBuilderRow({
                   rows={2}
                   value={rationale}
                   onChange={(e) => onUpdateRationale(e.target.value)}
-                  className="mt-1 w-full rounded border border-[#262D35] bg-[#12161A] p-1.5 text-xs text-white focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150"
+                  className="mt-1 w-full rounded border border-[#262D35] bg-[#12161A] p-1.5 text-xs text-white [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150"
                 />
               ) : (
                 <p

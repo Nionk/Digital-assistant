@@ -75,8 +75,8 @@ export function CustomSelect<T extends number | string = number | string>({
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          "flex items-center justify-between gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-xs font-medium text-white tabular-nums transition-all duration-150 ease-out select-none cursor-pointer",
-          "hover:border-[#E5C378] focus:border-[#E5C378] focus:outline-none focus:ring-1 focus:ring-[#E5C378]/30",
+          "flex items-center justify-between gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-xs font-medium text-white tabular-nums transition-all duration-150 ease-out select-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none active:outline-none",
+          "hover:border-[#E5C378] focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30",
           isOpen && "border-[#E5C378] ring-1 ring-[#E5C378]/30",
           disabled && "cursor-not-allowed opacity-50",
           buttonClassName

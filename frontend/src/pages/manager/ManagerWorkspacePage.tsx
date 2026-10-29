@@ -280,7 +280,7 @@ export function ManagerWorkspacePage() {
       />
 
       {workspaceMode === "catalog" ? (
-        <main className="flex-1">
+        <main className="flex-1 overflow-y-auto scrollbar-thin">
           <EventsCatalogView />
         </main>
       ) : (
@@ -360,7 +360,7 @@ export function ManagerWorkspacePage() {
                             value={clientSearchQuery}
                             onChange={(e) => setClientSearchQuery(e.target.value)}
                             placeholder="Поиск компании или контакта..."
-                            className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#161B21] pl-10 pr-3.5 text-sm text-white placeholder:text-[#8E95A0] shadow-inner transition-all duration-150 ease-out hover:border-[#4B5565] focus:border-[#E5C378] focus:bg-[#1A2027] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none"
+                            className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#161B21] pl-10 pr-3.5 text-sm text-white placeholder:text-[#8E95A0] shadow-inner transition-all duration-150 ease-out hover:border-[#4B5565] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:bg-[#1A2027] focus:ring-1 focus:ring-[#E5C378]/30"
                           />
                         </div>
 

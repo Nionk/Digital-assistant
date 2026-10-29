@@ -186,7 +186,7 @@ export function FinancialAndPitchPanel({
           rows={7}
           value={pitchText}
           onChange={(e) => onPitchChange(e.target.value)}
-          className="mt-2.5 w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 focus:outline-none transition-all duration-150 scrollbar-thin"
+          className="mt-2.5 w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:ring-1 focus:ring-[#E5C378]/30 transition-all duration-150 scrollbar-thin"
         />
 
         <div className="mt-3 space-y-2">
