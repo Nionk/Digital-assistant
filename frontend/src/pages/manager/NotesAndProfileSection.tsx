@@ -63,11 +63,26 @@ const DEMO_NOTE_PRESETS = [
 const ALL_ROLES: ParticipationRole[] = ["delegate", "speaker", "sponsor"];
 
 const LOADING_PHRASES = [
-  "Подбираем предложения...",
-  "Анализируем профиль клиента...",
-  "Сверяем даты и проверяем календарь накладок...",
-  "Рассчитываем льготные тарифы Early Bird...",
-  "Еще немного, формируем варианты пакетов...",
+  "Анализируем цели клиента и сопоставляем с календарем отрасли...",
+  "Проверяем спикерские слоты на ключевых пленарных сессиях...",
+  "Выбиваем максимальную скидку Early Bird у организаторов...",
+  "Сверяем даты, чтобы спикер не телепортировался между городами...",
+  "Ищем закрытые деловые завтраки с первыми лицами индустрии...",
+  "Фильтруем скучные доклады, оставляем только целевой нетворкинг...",
+  "Подбираем выставочные зоны с максимальной проходимостью целевой аудитории...",
+  "Считаем отдачу и выгоду каждого вложенного рубля в участие...",
+  "Узнаём инсайды у программных директоров и отраслевых продюсеров...",
+  "Проверяем, чтобы на площадке подавали приличный зерновой кофе...",
+  "Калибруем пакеты: от экономного делегата до генерального партнёра...",
+  "Отсекаем площадки с накрученной посещаемостью и фальшивыми охватами...",
+  "Упаковываем смыслы выступления под актуальные боли заказчиков...",
+  "Ищем события, где точно соберутся ваши будущие ключевые клиенты...",
+  "Формируем идеальное трио площадок под утвержденный бюджет...",
+  "Согласовываем тайминги кофе-брейков и кулуарных переговоров...",
+  "Убеждаемся, что бейджи спикеров напечатают без досадных опечаток...",
+  "Проверяем акустику залов и видимость слайдов презентации...",
+  "Исключаем пересечения дат с семейными отпусками и дедлайнами...",
+  "Финальная полировка готовых пакетов предложений...",
 ];
 
 export function NotesAndProfileSection({
@@ -111,15 +126,22 @@ export function NotesAndProfileSection({
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [catalogData?.events]);
 
-  // Живая ротация привлекательных фраз при подборе
+  // Живая ротация привлекательных фраз при подборе (каждые 3.3с в случайном порядке)
   React.useEffect(() => {
     if (!isMatching) {
       setLoadingPhraseIndex(0);
       return;
     }
+    // Случайная стартовая фраза
+    setLoadingPhraseIndex(Math.floor(Math.random() * LOADING_PHRASES.length));
+
     const interval = setInterval(() => {
-      setLoadingPhraseIndex((prev) => (prev + 1) % LOADING_PHRASES.length);
-    }, 1100);
+      setLoadingPhraseIndex((prev) => {
+        let next = Math.floor(Math.random() * (LOADING_PHRASES.length - 1));
+        if (next >= prev) next += 1;
+        return next;
+      });
+    }, 3300);
     return () => clearInterval(interval);
   }, [isMatching]);
 
@@ -300,11 +322,20 @@ export function NotesAndProfileSection({
       {/* Круглый движущийся индикатор загрузки со сменяющимися фразами */}
       {isMatching && (
         <div className="border-b border-[#21262F] bg-[#12161A] px-4 py-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-h-[26px]">
             <div className="h-5 w-5 shrink-0 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
-            <p className="font-serif italic text-xs font-medium text-[#E5C378] transition-all duration-300">
-              {LOADING_PHRASES[loadingPhraseIndex]}
-            </p>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={loadingPhraseIndex}
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.28, ease: "easeInOut" }}
+                className="font-serif italic text-xs font-medium text-[#E5C378]"
+              >
+                {LOADING_PHRASES[loadingPhraseIndex]}
+              </motion.p>
+            </AnimatePresence>
           </div>
         </div>
       )}
