@@ -235,7 +235,7 @@ export function NotesAndProfileSection({
                 rows={3}
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
-                placeholder="Опишите итоги разговора с клиентом: какие задачи нужно решить (выход на застройщиков, спикерство в сессии, стенд), желаемые города, период и общий лимит бюджета..."
+                placeholder="Вводные встречи: задачи участия, ключевые темы, спикерство/стенд, география и лимит бюджета..."
                 className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
               />
 

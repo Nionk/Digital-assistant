@@ -50,8 +50,8 @@ export function ManagerHeader({
 
   return (
     <header className="sticky top-0 z-30 flex h-[67px] shrink-0 items-center justify-between border-b border-[#1A2026] bg-[#0E1215] px-4 sm:px-6 shadow-sm relative">
-      {/* Тонкая неоново-голубая линия в цвет куба логотипа, отделяющая хедер от основного блока */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-[#1E3A8A]/30 via-[#38BDF8]/80 to-[#1E3A8A]/30 shadow-[0_1px_6px_rgba(56,189,248,0.35)]" />
+      {/* Деликатная бронзово-золотая нить переплёта, отделяющая хедер от контента */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
 
       {/* 1. Левая часть: ТОЛЬКО logo.png, клик ведет на подбор клиентам */}
       <div className="flex items-center">

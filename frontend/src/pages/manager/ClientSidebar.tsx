@@ -70,7 +70,7 @@ export function ClientSidebar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Поиск компании..."
-            className="h-8 w-full rounded-[6px] border border-[#262C35] bg-[#161B21] pl-8 pr-2.5 text-xs text-white placeholder:text-[#6B7280] focus:border-[#38BDF8] focus:bg-[#1A2027] focus:outline-none"
+            className="h-8 w-full rounded-[6px] border border-[#262C35] bg-[#161B21] pl-8 pr-2.5 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus:border-[#E5C378] focus:bg-[#181E25] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
           />
         </div>
       </div>

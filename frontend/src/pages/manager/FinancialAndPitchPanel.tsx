@@ -252,9 +252,9 @@ export function FinancialAndPitchPanel({
                   href={publishedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#38BDF8]/50 bg-[#121E2C] px-3 text-xs font-medium text-[#60A5FA] transition-all duration-200 hover:bg-[#1E3A5F] hover:text-[#BAE6FD] hover:border-[#38BDF8] hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]"
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#7C5A20]/70 bg-[#1E190E] px-3 text-xs font-serif italic text-[#E5C378] transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] select-none"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <ExternalLink className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.75} />
                   <span>Открыть витрину</span>
                 </a>
               </div>
