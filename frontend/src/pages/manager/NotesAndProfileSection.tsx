@@ -494,7 +494,7 @@ export function NotesAndProfileSection({
                     <button
                       type="button"
                       className={cn(
-                        "w-full flex h-6.5 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
+                        "w-full flex h-7 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
                         isOpen && "border-[#E5C378] text-[#E5C378] bg-[#161B21]"
                       )}
                     >
@@ -658,7 +658,7 @@ export function NotesAndProfileSection({
                     <button
                       type="button"
                       className={cn(
-                        "w-full flex h-6.5 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
+                        "w-full flex h-7 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
                         isOpen && "border-[#E5C378] text-[#E5C378] bg-[#161B21]"
                       )}
                     >

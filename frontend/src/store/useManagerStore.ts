@@ -22,10 +22,19 @@ export interface ProducerProfile {
 
 export const PRODUCER_PROFILES: ProducerProfile[] = [
   {
+    id: "anna",
+    name: "Анна Соколова",
+    role: "Ведущий менеджер сопровождения",
+    department: "Девелопмент, КРТ и Урбанистика",
+    avatarText: "АС",
+    avatarBg: "bg-pine",
+    dealsCount: 6,
+  },
+  {
     id: "ekaterina",
     name: "Екатерина Смирнова",
     role: "Старший продюсер проектов",
-    department: "Девелопмент, КРТ и Урбанистика",
+    department: "Архитектура и Городская среда",
     avatarText: "ЕС",
     avatarBg: "bg-pine",
     dealsCount: 5,
@@ -38,15 +47,6 @@ export const PRODUCER_PROFILES: ProducerProfile[] = [
     avatarText: "АМ",
     avatarBg: "bg-novel-slate",
     dealsCount: 3,
-  },
-  {
-    id: "guest",
-    name: "Куратор (Демо-доступ)",
-    role: "Ознакомительный доступ",
-    department: "Все отраслевые направления",
-    avatarText: "СК",
-    avatarBg: "bg-novel-dark",
-    dealsCount: 8,
   },
 ];
 

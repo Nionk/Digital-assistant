@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
   Globe,
-  Plus,
+  Check,
   Compass,
   Edit3,
   Building,
   Sparkles,
+  ChevronRight,
 } from "lucide-react";
 import type { BundleVariantOut } from "@/api/types";
 import type {
@@ -34,6 +35,7 @@ interface BundleConstructorSectionProps {
   onToggleEventIncluded: (eventId: number) => void;
   onChangeEventTariff: (eventId: number, tariffId: number) => void;
   onUpdateEventRationale: (eventId: number, rationale: string) => void;
+  onOpenEventDetails?: (eventId: number) => void;
 }
 
 export function BundleConstructorSection({
@@ -44,6 +46,7 @@ export function BundleConstructorSection({
   onToggleEventIncluded,
   onChangeEventTariff,
   onUpdateEventRationale,
+  onOpenEventDetails,
 }: BundleConstructorSectionProps) {
   const mainRows = summary.rows.filter((r) => !r.isBonusSlot);
   const bonusRows = summary.rows.filter((r) => r.isBonusSlot);
@@ -64,9 +67,9 @@ export function BundleConstructorSection({
         <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
           Подходящих мероприятий не найдено
         </h3>
-        <p className="mx-auto mt-1.5 max-w-md font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
+        <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-[#8E95A0]">
           По заданным критериям (город, период дат, формат) в базе знаний агентства нет активных площадок.
-          Скорректируйте географию или параметры отбора в блоке выше, либо добавьте новые мероприятия во вкладке «База мероприятий».
+          Скорректируйте географию или параметры отбора в блоке выше, либо изучите весь реестр во вкладке «База площадок».
         </p>
       </section>
     );
@@ -122,7 +125,7 @@ export function BundleConstructorSection({
                         : "border-[#262D35] bg-[#12161A]"
                     )}
                   >
-                    {isActive && <Plus className="h-3 w-3 stroke-[3]" />}
+                    {isActive && <Check className="h-3 w-3 stroke-[3]" />}
                   </span>
                 </div>
 
@@ -171,6 +174,11 @@ export function BundleConstructorSection({
               onUpdateRationale={(text) =>
                 onUpdateEventRationale(row.item.event_id, text)
               }
+              onOpenDetails={
+                onOpenEventDetails
+                  ? () => onOpenEventDetails(row.item.event_id)
+                  : undefined
+              }
             />
           ))}
         </motion.div>
@@ -200,6 +208,11 @@ export function BundleConstructorSection({
                 onUpdateRationale={(text) =>
                   onUpdateEventRationale(row.item.event_id, text)
                 }
+                onOpenDetails={
+                  onOpenEventDetails
+                    ? () => onOpenEventDetails(row.item.event_id)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -214,6 +227,7 @@ interface EventBuilderRowProps {
   onToggleIncluded: () => void;
   onChangeTariff: (tariffId: number) => void;
   onUpdateRationale: (rationale: string) => void;
+  onOpenDetails?: () => void;
 }
 
 function EventBuilderRow({
@@ -221,6 +235,7 @@ function EventBuilderRow({
   onToggleIncluded,
   onChangeTariff,
   onUpdateRationale,
+  onOpenDetails,
 }: EventBuilderRowProps) {
   const [isEditingRationale, setIsEditingRationale] = React.useState(false);
   const { item, isIncluded, selectedTariff, rationale, isBonusSlot } = row;
@@ -259,7 +274,7 @@ function EventBuilderRow({
                 : "border-[#262D35] bg-[#12161A] hover:border-[#E5C378]"
             )}
           >
-            {isIncluded && <Plus className="h-3 w-3 stroke-[3]" />}
+            {isIncluded && <Check className="h-3 w-3 stroke-[3]" />}
           </button>
 
           {/* Календарный лист даты с золотой рамкой, увеличенной высотой и вертикальным центрированием */}
@@ -306,9 +321,33 @@ function EventBuilderRow({
               )}
             </div>
 
-            <h3 className="mt-1 font-serif text-[15px] font-semibold leading-snug text-white">
-              {item.canonical_title}
-            </h3>
+            <div className="mt-1 flex items-start justify-between gap-2">
+              <h3
+                onClick={onOpenDetails}
+                className={cn(
+                  "font-serif text-[15px] font-semibold leading-snug text-white transition-colors",
+                  onOpenDetails && "cursor-pointer hover:text-[#E5C378]"
+                )}
+                title={
+                  onOpenDetails
+                    ? "Нажмите, чтобы открыть карточку мероприятия и все тарифы"
+                    : undefined
+                }
+              >
+                {item.canonical_title}
+              </h3>
+
+              {onOpenDetails && (
+                <button
+                  type="button"
+                  onClick={onOpenDetails}
+                  className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-serif italic text-[#8E95A0] transition-colors hover:text-[#E5C378] cursor-pointer"
+                >
+                  <span>О площадке</span>
+                  <ChevronRight className="h-3 w-3" strokeWidth={2} />
+                </button>
+              )}
+            </div>
 
             {/* Темы строкой */}
             {item.themes.length > 0 && (

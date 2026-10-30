@@ -219,11 +219,14 @@ export function ClientShowcasePage() {
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 shadow-sm">
           {/* Верхняя панель: Заголовок + Плавные селекторы без вспышек */}
           <div className="flex flex-col justify-between gap-4 border-b border-[#21262F] pb-4 lg:flex-row lg:items-center">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
               <h2 className="font-serif text-lg font-bold tracking-tight text-white sm:text-xl">
                 Рекомендовано для вас
               </h2>
+              <span className="rounded-[5px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-xs font-semibold text-[#E5C378] tabular-nums">
+                {filteredItems.length}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -269,19 +272,19 @@ export function ClientShowcasePage() {
                 })}
               </div>
 
-              {/* Плавный переключатель Карусель / Сетка */}
+              {/* Плавный переключатель Сетка / Карусель */}
               <div className="flex items-center rounded-[8px] border border-[#232931] bg-[#12161A] p-1 gap-0.5 shadow-inner">
                 {(
                   [
                     {
-                      id: "carousel",
-                      label: "Карусель",
-                      icon: GalleryHorizontalEnd,
-                    },
-                    {
                       id: "grid",
                       label: "Сетка",
                       icon: LayoutGrid,
+                    },
+                    {
+                      id: "carousel",
+                      label: "Карусель",
+                      icon: GalleryHorizontalEnd,
                     },
                   ] as const
                 ).map((mode) => {
@@ -510,6 +513,10 @@ export function ClientShowcasePage() {
         }}
         isAsking={askMutation.isPending}
         managerFullName={showcase.manager_full_name}
+        onApproveEvent={(ev) =>
+          handleReactToItem(ev.selection_item_id, "interested")
+        }
+        isReacting={reactionMutation.isPending}
       />
     </div>
   );

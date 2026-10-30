@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Check,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import type { ShowcaseEventItemOut } from "@/api/types";
 import type { RegulationChatExchange } from "@/store/useShowcaseStore";
@@ -34,6 +35,8 @@ interface RegulationConsultantDrawerProps {
   onAskQuestion: (questionText: string) => void;
   isAsking: boolean;
   managerFullName: string;
+  onApproveEvent?: (event: ShowcaseEventItemOut) => void;
+  isReacting?: boolean;
 }
 
 export function RegulationConsultantDrawer({
@@ -47,6 +50,8 @@ export function RegulationConsultantDrawer({
   onAskQuestion,
   isAsking,
   managerFullName,
+  onApproveEvent,
+  isReacting,
 }: RegulationConsultantDrawerProps) {
   const [inputQuestion, setInputQuestion] = React.useState("");
   const [isEventSelectorOpen, setIsEventSelectorOpen] = React.useState(false);
@@ -318,6 +323,33 @@ export function RegulationConsultantDrawer({
                 <p className="mt-1.5 text-xs leading-relaxed text-[#D1D5DB]">
                   {activeEvent.included_benefits}
                 </p>
+              </div>
+            )}
+
+            {/* Быстрое добавление мероприятия в план участия прямо из окна консультанта */}
+            {onApproveEvent && (
+              <div className="mt-3.5 border-t border-[#21262F] pt-3">
+                {activeEvent.client_reaction === "interested" ? (
+                  <div className="flex items-center justify-center gap-2 rounded-[8px] border border-[#1E5241] bg-[#0E241E] px-3 py-2 text-xs font-semibold text-[#34D399]">
+                    <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                    <span>Мероприятие в вашем плане участия</span>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="monolith"
+                    size="md"
+                    disabled={isReacting}
+                    onClick={() => onApproveEvent(activeEvent)}
+                    className="w-full text-xs font-semibold cursor-pointer"
+                  >
+                    <Plus
+                      className="h-4 w-4 text-[#E5C378] monolith-icon"
+                      strokeWidth={2.25}
+                    />
+                    <span>Добавить мероприятие в план</span>
+                  </Button>
+                )}
               </div>
             )}
           </section>

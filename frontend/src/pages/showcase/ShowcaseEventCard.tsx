@@ -91,6 +91,12 @@ export function ShowcaseEventCard({
   };
 
   const handleApproveClick = () => {
+    if (isInterested) {
+      setActiveExpandPanel((prev) =>
+        prev === "accompaniment" ? "none" : "accompaniment"
+      );
+      return;
+    }
     const comment =
       selectedAgencyServices.length > 0
         ? `Опции сопровождения: ${selectedAgencyServices.join(", ")}`

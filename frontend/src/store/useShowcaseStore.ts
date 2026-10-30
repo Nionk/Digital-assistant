@@ -44,7 +44,7 @@ interface ShowcaseState {
 }
 
 export const useShowcaseStore = create<ShowcaseState>((set) => ({
-  layoutMode: "carousel",
+  layoutMode: "grid",
   roleFilter: "all",
   activeDrawerEventId: null,
   drawerInitialTab: "regulation",

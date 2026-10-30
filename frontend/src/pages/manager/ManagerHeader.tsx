@@ -128,7 +128,7 @@ export function ManagerHeader({
           </span>
           <span
             className={cn(
-              "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
+              "rounded bg-[#1A252A] px-1.5 py-0.5 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
               "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
             )}
           >
