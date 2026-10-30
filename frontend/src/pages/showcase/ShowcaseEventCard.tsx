@@ -265,7 +265,7 @@ export function ShowcaseEventCard({
                         ? "ebGold"
                         : item.participation_role === "sponsor"
                           ? "ebRose"
-                          : "ebEmerald"
+                          : "ebBlue"
                     }
                   >
                     {ROLE_BADGE_LABELS[item.participation_role]}

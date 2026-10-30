@@ -16,6 +16,7 @@ import type { ShowcaseEventItemOut } from "@/api/types";
 import type { RegulationChatExchange } from "@/store/useShowcaseStore";
 import { SlideOverDrawer } from "@/components/ui/slide-over-drawer";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   ROLE_BADGE_LABELS,
   formatDateRange,
@@ -242,18 +243,18 @@ export function RegulationConsultantDrawer({
                 </h3>
               </div>
 
-              <span
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-[6px] border px-2.5 py-1 text-[11px] font-semibold",
+              <Badge
+                variant={
                   activeEvent.participation_role === "speaker"
-                    ? "border-[#7C5A20]/60 bg-[#261E0F] text-[#E5C378]"
+                    ? "ebGold"
                     : activeEvent.participation_role === "sponsor"
-                      ? "border-[#5E2242] bg-[#28131E] text-[#F472B6]"
-                      : "border-[#1E5241] bg-[#0E241E] text-[#34D399]"
-                )}
+                      ? "ebRose"
+                      : "ebBlue"
+                }
+                className="text-[11px] shrink-0"
               >
                 {ROLE_BADGE_LABELS[activeEvent.participation_role]}
-              </span>
+              </Badge>
             </div>
 
             <div className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs tabular-nums">
@@ -266,12 +267,14 @@ export function RegulationConsultantDrawer({
                     {formatRub(activeEvent.actual_price)}
                   </span>
                   {activeEvent.savings > 0 && (
-                    <span className="mt-0.5 block text-[11px] font-semibold text-[#34D399]">
-                      Выгода {formatRub(activeEvent.savings)}
-                      {activeEvent.early_bird_deadline
-                        ? ` до ${formatDateShort(activeEvent.early_bird_deadline)}`
-                        : ""}
-                    </span>
+                    <div className="mt-1">
+                      <Badge variant="ebEmerald" className="text-[10px]">
+                        Выгода {formatRub(activeEvent.savings)}
+                        {activeEvent.early_bird_deadline
+                          ? ` до ${formatDateShort(activeEvent.early_bird_deadline)}`
+                          : ""}
+                      </Badge>
+                    </div>
                   )}
                 </div>
               </div>
