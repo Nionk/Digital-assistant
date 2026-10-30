@@ -286,7 +286,6 @@ export function ManagerWorkspacePage() {
         workspaceMode={workspaceMode}
         onModeChange={setWorkspaceMode}
         burningDeadlines={burningDeadlines}
-        eventsCount={catalogData?.total_count}
       />
 
       {workspaceMode === "catalog" ? (

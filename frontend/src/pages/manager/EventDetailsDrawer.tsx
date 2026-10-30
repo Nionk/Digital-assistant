@@ -21,6 +21,7 @@ import {
   formatDateShort,
   formatDateRange,
   formatRub,
+  formatMinPrice,
 } from "@/lib/formatters";
 
 interface EventDetailsDrawerProps {
@@ -72,7 +73,7 @@ export function EventDetailsDrawer({
   const maxSavings = Math.max(0, ...event.tariffs.map((t) => t.savings || 0));
 
   const handleCopySummary = () => {
-    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}Тарифы: от ${minPrice ? formatRub(minPrice) : "По запросу"}\n\nОписание:\n${event.summary}`;
+    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}Тарифы: ${formatMinPrice(minPrice)}\n\nОписание:\n${event.summary}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -197,7 +198,7 @@ export function EventDetailsDrawer({
                 <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-[11px] text-[#8E95A0]">
                   <span>Входной порог:</span>
                   <strong className="text-white font-bold tabular-nums">
-                    {minPrice !== null ? `от ${formatRub(minPrice)}` : "По запросу"}
+                    {formatMinPrice(minPrice)}
                   </strong>
                 </div>
                 {maxSavings > 0 && (

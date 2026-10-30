@@ -33,6 +33,7 @@ import {
   formatCalendarBadge,
   formatDateShort,
   formatRub,
+  formatMinPrice,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -244,9 +245,14 @@ export function EventsCatalogView() {
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 sm:p-4 shadow-sm space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#E5C378]">
-              Отслеживаемый реестр отраслевых площадок
-            </h1>
+            <div className="flex flex-wrap items-baseline gap-2.5">
+              <h1 className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#E5C378]">
+                Отслеживаемый реестр отраслевых площадок
+              </h1>
+              <span className="rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] px-2 py-0.5 text-[11px] font-medium text-[#E5C378] tabular-nums select-none">
+                {events.length} в базе
+              </span>
+            </div>
             <p className="mt-0.5 font-serif italic text-xs leading-relaxed text-[#8E95A0]">
               Каталог конференций, форумов и круглых столов с актуальными тарифами организаторов и скидками Early Bird
             </p>
@@ -596,7 +602,7 @@ export function EventsCatalogView() {
                         {minPrice !== null ? (
                           <div>
                             <span className="font-sans font-bold text-white text-xs">
-                              от {formatRub(minPrice)}
+                              {formatMinPrice(minPrice)}
                             </span>
                             <span className="block text-[10px] text-[#727985] font-serif italic">
                               {ev.tariffs.length} тарифа
@@ -768,7 +774,7 @@ export function EventsCatalogView() {
                 <div className="mt-3 flex items-center justify-between border-t border-[#21262F] pt-2.5 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-sans font-bold text-white tabular-nums">
-                      {minPrice !== null ? `от ${formatRub(minPrice)}` : "По запросу"}
+                      {formatMinPrice(minPrice)}
                     </span>
                     {savings > 0 && (
                       <Badge variant="ebEmerald" className="text-[9px]">

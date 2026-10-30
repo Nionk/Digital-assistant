@@ -118,6 +118,16 @@ export function formatRub(amount: number | null | undefined): string {
   return `${rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0")}\u00A0₽`;
 }
 
+export function formatMinPrice(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) {
+    return "По запросу";
+  }
+  if (amount === 0) {
+    return "Бесплатно";
+  }
+  return `от ${formatRub(amount)}`;
+}
+
 export function formatNumberCompact(amount: number): string {
   const rounded = Math.round(amount);
   return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
