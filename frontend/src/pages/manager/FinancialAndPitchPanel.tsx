@@ -209,7 +209,7 @@ export function FinancialAndPitchPanel({
         <div className="mt-3 space-y-2">
           <Button
             type="button"
-            variant="gold"
+            variant="monolith"
             size="lg"
             disabled={isPublishing || summary.includedRows.length === 0}
             onClick={onPublish}
@@ -219,7 +219,7 @@ export function FinancialAndPitchPanel({
               <span>Публикация витрины...</span>
             ) : (
               <>
-                <Send className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
+                <Send className="h-4 w-4 text-[#E5C378] monolith-icon" strokeWidth={2} />
                 <span>Опубликовать витрину и скопировать ссылку</span>
               </>
             )}

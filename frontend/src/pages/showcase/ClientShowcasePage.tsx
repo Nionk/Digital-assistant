@@ -432,14 +432,14 @@ export function ClientShowcasePage() {
       {/* 4. Блок «Этапы совместной работы и подготовка под задачи бизнеса» */}
       <AgencyWorkflowStepsSection />
 
-      {/* 5. Плавающая кнопка запуска ИИ-консультанта по регламентам в стиле золотого слитка */}
+      {/* 5. Плавающая кнопка запуска ИИ-консультанта по регламентам в стиле обсидианового монолита */}
       {!activeDrawerEventId && items.length > 0 && (
         <button
           type="button"
           onClick={() => openEventDrawer(items[0].event_id, "regulation")}
-          className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-[8px] btn-gold-ingot px-4 py-3 text-xs font-semibold shadow-2xl active:scale-[0.98] transition-transform"
+          className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-xl btn-monolith px-4 py-3 text-xs font-semibold shadow-2xl active:scale-[0.98] transition-transform"
         >
-          <MessageSquareText className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
+          <MessageSquareText className="h-4 w-4 text-[#E5C378] monolith-icon" strokeWidth={2} />
           <span>Вопросы по регламенту и тарифам</span>
         </button>
       )}
