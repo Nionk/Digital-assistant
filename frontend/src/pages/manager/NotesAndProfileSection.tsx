@@ -295,11 +295,11 @@ export function NotesAndProfileSection({
               <div className="mt-3 flex items-center justify-end">
                 <Button
                   type="button"
-                  variant="primary"
+                  variant="gold"
                   size="md"
                   disabled={isMatching || notes.trim().length < 10}
                   onClick={onRunInitialMatch}
-                  className="bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out hover:shadow-[0_0_12px_rgba(229,195,120,0.35)]"
+                  className="font-semibold text-xs px-4"
                 >
                   {isMatching ? (
                     <>

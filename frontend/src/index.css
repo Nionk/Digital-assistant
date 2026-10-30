@@ -135,3 +135,109 @@
   }
 }
 
+/* Роскошная анимация переливающегося слитка золота (Gold Ingot Shimmer) */
+@keyframes gold-bar-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes gold-bar-glare {
+  0% {
+    transform: translateX(-160%) skewX(-24deg);
+  }
+  40%, 100% {
+    transform: translateX(260%) skewX(-24deg);
+  }
+}
+
+.btn-gold-ingot {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(
+    115deg,
+    #B38728 0%,
+    #D4AF37 18%,
+    #FFF6BD 35%,
+    #E5C378 50%,
+    #C5942B 68%,
+    #FDF3A9 82%,
+    #996815 100%
+  ) !important;
+  background-size: 240% 100% !important;
+  animation: gold-bar-shift 5s ease-in-out infinite !important;
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2px 0 rgba(90, 56, 8, 0.55),
+    0 2px 10px rgba(212, 175, 55, 0.35),
+    0 0 20px rgba(229, 195, 120, 0.2);
+  color: #0E1215 !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 240, 170, 0.45) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.btn-gold-ingot::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0) 25%,
+    rgba(255, 255, 255, 0.45) 48%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.45) 52%,
+    rgba(255, 255, 255, 0) 75%,
+    transparent 100%
+  );
+  animation: gold-bar-glare 3.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.btn-gold-ingot:hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1.5px 2px 0 rgba(90, 56, 8, 0.5),
+    0 4px 18px rgba(229, 195, 120, 0.55),
+    0 0 30px rgba(255, 230, 140, 0.35) !important;
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.btn-gold-ingot:active:not(:disabled) {
+  transform: scale(0.985);
+  box-shadow: 
+    inset 0 2px 4px 0 rgba(70, 42, 6, 0.6),
+    0 1px 4px rgba(212, 175, 55, 0.3) !important;
+  filter: brightness(0.96);
+}
+
+.btn-gold-ingot:disabled {
+  animation: none !important;
+  opacity: 0.45 !important;
+  box-shadow: none !important;
+  filter: grayscale(0.4) !important;
+  cursor: not-allowed;
+}
+
+.btn-gold-ingot:disabled::after {
+  display: none !important;
+}
+
+.btn-gold-ingot > * {
+  position: relative;
+  z-index: 2;
+}
+
+
