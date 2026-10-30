@@ -22,14 +22,12 @@ interface ManagerHeaderProps {
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   burningDeadlines: BurningDeadlineOut[];
-  eventsCount?: number;
 }
 
 export function ManagerHeader({
   workspaceMode,
   onModeChange,
   burningDeadlines,
-  eventsCount = 15,
 }: ManagerHeaderProps) {
   const [isDeadlinesOpen, setIsDeadlinesOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -71,8 +69,8 @@ export function ManagerHeader({
         </button>
       </div>
 
-      {/* 2. Центральная часть: Селекторы с переливом в золотой цвет, миганием и подчеркиванием */}
-      <nav className="flex items-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner">
+      {/* 2. Центральная часть: Селекторы строго по центру шапки */}
+      <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner z-10">
         {/* Вкладка: Подбор клиентам */}
         <button
           type="button"
@@ -143,7 +141,7 @@ export function ManagerHeader({
       </nav>
 
       {/* 3. Правая часть: Дедлайны (fire.png + золотая цифра) + Разделитель + Профиль */}
-      <div className="flex items-center gap-2 sm:gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
         {/* Кнопка дедлайнов Early Bird */}
         <div className="relative" ref={dropdownRef}>
           <button
