@@ -209,17 +209,17 @@ export function FinancialAndPitchPanel({
         <div className="mt-3 space-y-2">
           <Button
             type="button"
-            variant="primary"
+            variant="gold"
             size="lg"
             disabled={isPublishing || summary.includedRows.length === 0}
             onClick={onPublish}
-            className="w-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] text-[#0E1215] font-semibold hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] active:scale-[0.98] active:brightness-150 transition-all duration-100 ease-out"
+            className="w-full font-semibold"
           >
             {isPublishing ? (
               <span>Публикация витрины...</span>
             ) : (
               <>
-                <Send className="h-4 w-4" strokeWidth={1.75} />
+                <Send className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
                 <span>Опубликовать витрину и скопировать ссылку</span>
               </>
             )}
