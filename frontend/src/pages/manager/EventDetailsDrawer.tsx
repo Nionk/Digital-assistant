@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import {
   X,
   MapPin,
@@ -38,6 +39,14 @@ export function EventDetailsDrawer({
   onClose,
 }: EventDetailsDrawerProps) {
   const [copied, setCopied] = React.useState(false);
+  const [copiedAddress, setCopiedAddress] = React.useState(false);
+
+  const handleCopyAddress = (addr: string) => {
+    navigator.clipboard.writeText(addr).catch(() => {});
+    setCopiedAddress(true);
+    toast.success(`Адрес скопирован: ${addr}`);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -81,7 +90,7 @@ export function EventDetailsDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
             onClick={onClose}
             className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
@@ -92,7 +101,7 @@ export function EventDetailsDrawer({
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 flex h-full w-full max-w-[540px] flex-col border-l border-[#7C5A20]/60 bg-[#161B22] text-white shadow-2xl"
           >
             {/* 1. Шапка шторки */}
@@ -132,7 +141,7 @@ export function EventDetailsDrawer({
                   <h2 className="font-serif text-base sm:text-lg font-bold leading-snug text-white">
                     {event.canonical_title}
                   </h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[#8E95A0]">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#8E95A0]">
                     <span className="inline-flex items-center gap-1 font-medium text-[#D1D5DB]">
                       {event.is_online ? (
                         <Globe className="h-3.5 w-3.5 text-[#529E85]" strokeWidth={1.5} />
@@ -144,12 +153,36 @@ export function EventDetailsDrawer({
                     {event.venue && (
                       <>
                         <span>·</span>
-                        <span className="inline-flex items-center gap-1 truncate max-w-[260px] text-[#D1D5DB]">
+                        <span className="inline-flex items-center gap-1 text-[#D1D5DB] leading-relaxed">
                           <Building className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={1.5} />
-                          <span className="truncate">{event.venue}</span>
+                          <span>{event.venue}</span>
                         </span>
                       </>
                     )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyAddress(
+                          event.is_online
+                            ? "Онлайн"
+                            : `${event.city || ""}${event.venue ? `, ${event.venue}` : ""}`.trim()
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] px-2 py-0.5 text-[11px] text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white transition-all select-none cursor-pointer"
+                      title="Скопировать точный адрес площадки в буфер обмена"
+                    >
+                      {copiedAddress ? (
+                        <>
+                          <Check className="h-3 w-3 text-[#34D399]" />
+                          <span className="text-[#34D399] font-medium">Скопировано</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3" />
+                          <span>Скопировать адрес</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

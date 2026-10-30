@@ -474,34 +474,42 @@ export function ManagerWorkspacePage() {
                   </button>
                 </div>
               ) : (
-                <>
-                  {/* Компактная шапка активного клиента (без иконки здания, разделение названия и контакта) */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-5 py-3.5 shadow-sm">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h1 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                        {activeClient.company_name}
-                      </h1>
-                      {activeClient.contact_person && (
-                        <>
-                          <div className="hidden h-4 w-[1px] bg-[#2D3540] sm:block" />
-                          <span className="text-xs font-normal text-[#8E95A0]">
-                            {activeClient.contact_person}
-                          </span>
-                        </>
-                      )}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeClient.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="space-y-4"
+                  >
+                    {/* Компактная шапка активного клиента (без иконки здания, разделение названия и контакта) */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-5 py-3.5 shadow-sm">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h1 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                          {activeClient.company_name}
+                        </h1>
+                        {activeClient.contact_person && (
+                          <>
+                            <div className="hidden h-4 w-[1px] bg-[#2D3540] sm:block" />
+                            <span className="text-xs font-normal text-[#8E95A0]">
+                              {activeClient.contact_person}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}
-                {activeMagicToken && (
-                  <PublishedShowcaseMonitor
-                    magicToken={activeMagicToken}
-                    onCopyLink={handleCopyShowcaseLink}
-                  />
-                )}
+                    {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}
+                    {activeMagicToken && (
+                      <PublishedShowcaseMonitor
+                        magicToken={activeMagicToken}
+                        onCopyLink={handleCopyShowcaseLink}
+                      />
+                    )}
 
-                {/* Асимметричная двухколоночная сетка без вертикальной простыни */}
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 items-start">
+                    {/* Асимметричная двухколоночная сетка без вертикальной простыни */}
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 items-start">
                   {/* Левая/Центральная колонка конструктора (7 из 12 = ~58-60%) */}
                   <div className="space-y-4 xl:col-span-8">
                     <NotesAndProfileSection
@@ -521,76 +529,111 @@ export function ManagerWorkspacePage() {
                       onRematchWithOverride={handleRematchWithOverride}
                     />
 
-                    {activeMatchResult && computedSummary ? (
-                      <BundleConstructorSection
-                        variants={activeMatchResult.bundle_variants}
-                        selectedVariantGroup={activeVariantGroup}
-                        onSelectVariantGroup={handleSelectVariantGroup}
-                        summary={computedSummary}
-                        onToggleEventIncluded={(evId) =>
-                          toggleEventIncluded(activeClient.id, evId)
-                        }
-                        onChangeEventTariff={(evId, tarId) =>
-                          changeEventTariff(activeClient.id, evId, tarId)
-                        }
-                        onUpdateEventRationale={(evId, text) =>
-                          updateEventRationale(activeClient.id, evId, text)
-                        }
-                      />
-                    ) : (
-                      !matchMutation.isPending && (
-                        <div className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm">
-                          <Compass
-                            className="mx-auto h-9 w-9 text-[#E5C378]"
-                            strokeWidth={1.5}
+                    <AnimatePresence mode="wait">
+                      {activeMatchResult && computedSummary ? (
+                        <motion.div
+                          key={`bundle-section-${activeMatchResult.selection_id}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.24, ease: "easeOut" }}
+                        >
+                          <BundleConstructorSection
+                            variants={activeMatchResult.bundle_variants}
+                            selectedVariantGroup={activeVariantGroup}
+                            onSelectVariantGroup={handleSelectVariantGroup}
+                            summary={computedSummary}
+                            onToggleEventIncluded={(evId) =>
+                              toggleEventIncluded(activeClient.id, evId)
+                            }
+                            onChangeEventTariff={(evId, tarId) =>
+                              changeEventTariff(activeClient.id, evId, tarId)
+                            }
+                            onUpdateEventRationale={(evId, text) =>
+                              updateEventRationale(activeClient.id, evId, text)
+                            }
                           />
-                          <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
-                            Готово к формированию пакетов участия
-                          </h3>
-                          <p className="mx-auto mt-1.5 max-w-lg font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
-                            Проверьте конспект установочной встречи выше и нажмите{" "}
-                            <strong className="font-bold text-inherit">
-                              «Подобрать варианты пакетов»
-                            </strong>
-                            . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
-                          </p>
-                        </div>
-                      )
-                    )}
+                        </motion.div>
+                      ) : (
+                        !matchMutation.isPending && (
+                          <motion.div
+                            key="bundle-empty"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm"
+                          >
+                            <Compass
+                              className="mx-auto h-9 w-9 text-[#E5C378]"
+                              strokeWidth={1.5}
+                            />
+                            <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
+                              Готово к формированию пакетов участия
+                            </h3>
+                            <p className="mx-auto mt-1.5 max-w-lg font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
+                              Проверьте конспект установочной встречи выше и нажмите{" "}
+                              <strong className="font-bold text-inherit">
+                                «Подобрать варианты пакетов»
+                              </strong>
+                              . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
+                            </p>
+                          </motion.div>
+                        )
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Правая закрепленная колонка итога и публикации (4 из 12 = ~33-38%, sticky) */}
                   <div className="xl:col-span-4">
-                    {activeMatchResult && computedSummary ? (
-                      <FinancialAndPitchPanel
-                        companyName={activeClient.company_name}
-                        summary={computedSummary}
-                        pitchText={activePitchText}
-                        onPitchChange={(text) =>
-                          setPitchText(activeClient.id, text)
-                        }
-                        onSyncPitchNumbers={handleSyncPitch}
-                        onPublish={handlePublishSelection}
-                        isPublishing={publishMutation.isPending}
-                        publishedUrl={activePublishedUrl}
-                        onCopyLink={handleCopyShowcaseLink}
-                      />
-                    ) : (
-                      <div className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm">
-                        <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
-                          Сводка и публикация КП
-                        </span>
-                        <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
-                          Ожидание расчёта подборки
-                        </h3>
-                        <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
-                          После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
-                        </p>
-                      </div>
-                    )}
+                    <AnimatePresence mode="wait">
+                      {activeMatchResult && computedSummary ? (
+                        <motion.div
+                          key={`pitch-panel-${activeMatchResult.selection_id}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.24, ease: "easeOut" }}
+                        >
+                          <FinancialAndPitchPanel
+                            companyName={activeClient.company_name}
+                            summary={computedSummary}
+                            pitchText={activePitchText}
+                            onPitchChange={(text) =>
+                              setPitchText(activeClient.id, text)
+                            }
+                            onSyncPitchNumbers={handleSyncPitch}
+                            onPublish={handlePublishSelection}
+                            isPublishing={publishMutation.isPending}
+                            publishedUrl={activePublishedUrl}
+                            onCopyLink={handleCopyShowcaseLink}
+                          />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="pitch-empty"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm"
+                        >
+                          <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
+                            Сводка и публикация КП
+                          </span>
+                          <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
+                            Ожидание расчёта подборки
+                          </h3>
+                          <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
+                            После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
-              </>
+              </motion.div>
+            </AnimatePresence>
             )}
           </div>
         </main>
