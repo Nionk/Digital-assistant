@@ -327,7 +327,7 @@ export function ShowcaseEventCard({
         <div className="grid grid-cols-2 gap-2.5">
           <Button
             type="button"
-            variant={isInterested ? "outline" : "gold"}
+            variant={isInterested ? "outline" : "monolith"}
             size="md"
             disabled={isReacting}
             onClick={handleApproveClick}
@@ -338,7 +338,7 @@ export function ShowcaseEventCard({
                 : ""
             )}
           >
-            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <Check className={cn("h-3.5 w-3.5", isInterested ? "text-[#34D399]" : "text-[#E5C378] monolith-icon")} strokeWidth={2.5} />
             <span>{isInterested ? "В плане участия" : "Включить в план"}</span>
           </Button>
 
@@ -441,12 +441,12 @@ export function ShowcaseEventCard({
 
             <Button
               type="button"
-              variant="gold"
+              variant="monolith"
               size="sm"
               onClick={handleSendAccompanimentUpdate}
               className="mt-3 w-full"
             >
-              <Send className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <Send className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" strokeWidth={1.75} />
               <span>Сохранить и передать менеджеру</span>
             </Button>
           </div>

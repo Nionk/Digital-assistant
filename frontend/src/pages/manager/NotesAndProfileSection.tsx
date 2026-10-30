@@ -295,7 +295,7 @@ export function NotesAndProfileSection({
               <div className="mt-3 flex items-center justify-end">
                 <Button
                   type="button"
-                  variant="gold"
+                  variant="monolith"
                   size="md"
                   disabled={isMatching || notes.trim().length < 10}
                   onClick={onRunInitialMatch}
@@ -303,13 +303,13 @@ export function NotesAndProfileSection({
                 >
                   {isMatching ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin text-[#0E1215]" />
+                      <Loader2 className="h-4 w-4 animate-spin text-[#E5C378]" />
                       <span>Формируем подборку...</span>
                     </>
                   ) : (
                     <>
                       <span>Подобрать варианты пакетов</span>
-                      <ArrowRight className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
+                      <ArrowRight className="h-4 w-4 text-[#E5C378] monolith-icon" strokeWidth={2} />
                     </>
                   )}
                 </Button>

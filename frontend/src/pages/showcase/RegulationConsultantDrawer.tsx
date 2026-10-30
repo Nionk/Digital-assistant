@@ -105,14 +105,14 @@ export function RegulationConsultantDrawer({
             />
             <Button
               type="submit"
-              variant="gold"
+              variant="monolith"
               size="md"
               disabled={isAsking || inputQuestion.trim().length < 3}
             >
               {isAsking ? (
-                <Loader2 className="h-4 w-4 animate-spin text-[#12161A]" />
+                <Loader2 className="h-4 w-4 animate-spin text-[#E5C378]" />
               ) : (
-                <Send className="h-4 w-4 text-[#12161A]" strokeWidth={2} />
+                <Send className="h-4 w-4 text-[#E5C378] monolith-icon" strokeWidth={2} />
               )}
             </Button>
           </div>
