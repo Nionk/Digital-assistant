@@ -1,5 +1,6 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import {
   Search,
   MapPin,
@@ -13,6 +14,8 @@ import {
   LayoutGrid,
   ChevronRight,
   ArrowUpDown,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useManagerEventsCatalog } from "@/api/queries";
 import type { CatalogEventItemOut } from "@/api/types";
@@ -66,6 +69,21 @@ export function EventsCatalogView() {
   const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
   const [selectedEventForDrawer, setSelectedEventForDrawer] =
     React.useState<CatalogEventItemOut | null>(null);
+  const [copiedEventId, setCopiedEventId] = React.useState<number | null>(null);
+
+  const handleCopyLocation = (e: React.MouseEvent, ev: CatalogEventItemOut) => {
+    e.stopPropagation();
+    const fullText = ev.is_online
+      ? "Онлайн"
+      : `${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`.trim();
+    if (!fullText) return;
+    navigator.clipboard.writeText(fullText).catch(() => {});
+    setCopiedEventId(ev.event_id);
+    toast.success(`Адрес скопирован: ${fullText}`);
+    setTimeout(() => {
+      setCopiedEventId((prev) => (prev === ev.event_id ? null : prev));
+    }, 2000);
+  };
 
   const events = data?.events || [];
 
@@ -470,29 +488,62 @@ export function EventsCatalogView() {
                             </div>
                           </td>
 
-                      {/* 2. Название и тематика */}
+                      {/* 2. Название и тематика с полным тултипом */}
                       <td className="py-3 px-3 align-middle">
                         <div className="min-w-0 max-w-lg">
-                          <span className="font-serif text-[13px] font-semibold text-white group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1">
+                          <span
+                            title={ev.canonical_title}
+                            className="font-serif text-[13px] font-semibold text-white group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1 cursor-pointer"
+                          >
                             {ev.canonical_title}
                           </span>
                           {ev.themes.length > 0 && (
-                            <p className="mt-0.5 text-[11px] text-[#727985] truncate font-serif italic">
+                            <p
+                              title={ev.themes.join(" · ")}
+                              className="mt-0.5 text-[11px] text-[#727985] truncate font-serif italic"
+                            >
                               {ev.themes.slice(0, 3).join(" · ")}
+                              {ev.themes.length > 3 && (
+                                <span
+                                  className="text-[#E5C378]/80 font-normal ml-1"
+                                  title={ev.themes.slice(3).join(" · ")}
+                                >
+                                  +{ev.themes.length - 3}
+                                </span>
+                              )}
                             </p>
                           )}
                         </div>
                       </td>
 
-                      {/* 3. Формат и город */}
+                      {/* 3. Формат и город: кликабельный адрес с копированием в буфер */}
                       <td className="py-3 px-3 align-middle whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-[#D1D5DB]">
-                          {ev.is_online ? (
-                            <Globe className="h-3 w-3 text-[#529E85] shrink-0" strokeWidth={1.5} />
-                          ) : (
-                            <MapPin className="h-3 w-3 text-[#8E95A0] shrink-0" strokeWidth={1.5} />
-                          )}
-                          <span className="truncate">{locationLabel}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyLocation(e, ev)}
+                            title={
+                              ev.is_online
+                                ? "Онлайн (клик — скопировать)"
+                                : `Клик — скопировать полный адрес: ${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`
+                            }
+                            className="group/loc inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-1.5 py-0.5 text-xs text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer select-none text-left"
+                          >
+                            {ev.is_online ? (
+                              <Globe className="h-3.5 w-3.5 text-[#529E85] shrink-0" strokeWidth={1.5} />
+                            ) : (
+                              <MapPin className="h-3.5 w-3.5 text-[#8E95A0] group-hover/loc:text-[#E5C378] shrink-0" strokeWidth={1.5} />
+                            )}
+                            <span className="truncate max-w-[140px] font-medium">
+                              {locationLabel}
+                              {ev.venue && ` (${ev.venue})`}
+                            </span>
+                            {copiedEventId === ev.event_id ? (
+                              <Check className="h-3 w-3 text-[#34D399] shrink-0" />
+                            ) : (
+                              <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
+                            )}
+                          </button>
                           <span className="text-[#3A4553]">·</span>
                           <span className="text-[11px] text-[#8E95A0] font-serif italic">
                             {formatLabel}
@@ -599,30 +650,51 @@ export function EventsCatalogView() {
                           {formatLabel}
                         </span>
                         <span>·</span>
-                        <span className="inline-flex items-center gap-1 font-medium text-[#D1D5DB]">
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyLocation(e, ev)}
+                          title={`Клик — скопировать адрес: ${ev.is_online ? "Онлайн" : `${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`}`}
+                          className="group/loc inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 font-medium text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer"
+                        >
                           {ev.is_online ? (
                             <Globe className="h-3 w-3 text-[#529E85]" strokeWidth={1.5} />
                           ) : (
-                            <MapPin className="h-3 w-3 text-[#8E95A0]" strokeWidth={1.5} />
+                            <MapPin className="h-3 w-3 text-[#8E95A0] group-hover/loc:text-[#E5C378]" strokeWidth={1.5} />
                           )}
-                          {locationLabel}
-                        </span>
+                          <span>{locationLabel}</span>
+                          {copiedEventId === ev.event_id ? (
+                            <Check className="h-3 w-3 text-[#34D399] shrink-0" />
+                          ) : (
+                            <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
+                          )}
+                        </button>
                         {ev.venue && (
                           <>
                             <span>·</span>
-                            <span className="inline-flex items-center gap-1 truncate max-w-[200px]">
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyLocation(e, ev)}
+                              title={`Клик — скопировать адрес площадки: ${ev.city || ""}, ${ev.venue}`}
+                              className="inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer text-[#D1D5DB] leading-tight truncate max-w-[220px]"
+                            >
                               <Building className="h-3 w-3 shrink-0 opacity-70" strokeWidth={1.5} />
-                              {ev.venue}
-                            </span>
+                              <span className="truncate">{ev.venue}</span>
+                            </button>
                           </>
                         )}
                       </div>
 
-                      <h3 className="mt-1 font-serif text-sm sm:text-[15px] font-semibold leading-snug text-white group-hover:text-[#E5C378] transition-colors line-clamp-1">
+                      <h3
+                        title={ev.canonical_title}
+                        className="mt-1 font-serif text-sm sm:text-[15px] font-semibold leading-snug text-white group-hover:text-[#E5C378] transition-colors line-clamp-1"
+                      >
                         {ev.canonical_title}
                       </h3>
 
-                      <p className="mt-1 text-xs text-[#8E95A0] line-clamp-1 leading-relaxed">
+                      <p
+                        title={ev.summary}
+                        className="mt-1 text-xs text-[#8E95A0] line-clamp-1 leading-relaxed"
+                      >
                         {ev.summary}
                       </p>
                     </div>
@@ -634,11 +706,20 @@ export function EventsCatalogView() {
                       {ev.themes.slice(0, 4).map((t) => (
                         <span
                           key={t}
-                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.2 text-[10px] font-serif italic text-[#8E95A0]"
+                          title={t}
+                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.2 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                         >
                           {t}
                         </span>
                       ))}
+                      {ev.themes.length > 4 && (
+                        <span
+                          title={ev.themes.slice(4).join(", ")}
+                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.2 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
+                        >
+                          +{ev.themes.length - 4}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

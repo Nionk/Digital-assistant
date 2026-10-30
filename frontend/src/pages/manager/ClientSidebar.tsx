@@ -98,7 +98,7 @@ export function ClientSidebar({
                 type="button"
                 onClick={() => onSelectClient(client)}
                 className={cn(
-                  "group flex w-full flex-col gap-1 rounded-[8px] border px-3 py-2.5 text-left transition-all",
+                  "group flex w-full flex-col gap-1 rounded-[8px] border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 ease-out active:scale-[0.99]",
                   isSelected
                     ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
                     : "border-[#262C35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
