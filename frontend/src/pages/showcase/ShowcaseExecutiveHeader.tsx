@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import type { ShowcaseViewOut } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { formatDateShort, formatRub } from "@/lib/formatters";
+import logoImage from "@/assets/images/logo.png";
 
 interface ShowcaseExecutiveHeaderProps {
   showcase: ShowcaseViewOut;
@@ -31,33 +33,29 @@ export function ShowcaseExecutiveHeader({
   );
 
   return (
-    <header className="border-b border-border bg-surface">
+    <header className="border-b border-[#1A2026] bg-[#0E1215] relative text-white">
+      {/* Деликатная бронзово-золотая нить переплёта внизу хедера */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
+
       {/* Верхняя навигационная полоса */}
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 border-b border-[#1F2630] px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-badge bg-pine text-xs font-bold tracking-wider text-white">
-            СК
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-tight text-ink">
-                СКАРТ
-              </span>
-              <span className="hidden rounded-badge bg-canvas border border-border px-2 py-0.5 text-[11px] font-medium text-ink-secondary sm:inline-block">
-                Отраслевые мероприятия с пользой для бизнеса
-              </span>
-            </div>
-            <p className="text-[11px] text-ink-muted">
-              Подбор площадок и сопровождение участия для строительной отрасли
-            </p>
-          </div>
+          <img
+            src={logoImage}
+            alt="СКАРТ.AI"
+            className="h-7 sm:h-8 w-auto object-contain shrink-0"
+          />
+          <div className="hidden h-4 w-[1px] bg-[#2D3540] sm:block" />
+          <span className="hidden font-serif italic text-xs text-[#E5C378] sm:inline">
+            Персональная витрина участия в деловых событиях
+          </span>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="hidden md:flex items-center gap-2 rounded-control border border-border bg-canvas px-3 py-1.5 text-xs">
-            <UserCheck className="h-3.5 w-3.5 text-pine" strokeWidth={1.75} />
-            <span className="text-ink-muted">Персональный менеджер:</span>
-            <strong className="font-semibold text-ink">
+          <div className="hidden md:flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-3 py-1.5 text-xs text-[#8E95A0]">
+            <UserCheck className="h-3.5 w-3.5 text-[#E5C378]" strokeWidth={1.75} />
+            <span>Продюсер проекта:</span>
+            <strong className="font-semibold text-white font-serif italic">
               {showcase.manager_full_name}
             </strong>
           </div>
@@ -67,8 +65,9 @@ export function ShowcaseExecutiveHeader({
             variant="outline"
             size="sm"
             onClick={onOpenConsultant}
+            className="border-[#7C5A20]/50 bg-[#161B21] text-xs text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white transition-all shadow-sm"
           >
-            <FileSearch className="h-3.5 w-3.5 text-pine" strokeWidth={1.75} />
+            <FileSearch className="h-3.5 w-3.5 text-inherit" strokeWidth={1.75} />
             <span>Проверить регламенты</span>
           </Button>
         </div>
@@ -78,97 +77,97 @@ export function ShowcaseExecutiveHeader({
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-stretch">
           {/* Левая колонка (7 из 12): Обращение к клиенту и письмо менеджера */}
-          <div className="flex flex-col justify-between rounded-card border border-border bg-canvas/55 p-5 sm:p-6 lg:col-span-7">
+          <div className="flex flex-col justify-between rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 lg:col-span-7 shadow-sm">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#161B22] text-[#D1D5DB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#2B3545]">
+                <Badge variant="ebGold" className="text-[10px]">
                   ПЕРСОНАЛЬНАЯ СЕЛЕКЦИЯ
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#0B2528] text-[#2DD4BF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#165057]">
-                  <CalendarCheck className="h-3 w-3 text-[#2DD4BF]" strokeWidth={2} />
+                </Badge>
+                <Badge variant="ebEmerald" className="text-[10px]">
+                  <CalendarCheck className="h-3 w-3 mr-1 text-[#34D399]" strokeWidth={2} />
                   КАЛЕНДАРЬ БЕЗ НАКЛАДОК
-                </span>
+                </Badge>
               </div>
 
-              <h1 className="mt-3.5 font-serif text-2xl font-bold tracking-tight text-ink sm:text-3xl leading-tight">
+              <h1 className="mt-3.5 font-serif text-2xl font-bold tracking-tight text-white sm:text-3xl leading-tight">
                 План участия в профильных мероприятиях для {showcase.company_name}
               </h1>
 
-              {/* Текст сопроводительного письма от менеджера */}
-              <div className="mt-4 rounded-control border-l-2 border-pine bg-surface p-4 shadow-card">
-                <p className="whitespace-pre-line text-sm leading-relaxed text-ink-secondary">
+              {/* Текст сопроводительного письма от менеджера с золотой нитью */}
+              <div className="mt-4 rounded-[8px] border-l-2 border-[#E5C378] bg-[#12161A] p-4 shadow-inner">
+                <p className="whitespace-pre-line text-xs sm:text-[13px] leading-relaxed text-[#D1D5DB] font-sans">
                   {showcase.pitch_text}
                 </p>
               </div>
             </div>
 
             {/* Нижняя строка прогресса согласования (Шаг 07) */}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/80 pt-3.5 text-xs">
-              <div className="flex items-center gap-2 text-ink-muted">
-                <ShieldCheck className="h-4 w-4 text-sage" strokeWidth={1.75} />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#21262F] pt-3.5 text-xs">
+              <div className="flex items-center gap-2 text-[#8E95A0]">
+                <ShieldCheck className="h-4 w-4 text-[#34D399]" strokeWidth={1.75} />
                 <span>
                   Отметьте подходящие площадки ниже или укажите пожелания для корректировки
                 </span>
               </div>
 
               <div className="flex items-center gap-2 tabular-nums">
-                <span className="rounded-badge bg-novel-sand text-[#282112] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+                <Badge variant="ebGold" className="text-[10px]">
                   В ПЛАНЕ: {approvedCount} ИЗ {showcase.total_events_count}
-                </span>
+                </Badge>
                 {rejectedCount > 0 && (
-                  <span className="rounded-badge bg-novel-wine text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-[#7A2430]">
+                  <Badge variant="ebRose" className="text-[10px]">
                     НА ЗАМЕНУ: {rejectedCount}
-                  </span>
+                  </Badge>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Правая колонка (5 из 12): Контрастная темно-хвойная финансовая сводка пакета */}
-          <div className="flex flex-col justify-between rounded-card bg-pine p-5 text-white shadow-elevated sm:p-6 lg:col-span-5">
+          {/* Правая колонка (5 из 12): Благородная графитово-золотая финансовая сводка пакета */}
+          <div className="flex flex-col justify-between rounded-[12px] border border-[#7C5A20]/60 bg-[#161B22] p-5 text-white shadow-xl sm:p-6 lg:col-span-5 relative overflow-hidden">
             <div>
-              <div className="flex items-center justify-between border-b border-white/15 pb-3">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/80">
+              <div className="flex items-center justify-between border-b border-[#21262F] pb-3">
+                <span className="font-serif italic text-xs font-semibold uppercase tracking-wider text-[#E5C378]">
                   Сводный бюджет участия
                 </span>
-                <span className="rounded-tag bg-white/20 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider tabular-nums">
+                <span className="rounded-[4px] border border-[#7C5A20]/40 bg-[#12161A] px-2 py-0.5 text-[10px] font-bold text-[#E5C378] uppercase tracking-wider tabular-nums">
                   {showcase.total_events_count} {showcase.total_events_count === 1 ? "мероприятие" : "мероприятия"} в пакете
                 </span>
               </div>
 
               <div className="mt-4">
-                <div className="flex items-baseline justify-between text-xs text-white/75">
+                <div className="flex items-baseline justify-between text-xs text-[#8E95A0]">
                   <span>Организационные взносы площадок:</span>
                   {showcase.total_savings > 0 && totalBasePrice > showcase.total_actual_price && (
-                    <span className="text-white/50 line-through tabular-nums">
+                    <span className="text-[#6B7280] line-through tabular-nums">
                       {formatRub(totalBasePrice)}
                     </span>
                   )}
                 </div>
 
                 <div className="mt-1 flex items-baseline gap-3 tabular-nums">
-                  <span className="text-3xl font-bold tracking-tight text-white">
+                  <span className="text-3xl sm:text-4xl font-sans font-bold tracking-tight text-white">
                     {formatRub(showcase.total_actual_price)}
                   </span>
-                  <span className="text-xs text-white/70">с НДС</span>
+                  <span className="text-xs text-[#8E95A0]">с НДС</span>
                 </div>
               </div>
 
               {/* Блок выгоды Early Bird и партнёрских условий */}
               {showcase.total_savings > 0 && (
-                <div className="mt-4 rounded-control border border-white/20 bg-white/10 p-3.5">
+                <div className="mt-4 rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-3.5">
                   <div className="flex items-center justify-between gap-2 tabular-nums">
                     <span className="text-xs font-medium text-white/90">
                       Ваша выгода по спецтарифам:
                     </span>
-                    <span className="rounded-tag bg-novel-gold text-[#1F1808] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                    <Badge variant="ebEmerald" className="text-[10px]">
                       −{formatRub(showcase.total_savings)}
-                    </span>
+                    </Badge>
                   </div>
                   {showcase.min_early_bird_deadline && (
-                    <p className="mt-1.5 text-xs text-white/80 tabular-nums">
+                    <p className="mt-1.5 text-xs text-[#34D399] tabular-nums">
                       Льготные условия действительны при согласовании до{" "}
-                      <strong className="text-white underline decoration-white/40 underline-offset-2">
+                      <strong className="text-white underline decoration-[#34D399]/40 underline-offset-2">
                         {formatDateShort(showcase.min_early_bird_deadline)}
                       </strong>
                     </p>
@@ -178,12 +177,12 @@ export function ShowcaseExecutiveHeader({
             </div>
 
             {/* Разделение внешних взносов и сопровождения агентства (Слайд 10) */}
-            <div className="mt-5 border-t border-white/15 pt-3.5">
+            <div className="mt-5 border-t border-[#21262F] pt-3.5">
               <div className="flex items-start gap-2">
-                <Sparkles className="h-4 w-4 shrink-0 text-sage-border mt-0.5" strokeWidth={1.75} />
-                <p className="text-xs leading-relaxed text-white/80">
+                <Sparkles className="h-4 w-4 shrink-0 text-[#E5C378] mt-0.5" strokeWidth={1.75} />
+                <p className="text-xs leading-relaxed text-[#8E95A0]">
                   Внешние взносы организаторов фиксируются отдельно. На каждой карточке вы можете отметить необходимое{" "}
-                  <strong className="text-white">
+                  <strong className="text-white font-medium">
                     сопровождение агентства
                   </strong>{" "}
                   (подготовка спикера и презентации, организация целевых знакомств, интерактив на стенде).
@@ -196,4 +195,3 @@ export function ShowcaseExecutiveHeader({
     </header>
   );
 }
-

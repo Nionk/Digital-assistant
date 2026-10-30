@@ -4,10 +4,12 @@ import {
   Mic,
   Gamepad2,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Нижний информационный блок витрины клиента, раскрывающий ценность коммуникационного агентства
- * по Слайдам 05, 06, 07, 08 («Путь совместной работы» и «Подготовка под задачи клиента»).
+ * по Слайдам 05, 06, 07, 08 («Путь совместной работы» и «Подготовка под задачи клиента»)
+ * в обсидианово-золотом архитектурном стиле.
  */
 export function AgencyWorkflowStepsSection() {
   const pillars = [
@@ -43,17 +45,17 @@ export function AgencyWorkflowStepsSection() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="rounded-card border border-border bg-surface p-6 shadow-card">
-        <div className="flex flex-col justify-between gap-2 border-b border-border/80 pb-4 md:flex-row md:items-end">
+      <div className="rounded-2xl border border-[#262D35] bg-[#161B22] p-6 shadow-2xl">
+        <div className="flex flex-col justify-between gap-2 border-b border-[#262D35] pb-4 md:flex-row md:items-end">
           <div>
-            <span className="rounded-tag bg-novel-sand text-[#292213] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+            <Badge variant="ebGold" className="text-[10px] tracking-wider uppercase">
               ЭКСПЕРТНОЕ СОПРОВОЖДЕНИЕ
-            </span>
-            <h2 className="mt-1.5 font-serif text-lg font-bold text-ink sm:text-xl">
+            </Badge>
+            <h2 className="mt-2 font-serif text-lg font-bold text-white sm:text-xl">
               Как мы превращаем участие в мероприятиях в деловой результат
             </h2>
           </div>
-          <p className="text-xs text-ink-muted">
+          <p className="text-xs text-neutral-400">
             Форматы сопровождения можно сочетать под каждую выбранную площадку
           </p>
         </div>
@@ -64,21 +66,21 @@ export function AgencyWorkflowStepsSection() {
             return (
               <div
                 key={item.step}
-                className="flex flex-col justify-between rounded-control border border-border/80 bg-canvas/55 p-4"
+                className="group flex flex-col justify-between rounded-xl border border-[#262D35] bg-[#12161A] p-4 transition-all duration-200 hover:border-[#7C5A20]/60 hover:shadow-lg"
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-badge bg-pine/10 text-pine">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#7C5A20]/40 bg-[#161B22] text-[#E5C378] transition-transform duration-200 group-hover:scale-105">
                       <Icon className="h-4 w-4" strokeWidth={1.75} />
                     </span>
-                    <span className="text-xs font-bold text-ink-faint tabular-nums">
+                    <span className="font-serif italic text-base text-[#E5C378]/70 tabular-nums">
                       {item.step}
                     </span>
                   </div>
-                  <h3 className="mt-3 text-xs font-bold leading-snug text-ink">
+                  <h3 className="mt-3 text-xs font-bold leading-snug text-white transition-colors group-hover:text-[#E5C378]">
                     {item.title}
                   </h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
+                  <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
                     {item.description}
                   </p>
                 </div>
@@ -90,4 +92,3 @@ export function AgencyWorkflowStepsSection() {
     </section>
   );
 }
-
