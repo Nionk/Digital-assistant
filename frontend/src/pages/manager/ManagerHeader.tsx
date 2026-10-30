@@ -60,12 +60,12 @@ export function ManagerHeader({
         <button
           type="button"
           onClick={() => onModeChange("matching")}
-          className="flex items-center transition-opacity hover:opacity-90 focus:outline-none"
-          title="СКАРТ.AI — Подбор клиентам"
+          className="flex items-center transition-opacity hover:opacity-90 focus:outline-none cursor-pointer"
+          title="Подбор клиентам"
         >
           <img
             src={logoImage}
-            alt="СКАРТ.AI"
+            alt="Логотип платформы"
             className="h-8 sm:h-[34px] w-auto object-contain shrink-0"
           />
         </button>

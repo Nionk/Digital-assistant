@@ -226,7 +226,7 @@ async def get_public_showcase(
     return ShowcaseViewOut(
         selection_id=selection.id,
         company_name=client.company_name if client else "Уважаемый клиент",
-        manager_full_name=manager.full_name if manager else "Персональный менеджер СКАРТ",
+        manager_full_name=manager.full_name if manager else "Персональный менеджер сопровождения",
         pitch_text=selection.generated_pitch_text or "Здравствуйте! Направляем вашу персональную подборку мероприятий.",
         total_events_count=len(showcase_items),
         total_actual_price=round(total_actual, 2),
