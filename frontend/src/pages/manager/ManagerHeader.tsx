@@ -4,6 +4,7 @@ import {
   Database,
   Clock,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { BurningDeadlineOut } from "@/api/types";
@@ -36,6 +37,7 @@ export function ManagerHeader({
   const currentProducer = useManagerStore((s) => s.currentProducer);
   const isProducerModalOpen = useManagerStore((s) => s.isProducerModalOpen);
   const setProducerModalOpen = useManagerStore((s) => s.setProducerModalOpen);
+  const navigateToCatalogEvent = useManagerStore((s) => s.navigateToCatalogEvent);
 
   React.useEffect(() => {
     if (!isDeadlinesOpen) return;
@@ -208,12 +210,19 @@ export function ManagerHeader({
                       return (
                         <div
                           key={item.event_id}
-                          className="rounded-[8px] border border-[#262C35] bg-[#1A1E24] p-3 transition-colors hover:border-[#38414F] hover:bg-[#1E232B]"
+                          onClick={() => {
+                            navigateToCatalogEvent(item.event_id);
+                            setIsDeadlinesOpen(false);
+                          }}
+                          title="Нажмите, чтобы открыть подробную информацию и тарифы в Базе площадок"
+                          className="group/deadline rounded-[8px] border border-[#262C35] bg-[#1A1E24] p-3 transition-colors hover:border-[#E5C378] hover:bg-[#1E252E] cursor-pointer"
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <p className="text-[13px] font-medium leading-snug text-white">
-                              {item.event_title}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-medium leading-snug text-white group-hover/deadline:text-[#E5C378] transition-colors">
+                                {item.event_title}
+                              </p>
+                            </div>
                             <Badge variant="ebEmerald" className="shrink-0 py-1 px-3">
                               <span className="flex flex-col items-center leading-tight">
                                 <span className="text-[9px] uppercase tracking-wider opacity-90 font-semibold">
@@ -230,8 +239,9 @@ export function ManagerHeader({
                               <Clock className="h-3.5 w-3.5 text-[#8E95A0]" strokeWidth={1.5} />
                               Дедлайн: {formatDateShort(item.early_bird_deadline)}
                             </span>
-                            <span>
-                              Осталось дн.: {daysLeft ?? "—"}
+                            <span className="inline-flex items-center gap-1 font-serif italic text-[11px] text-[#8E95A0] group-hover/deadline:text-[#E5C378] transition-colors">
+                              <span>Осталось дн.: {daysLeft ?? "—"}</span>
+                              <ChevronRight className="h-3 w-3 stroke-[2] transition-transform group-hover/deadline:translate-x-0.5" />
                             </span>
                           </div>
                         </div>
