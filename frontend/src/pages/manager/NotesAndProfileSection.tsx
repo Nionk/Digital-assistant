@@ -217,10 +217,10 @@ export function NotesAndProfileSection({
       {/* Шапка блока Шага 01–03 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5 rounded-t-[12px]">
         <div className="flex items-baseline gap-2.5 min-w-0">
-          <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
+          <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
             01
           </span>
-          <h2 className="font-serif italic text-sm font-semibold tracking-tight text-[#E5C378] sm:text-[15px]">
+          <h2 className="font-serif italic text-sm font-semibold tracking-tight text-[#E5C378] sm:text-[15px] leading-snug">
             Запрос клиента и аналитика задач
           </h2>
           {hasMatchResult && isCollapsed && (

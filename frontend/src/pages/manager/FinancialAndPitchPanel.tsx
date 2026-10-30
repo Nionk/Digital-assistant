@@ -176,12 +176,12 @@ export function FinancialAndPitchPanel({
 
       {/* 2. Редактор сопроводительного письма и кнопка публикации (Шаг 06–07) */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#21262F]">
-          <div className="flex items-baseline gap-2">
-            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[#21262F]">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
               03
             </span>
-            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
+            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378] leading-snug">
               Персональное обращение к клиенту
             </h2>
           </div>
@@ -190,10 +190,10 @@ export function FinancialAndPitchPanel({
             type="button"
             onClick={onSyncPitchNumbers}
             title="Автоматически подставить пересчитанную сумму, выгоду и список площадок в текст письма"
-            className="group relative inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
+            className="group relative inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
           >
             <RefreshCw className="h-3 w-3 shrink-0 text-inherit transition-colors duration-150 group-hover:text-[#E5C378]" strokeWidth={2} />
-            <span className="transition-colors duration-150">Синхронизировать цифры</span>
+            <span className="transition-colors duration-150">Обновить цифры</span>
           </button>
         </div>
 
