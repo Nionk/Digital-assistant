@@ -205,14 +205,35 @@ export function ClientShowcasePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0E12] bg-[radial-gradient(ellipse_80%_35%_at_50%_0%,rgba(124,90,32,0.06),transparent_70%)] text-[#F3F4F6] pb-20">
-      {/* 1. Шапка витрины и сводный бюджет */}
-      <ShowcaseExecutiveHeader showcase={showcase} />
+    <div className="relative min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-20 overflow-x-hidden selection:bg-[#E5C378]/25 selection:text-white">
+      {/* ========================================================================= */}
+      {/* ВАРИАНТ 1: АТМОСФЕРНЫЙ АРХИТЕКТУРНЫЙ СВЕТ И ДЕЛИКАТНЫЙ ЭМБИЕНТ           */}
+      {/* ========================================================================= */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        {/* 1. Верхний коньячно-золотой световой купол (акцент на статусе и бюджете) */}
+        <div className="absolute -top-[12%] left-1/2 -translate-x-1/2 h-[680px] w-[1200px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(229,195,120,0.065)_0%,rgba(124,90,32,0.025)_45%,transparent_72%)] blur-2xl" />
 
-      {/* 2. График участия по датам */}
-      <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
-        <CalendarTimeline items={timelineItems} />
+        {/* 2. Левый глубокий хвойно-изумрудный отсвет (символ выгоды и партнерства) */}
+        <div className="absolute top-[35%] -left-[12%] h-[750px] w-[750px] rounded-full bg-[radial-gradient(circle_at_center,rgba(45,106,79,0.045)_0%,rgba(22,56,44,0.015)_50%,transparent_70%)] blur-3xl" />
+
+        {/* 3. Правый теплый бронзово-терракотовый ореол */}
+        <div className="absolute top-[60%] -right-[10%] h-[650px] w-[650px] rounded-full bg-[radial-gradient(circle_at_center,rgba(124,90,32,0.035)_0%,transparent_70%)] blur-3xl" />
+
+        {/* 4. Нижний хвойно-обсидиановый рассеянный свет в блоке этапов агентства */}
+        <div className="absolute -bottom-[10%] left-1/3 h-[500px] w-[800px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(45,106,79,0.03)_0%,transparent_70%)] blur-2xl" />
+
+        {/* 5. Тактильное микрозерно (Luxury Grain) */}
+        <div className="luxury-noise-bg absolute inset-0 opacity-40 mix-blend-overlay" />
       </div>
+
+      <div className="relative z-10">
+        {/* 1. Шапка витрины и сводный бюджет */}
+        <ShowcaseExecutiveHeader showcase={showcase} />
+
+        {/* 2. График участия по датам */}
+        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+          <CalendarTimeline items={timelineItems} />
+        </div>
 
       {/* 3. Секция рекомендованных мероприятий */}
       <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
@@ -518,6 +539,7 @@ export function ClientShowcasePage() {
         }
         isReacting={reactionMutation.isPending}
       />
+      </div>
     </div>
   );
 }

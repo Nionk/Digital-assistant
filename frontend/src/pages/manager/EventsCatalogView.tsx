@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useManagerEventsCatalog } from "@/api/queries";
 import type { CatalogEventItemOut } from "@/api/types";
+import { useManagerStore } from "@/store/useManagerStore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -72,6 +73,11 @@ export function EventsCatalogView() {
     React.useState<CatalogEventItemOut | null>(null);
   const [copiedEventId, setCopiedEventId] = React.useState<number | null>(null);
 
+  const catalogTargetEventId = useManagerStore((s) => s.catalogTargetEventId);
+  const setCatalogTargetEventId = useManagerStore((s) => s.setCatalogTargetEventId);
+
+  const events = data?.events || [];
+
   const handleCopyLocation = (e: React.MouseEvent, ev: CatalogEventItemOut) => {
     e.stopPropagation();
     const fullText = ev.is_online
@@ -86,7 +92,22 @@ export function EventsCatalogView() {
     }, 2000);
   };
 
-  const events = data?.events || [];
+  // Автоматическое открытие шторки площадки при переходе из дедлайнов Early Bird
+  React.useEffect(() => {
+    if (!catalogTargetEventId || events.length === 0) return;
+    const target = events.find((e) => e.event_id === catalogTargetEventId);
+    if (target) {
+      if (selectedFormat !== "all" && target.event_format !== selectedFormat) {
+        setSelectedFormat("all");
+      }
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery("");
+      }
+      setSelectedEventForDrawer(target);
+      toast.info(`Условия площадки: «${target.canonical_title}»`);
+    }
+    setCatalogTargetEventId(null);
+  }, [catalogTargetEventId, events, selectedFormat, searchQuery, setCatalogTargetEventId]);
 
   const cityOptions = React.useMemo(() => {
     const counts = new Map<string, number>();

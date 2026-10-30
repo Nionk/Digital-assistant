@@ -104,8 +104,13 @@ interface ManagerState {
     { magicToken: string; publicUrl: string; totalPrice: number; totalSavings: number }
   >;
 
+  // Целевое мероприятие для перехода в Базу площадок
+  catalogTargetEventId: number | null;
+
   // Действия
   setWorkspaceMode: (mode: ManagerWorkspaceMode) => void;
+  navigateToCatalogEvent: (eventId: number) => void;
+  setCatalogTargetEventId: (eventId: number | null) => void;
   toggleSidebar: () => void;
   selectClient: (clientId: number, initialNotes?: string) => void;
   setClientSearchQuery: (q: string) => void;
@@ -150,11 +155,16 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
   customRationaleByClient: {},
   pitchTextByClient: {},
   publishedInfoByClient: {},
+  catalogTargetEventId: null,
 
   setProducer: (producer) => set({ currentProducer: producer }),
   setProducerModalOpen: (open) => set({ isProducerModalOpen: open }),
 
   setWorkspaceMode: (mode) => set({ workspaceMode: mode }),
+  navigateToCatalogEvent: (eventId) =>
+    set({ workspaceMode: "catalog", catalogTargetEventId: eventId }),
+  setCatalogTargetEventId: (eventId) =>
+    set({ catalogTargetEventId: eventId }),
   toggleSidebar: () => set((s) => ({ isSidebarCollapsed: !s.isSidebarCollapsed })),
 
   selectClient: (clientId, initialNotes) =>
