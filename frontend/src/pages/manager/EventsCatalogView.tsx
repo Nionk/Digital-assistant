@@ -104,7 +104,6 @@ export function EventsCatalogView() {
         setSearchQuery("");
       }
       setSelectedEventForDrawer(target);
-      toast.info(`Условия площадки: «${target.canonical_title}»`);
     }
     setCatalogTargetEventId(null);
   }, [catalogTargetEventId, events, selectedFormat, searchQuery, setCatalogTargetEventId]);
