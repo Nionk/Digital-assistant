@@ -20,6 +20,7 @@ import {
 import { useManagerEventsCatalog } from "@/api/queries";
 import type { CatalogEventItemOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
 import {
   SearchableMultiSelectPopover,
@@ -333,7 +334,7 @@ export function EventsCatalogView() {
               <Sparkles className="h-3 w-3 text-inherit shrink-0" strokeWidth={1.75} />
               <span>Только со скидкой Early Bird</span>
               {onlyEarlyBird && (
-                <span className="ml-0.5 rounded bg-[#E5C378]/20 px-1 py-0.2 text-[10px] text-[#E5C378]">
+                <span className="ml-0.5 rounded bg-[#E5C378]/20 px-1 py-0.5 text-[10px] text-[#E5C378]">
                   {metrics.earlyBird}
                 </span>
               )}
@@ -359,36 +360,53 @@ export function EventsCatalogView() {
               Показано: <strong className="text-white font-sans font-semibold not-italic tabular-nums">{filteredEvents.length}</strong> из {events.length}
             </span>
 
-            {/* Переключатель вида Реестр / Карточки */}
-            <div className="inline-flex items-center rounded-[6px] border border-[#262D35] bg-[#12161A] p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                title="Режим реестра (таблица)"
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-2.5 py-1 text-xs font-serif italic transition-colors duration-120 select-none cursor-pointer",
-                  viewMode === "table"
-                    ? "bg-[#261E0F] text-[#E5C378] border-[#7C5A20]/60 font-semibold shadow-xs"
-                    : "text-[#8E95A0] hover:text-white"
-                )}
-              >
-                <LayoutList className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="hidden md:inline">Реестр</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                title="Режим визиток (карточки)"
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-2.5 py-1 text-xs font-serif italic transition-colors duration-120 select-none cursor-pointer",
-                  viewMode === "cards"
-                    ? "bg-[#261E0F] text-[#E5C378] border-[#7C5A20]/60 font-semibold shadow-xs"
-                    : "text-[#8E95A0] hover:text-white"
-                )}
-              >
-                <LayoutGrid className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="hidden md:inline">Карточки</span>
-              </button>
+            {/* Плавный переключатель вида Реестр / Карточки */}
+            <div className="inline-flex items-center rounded-[8px] border border-[#232931] bg-[#12161A] p-1 gap-0.5 shadow-inner">
+              {(
+                [
+                  { id: "table", label: "Реестр", icon: LayoutList, title: "Режим реестра (таблица)" },
+                  { id: "cards", label: "Карточки", icon: LayoutGrid, title: "Режим визиток (карточки)" },
+                ] as const
+              ).map((mode) => {
+                const Icon = mode.icon;
+                const isActive = viewMode === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setViewMode(mode.id)}
+                    title={mode.title}
+                    className={cn(
+                      "relative inline-flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 text-xs font-medium select-none cursor-pointer transition-colors duration-200 outline-none",
+                      isActive ? "text-white" : "text-[#8E95A0] hover:text-white"
+                    )}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="catalogViewModePill"
+                        transition={{
+                          type: "spring",
+                          stiffness: 380,
+                          damping: 32,
+                        }}
+                        className="absolute inset-0 rounded-[6px] bg-[#1A2128] shadow-sm"
+                      >
+                        <span className="absolute bottom-0 left-1.5 right-1.5 h-[2px] rounded-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37]" />
+                      </motion.span>
+                    )}
+                    <Icon
+                      className={cn(
+                        "relative z-10 h-3.5 w-3.5 shrink-0 transition-colors duration-200",
+                        isActive ? "text-[#E5C378]" : "text-[#8E95A0]"
+                      )}
+                      strokeWidth={1.75}
+                    />
+                    <span className="relative z-10 hidden md:inline">
+                      {mode.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -408,17 +426,19 @@ export function EventsCatalogView() {
           <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
             Мероприятия по заданным фильтрам не найдены
           </h3>
-          <p className="mx-auto mt-1.5 max-w-md font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
+          <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-[#8E95A0]">
             Попробуйте смягчить критерии поиска (сбросить тему, формат или отключить фильтр Early Bird)
           </p>
-          <button
+          <Button
             type="button"
+            variant="monolith"
+            size="sm"
             onClick={handleResetFilters}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-[6px] bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37] px-3.5 py-1.5 text-xs font-semibold text-[#0E1215] shadow-sm hover:shadow-[0_0_12px_rgba(229,195,120,0.35)] active:scale-[0.98] transition-all cursor-pointer"
+            className="mt-4 cursor-pointer"
           >
-            <RotateCcw className="h-3 w-3 text-[#0E1215]" strokeWidth={2} />
+            <RotateCcw className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" strokeWidth={1.75} />
             <span>Сбросить все фильтры</span>
-          </button>
+          </Button>
         </div>
       ) : (
         <AnimatePresence mode="wait" initial={false}>
@@ -707,7 +727,7 @@ export function EventsCatalogView() {
                         <span
                           key={t}
                           title={t}
-                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.2 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                         >
                           {t}
                         </span>
@@ -715,7 +735,7 @@ export function EventsCatalogView() {
                       {ev.themes.length > 4 && (
                         <span
                           title={ev.themes.slice(4).join(", ")}
-                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.2 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
+                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
                         >
                           +{ev.themes.length - 4}
                         </span>

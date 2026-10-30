@@ -121,7 +121,7 @@ export function ProducerProfileModal({
                             <span className="font-serif text-sm font-semibold text-white group-hover:text-[#E5C378] transition-colors truncate">
                               {profile.name}
                             </span>
-                            <span className="shrink-0 rounded-[2px] border border-[#262D35] bg-[#161B21] px-1.5 py-0.2 text-[10px] font-serif italic text-[#8E95A0]">
+                            <span className="shrink-0 rounded-[2px] border border-[#262D35] bg-[#161B21] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0]">
                               {profile.role}
                             </span>
                           </div>
