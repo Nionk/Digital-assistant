@@ -1,4 +1,5 @@
 import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
   Globe,
@@ -149,22 +150,31 @@ export function BundleConstructorSection({
       {/* Визуальная шкала «Календарь без пересечений по срокам» */}
       <CalendarTimeline items={timelineItems} />
 
-      {/* Горизонтальные строки мероприятий выбранного варианта */}
-      <div className="space-y-2.5">
-        {mainRows.map((row) => (
-          <EventBuilderRow
-            key={row.item.event_id}
-            row={row}
-            onToggleIncluded={() => onToggleEventIncluded(row.item.event_id)}
-            onChangeTariff={(tariffId) =>
-              onChangeEventTariff(row.item.event_id, tariffId)
-            }
-            onUpdateRationale={(text) =>
-              onUpdateEventRationale(row.item.event_id, text)
-            }
-          />
-        ))}
-      </div>
+      {/* Горизонтальные строки мероприятий выбранного варианта с мягким cross-fade при смене варианта */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={selectedVariantGroup}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="space-y-2.5"
+        >
+          {mainRows.map((row) => (
+            <EventBuilderRow
+              key={row.item.event_id}
+              row={row}
+              onToggleIncluded={() => onToggleEventIncluded(row.item.event_id)}
+              onChangeTariff={(tariffId) =>
+                onChangeEventTariff(row.item.event_id, tariffId)
+              }
+              onUpdateRationale={(text) =>
+                onUpdateEventRationale(row.item.event_id, text)
+              }
+            />
+          ))}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Бонусный слот: Спецпроекты и партнёрские пакеты «По запросу» */}
       {bonusRows.length > 0 && (
