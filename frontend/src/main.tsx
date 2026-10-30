@@ -21,17 +21,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <App />
         <Toaster
-          position="bottom-right"
+          position="bottom-left"
           theme="dark"
           toastOptions={{
             style: {
               background: "#161B22",
-              color: "#E5C378",
-              border: "1px solid #7C5A20",
+              color: "#F4EFE6",
+              border: "1px solid rgba(197, 160, 89, 0.45)",
               borderRadius: "8px",
-              fontSize: "13px",
-              fontFamily: 'Lora, Georgia, Cambria, "Times New Roman", serif',
-              fontStyle: "italic",
+              fontSize: "12px",
+              fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
               boxShadow: "0 12px 32px rgba(0, 0, 0, 0.75)",
             },
             classNames: {

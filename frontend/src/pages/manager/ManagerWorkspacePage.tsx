@@ -20,6 +20,7 @@ import { BundleConstructorSection } from "./BundleConstructorSection";
 import { FinancialAndPitchPanel } from "./FinancialAndPitchPanel";
 import { PublishedShowcaseMonitor } from "./PublishedShowcaseMonitor";
 import { EventsCatalogView } from "./EventsCatalogView";
+import { EventDetailsDrawer } from "./EventDetailsDrawer";
 
 export function ManagerWorkspacePage() {
   const { data: dashboard, isLoading: isDashboardLoading } =
@@ -62,7 +63,18 @@ export function ManagerWorkspacePage() {
 
   // Состояние выпадающего меню списка клиентов (стиль Early Bird Popover)
   const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
+  const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
+    React.useState<number | null>(null);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedCatalogEventForDrawer = React.useMemo(() => {
+    if (selectedEventIdForDrawer === null || !catalogData?.events) return null;
+    return (
+      catalogData.events.find(
+        (ev) => ev.event_id === selectedEventIdForDrawer
+      ) || null
+    );
+  }, [selectedEventIdForDrawer, catalogData?.events]);
 
   const handleToggleClientsDropdown = () => {
     setIsClientsDropdownOpen((prev) => !prev);
@@ -304,7 +316,7 @@ export function ManagerWorkspacePage() {
                     <span className="transition-colors duration-150">Список клиентов</span>
                     <span
                       className={cn(
-                        "rounded bg-[#1A252A] px-1.5 py-0.2 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
+                        "rounded bg-[#1A252A] px-1.5 py-0.5 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
                         "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
                       )}
                     >
@@ -552,6 +564,9 @@ export function ManagerWorkspacePage() {
                             onUpdateEventRationale={(evId, text) =>
                               updateEventRationale(activeClient.id, evId, text)
                             }
+                            onOpenEventDetails={(evId) =>
+                              setSelectedEventIdForDrawer(evId)
+                            }
                           />
                         </motion.div>
                       ) : (
@@ -571,9 +586,9 @@ export function ManagerWorkspacePage() {
                             <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
                               Готово к формированию пакетов участия
                             </h3>
-                            <p className="mx-auto mt-1.5 max-w-lg font-serif italic text-xs leading-relaxed text-[#D4AF37]/90">
+                            <p className="mx-auto mt-1.5 max-w-lg text-xs leading-relaxed text-[#8E95A0]">
                               Проверьте конспект установочной встречи выше и нажмите{" "}
-                              <strong className="font-bold text-inherit">
+                              <strong className="font-semibold text-white">
                                 «Подобрать варианты пакетов»
                               </strong>
                               . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
@@ -637,6 +652,13 @@ export function ManagerWorkspacePage() {
             )}
           </div>
         </main>
+
+        {/* Выдвижная шторка детального просмотра площадки прямо из конструктора пакета */}
+        <EventDetailsDrawer
+          event={selectedCatalogEventForDrawer}
+          isOpen={Boolean(selectedCatalogEventForDrawer)}
+          onClose={() => setSelectedEventIdForDrawer(null)}
+        />
         </div>
       )}
     </div>
