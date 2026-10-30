@@ -128,14 +128,6 @@ export function ManagerHeader({
           <span className="transition-colors duration-150">
             База площадок
           </span>
-          <span
-            className={cn(
-              "rounded bg-[#1A252A] px-1.5 py-0.5 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
-              "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
-            )}
-          >
-            {eventsCount}
-          </span>
 
           {/* Золотая светящаяся линия подчеркивания: плавно расходится от центра к краям */}
           <span
