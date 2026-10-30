@@ -2,6 +2,7 @@ import * as React from "react";
 import { useParams } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,7 @@ import {
   type ShowcaseRoleFilter,
 } from "@/store/useShowcaseStore";
 import { CalendarTimeline } from "@/components/ui/calendar-timeline";
+import { Badge } from "@/components/ui/badge";
 import { ShowcaseExecutiveHeader } from "./ShowcaseExecutiveHeader";
 import { ShowcaseEventCard } from "./ShowcaseEventCard";
 import { RegulationConsultantDrawer } from "./RegulationConsultantDrawer";
@@ -171,15 +173,13 @@ export function ClientShowcasePage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas p-6 text-ink">
-        <div className="rounded-card border border-border bg-surface p-8 text-center shadow-card max-w-md w-full">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-badge bg-pine text-sm font-bold text-white">
-            СК
-          </div>
-          <h2 className="mt-3 text-base font-semibold text-ink">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] p-6 text-white">
+        <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-8 text-center shadow-sm max-w-md w-full">
+          <div className="mx-auto h-8 w-8 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
+          <h2 className="mt-4 font-serif text-base font-semibold text-white">
             Загрузка персонального предложения...
           </h2>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 font-serif italic text-xs text-[#E5C378]">
             Формируем рекомендованный календарь мероприятий и условия участия
           </p>
         </div>
@@ -189,17 +189,17 @@ export function ClientShowcasePage() {
 
   if (isError || !showcase) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas p-6 text-ink">
-        <div className="rounded-card border border-terracotta-border bg-surface p-8 text-center shadow-card max-w-md w-full">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] p-6 text-white">
+        <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-8 text-center shadow-sm max-w-md w-full">
           <AlertCircle
-            className="mx-auto h-10 w-10 text-terracotta"
+            className="mx-auto h-10 w-10 text-[#E5C378]"
             strokeWidth={1.5}
           />
-          <h2 className="mt-3 text-base font-semibold text-ink">
+          <h2 className="mt-3 font-serif text-base font-semibold text-white">
             Персональная витрина не найдена
           </h2>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-            Проверьте корректность ссылки или обратитесь к вашему персональному менеджеру сопровождения ГК «СКАРТ».
+          <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-[#8E95A0]">
+            Проверьте корректность ссылки или обратитесь к вашему персональному продюсеру сопровождения ГК «СКАРТ».
           </p>
         </div>
       </div>
@@ -207,7 +207,7 @@ export function ClientShowcasePage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-ink pb-16">
+    <div className="min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-16">
       {/* 1. Шапка «Исполнительное досье» (Executive Briefing) */}
       <ShowcaseExecutiveHeader
         showcase={showcase}
@@ -223,26 +223,26 @@ export function ClientShowcasePage() {
 
       {/* 3. Секция «Рекомендовано для вас» (Карусель / Сетка в стиле Фото 8) */}
       <section className="mx-auto max-w-7xl px-4 pt-7 sm:px-6">
-        <div className="rounded-card border border-border bg-surface p-5 sm:p-6 shadow-card">
+        <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 shadow-sm">
           {/* Верхняя панель секции карточек: Заголовок + Фильтры ролей + Переключатель вида + Стрелки < > */}
-          <div className="flex flex-col justify-between gap-4 border-b border-border/80 pb-4 lg:flex-row lg:items-center">
+          <div className="flex flex-col justify-between gap-4 border-b border-[#21262F] pb-4 lg:flex-row lg:items-center">
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-tag bg-novel-sand text-[#2A2213] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-novel-sandBorder">
+                <Badge variant="ebGold" className="text-[10px]">
                   ВЫБОР АГЕНТСТВА
-                </span>
-                <h2 className="font-serif text-xl font-bold tracking-tight text-ink sm:text-2xl">
+                </Badge>
+                <h2 className="font-serif text-xl font-bold tracking-tight text-white sm:text-2xl">
                   Рекомендовано для вас
                 </h2>
               </div>
-              <p className="mt-0.5 text-xs text-ink-muted">
+              <p className="mt-1 text-xs text-[#8E95A0] font-serif italic">
                 Площадки отобраны с учетом ваших целевых ориентиров, аудитории и лимита бюджета
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Быстрый фильтр по ролям */}
-              <div className="flex items-center rounded-control border border-border bg-canvas p-0.5">
+              <div className="flex items-center rounded-[8px] border border-[#262D35] bg-[#12161A] p-0.5">
                 {(
                   [
                     { id: "all", label: "Все" },
@@ -256,10 +256,10 @@ export function ClientShowcasePage() {
                     type="button"
                     onClick={() => setRoleFilter(tab.id)}
                     className={cn(
-                      "rounded-[6px] px-2.5 py-1 text-xs font-medium transition-all",
+                      "rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
                       roleFilter === tab.id
-                        ? "bg-surface text-ink shadow-sm"
-                        : "text-ink-muted hover:text-ink"
+                        ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
+                        : "text-[#8E95A0] hover:text-white"
                     )}
                   >
                     {tab.label}
@@ -268,16 +268,16 @@ export function ClientShowcasePage() {
               </div>
 
               {/* Переключатель Карусель / Сетка */}
-              <div className="flex items-center rounded-control border border-border bg-canvas p-0.5">
+              <div className="flex items-center rounded-[8px] border border-[#262D35] bg-[#12161A] p-0.5">
                 <button
                   type="button"
                   onClick={() => setLayoutMode("carousel")}
                   title="Горизонтальная карусель"
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-medium transition-all",
+                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
                     layoutMode === "carousel"
-                      ? "bg-surface text-ink shadow-sm"
-                      : "text-ink-muted hover:text-ink"
+                      ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
+                      : "text-[#8E95A0] hover:text-white"
                   )}
                 >
                   <GalleryHorizontalEnd
@@ -291,10 +291,10 @@ export function ClientShowcasePage() {
                   onClick={() => setLayoutMode("grid")}
                   title="Сетка карточек"
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-medium transition-all",
+                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
                     layoutMode === "grid"
-                      ? "bg-surface text-ink shadow-sm"
-                      : "text-ink-muted hover:text-ink"
+                      ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
+                      : "text-[#8E95A0] hover:text-white"
                   )}
                 >
                   <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -310,7 +310,7 @@ export function ClientShowcasePage() {
                     onClick={() => emblaApi?.scrollPrev()}
                     disabled={!canScrollPrev}
                     aria-label="Предыдущая карточка"
-                    className="flex h-8 w-8 items-center justify-center rounded-control border border-border bg-canvas text-ink transition-colors hover:bg-surface-muted disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
                   </button>
@@ -319,7 +319,7 @@ export function ClientShowcasePage() {
                     onClick={() => emblaApi?.scrollNext()}
                     disabled={!canScrollNext}
                     aria-label="Следующая карточка"
-                    className="flex h-8 w-8 items-center justify-center rounded-control border border-border bg-canvas text-ink transition-colors hover:bg-surface-muted disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
                   </button>
@@ -328,32 +328,81 @@ export function ClientShowcasePage() {
             </div>
           </div>
 
-          {/* Отображение карточек: Карусель (1.12 карточки на смартфоне, 2 на планшете, 3 на десктопе) или Сетка */}
+          {/* Отображение карточек с плавным переходом: Карусель или Сетка */}
           <div className="mt-5">
             {filteredItems.length === 0 ? (
-              <div className="py-10 text-center text-xs text-ink-muted">
+              <div className="py-10 text-center font-serif italic text-xs text-[#8E95A0]">
                 В пакете нет площадок с выбранным фильтром роли
               </div>
-            ) : layoutMode === "carousel" ? (
-              <div className="overflow-hidden" ref={emblaRef}>
-                <div className="-ml-4 flex">
-                  {filteredItems.map((item) => (
-                    <div
-                      key={item.selection_item_id}
-                      className="min-w-0 shrink-0 grow-0 basis-[88%] pl-4 sm:basis-[56%] lg:basis-1/3"
-                    >
+            ) : (
+              <AnimatePresence mode="wait">
+                {layoutMode === "carousel" ? (
+                  <motion.div
+                    key="showcase-carousel"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="overflow-hidden"
+                    ref={emblaRef}
+                  >
+                    <div className="-ml-4 flex">
+                      {filteredItems.map((item) => (
+                        <div
+                          key={item.selection_item_id}
+                          className="min-w-0 shrink-0 grow-0 basis-[88%] pl-4 sm:basis-[56%] lg:basis-1/3"
+                        >
+                          <ShowcaseEventCard
+                            item={item}
+                            selectedAgencyServices={
+                              selectedAgencyServicesByItem[
+                                item.selection_item_id
+                              ] || []
+                            }
+                            onToggleAgencyService={(tag) =>
+                              toggleAgencyServiceForItem(
+                                item.selection_item_id,
+                                tag
+                              )
+                            }
+                            onReact={(reaction, comment) =>
+                              handleReactToItem(
+                                item.selection_item_id,
+                                reaction,
+                                comment
+                              )
+                            }
+                            isReacting={reactionMutation.isPending}
+                            onOpenRegulationDrawer={(initialQuestion) =>
+                              handleOpenRegulationDrawerForCard(
+                                item.event_id,
+                                initialQuestion
+                              )
+                            }
+                            quickChips={showcase.faq_quick_chips}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="showcase-grid"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                  >
+                    {filteredItems.map((item) => (
                       <ShowcaseEventCard
+                        key={item.selection_item_id}
                         item={item}
                         selectedAgencyServices={
-                          selectedAgencyServicesByItem[
-                            item.selection_item_id
-                          ] || []
+                          selectedAgencyServicesByItem[item.selection_item_id] || []
                         }
                         onToggleAgencyService={(tag) =>
-                          toggleAgencyServiceForItem(
-                            item.selection_item_id,
-                            tag
-                          )
+                          toggleAgencyServiceForItem(item.selection_item_id, tag)
                         }
                         onReact={(reaction, comment) =>
                           handleReactToItem(
@@ -371,40 +420,10 @@ export function ClientShowcasePage() {
                         }
                         quickChips={showcase.faq_quick_chips}
                       />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredItems.map((item) => (
-                  <ShowcaseEventCard
-                    key={item.selection_item_id}
-                    item={item}
-                    selectedAgencyServices={
-                      selectedAgencyServicesByItem[item.selection_item_id] || []
-                    }
-                    onToggleAgencyService={(tag) =>
-                      toggleAgencyServiceForItem(item.selection_item_id, tag)
-                    }
-                    onReact={(reaction, comment) =>
-                      handleReactToItem(
-                        item.selection_item_id,
-                        reaction,
-                        comment
-                      )
-                    }
-                    isReacting={reactionMutation.isPending}
-                    onOpenRegulationDrawer={(initialQuestion) =>
-                      handleOpenRegulationDrawerForCard(
-                        item.event_id,
-                        initialQuestion
-                      )
-                    }
-                    quickChips={showcase.faq_quick_chips}
-                  />
-                ))}
-              </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             )}
           </div>
         </div>
@@ -413,14 +432,14 @@ export function ClientShowcasePage() {
       {/* 4. Блок «Этапы совместной работы и подготовка под задачи бизнеса» */}
       <AgencyWorkflowStepsSection />
 
-      {/* 5. Плавающая кнопка запуска ИИ-консультанта по регламентам (Фото 7) */}
+      {/* 5. Плавающая кнопка запуска ИИ-консультанта по регламентам в стиле золотого слитка */}
       {!activeDrawerEventId && items.length > 0 && (
         <button
           type="button"
           onClick={() => openEventDrawer(items[0].event_id, "regulation")}
-          className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-card bg-pine px-4 py-3 text-xs font-semibold text-white shadow-elevated transition-transform hover:scale-[1.02] hover:bg-pine-hover"
+          className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-[8px] btn-gold-ingot px-4 py-3 text-xs font-semibold shadow-2xl active:scale-[0.98] transition-transform"
         >
-          <MessageSquareText className="h-4 w-4" strokeWidth={1.75} />
+          <MessageSquareText className="h-4 w-4 text-[#0E1215]" strokeWidth={2} />
           <span>Вопросы по регламенту и тарифам</span>
         </button>
       )}
