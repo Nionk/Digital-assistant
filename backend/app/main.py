@@ -20,10 +20,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SKART AI Assistant API",
+    title="Digital Assistant API",
     description=(
         "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании "
-        "для ГК «СКАРТ». Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную "
+        "Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную "
         "публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам."
     ),
     version="0.1.0-demo",
