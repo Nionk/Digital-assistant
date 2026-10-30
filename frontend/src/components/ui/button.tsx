@@ -24,6 +24,8 @@ const buttonVariants = cva(
           "bg-terracotta text-white shadow-sm hover:bg-terracotta-hover",
         terracottaTint:
           "bg-terracotta-tint text-terracotta border border-terracotta-border hover:bg-terracotta/15",
+        gold:
+          "btn-gold-ingot text-[#0E1215]",
       },
       size: {
         xs: "h-7 px-2.5 text-xs",
