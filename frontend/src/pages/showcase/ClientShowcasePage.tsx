@@ -10,6 +10,7 @@ import {
   GalleryHorizontalEnd,
   MessageSquareText,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import {
   useAskRegulationMutation,
@@ -21,7 +22,6 @@ import {
   type ShowcaseRoleFilter,
 } from "@/store/useShowcaseStore";
 import { CalendarTimeline } from "@/components/ui/calendar-timeline";
-import { Badge } from "@/components/ui/badge";
 import { ShowcaseExecutiveHeader } from "./ShowcaseExecutiveHeader";
 import { ShowcaseEventCard } from "./ShowcaseEventCard";
 import { RegulationConsultantDrawer } from "./RegulationConsultantDrawer";
@@ -55,7 +55,7 @@ export function ClientShowcasePage() {
     toggleAgencyServiceForItem,
   } = useShowcaseStore();
 
-  // Инициализация Embla Carousel с поддержкой свайпа и частичным показом следующей карточки на мобильном
+  // Инициализация Embla Carousel с поддержкой свайпа
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "start",
     containScroll: "trimSnaps",
@@ -76,7 +76,7 @@ export function ClientShowcasePage() {
     updateScrollButtons();
     emblaApi.on("select", updateScrollButtons);
     emblaApi.on("reInit", updateScrollButtons);
-  }, [emblaApi, updateScrollButtons]);
+  }, [emblaApi, updateScrollButtons, roleFilter]);
 
   const items = showcase?.items || [];
 
@@ -117,19 +117,17 @@ export function ClientShowcasePage() {
       if (reaction === "interested") {
         toast.success(
           comment
-            ? "Площадка и запрошенная подготовка сохранены. Менеджер уведомлен в Telegram."
-            : "Площадка отмечена как интересная. Менеджер получил уведомление."
+            ? "Мероприятие и выбранные опции подготовки сохранены"
+            : "Мероприятие добавлено в ваш план участия"
         );
       } else {
-        toast.success(
-          "Пожелание по замене передано вашему менеджеру в Telegram."
-        );
+        toast.success("Пожелание по замене передано вашему куратору");
       }
     } catch (err) {
       toast.error(
         err instanceof Error
           ? err.message
-          : "Не удалось сохранить отклик. Повторите попытку."
+          : "Не удалось сохранить выбор. Повторите попытку."
       );
     }
   };
@@ -150,7 +148,7 @@ export function ClientShowcasePage() {
         exchangeId,
         err instanceof Error
           ? err.message
-          : "Ошибка при обращении к консультанту по регламенту"
+          : "Не удалось получить ответ. Попробуйте еще раз."
       );
     }
   };
@@ -173,14 +171,14 @@ export function ClientShowcasePage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] p-6 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] bg-[radial-gradient(ellipse_80%_35%_at_50%_0%,rgba(124,90,32,0.06),transparent_70%)] p-6 text-white">
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-8 text-center shadow-sm max-w-md w-full">
           <div className="mx-auto h-8 w-8 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
           <h2 className="mt-4 font-serif text-base font-semibold text-white">
             Загрузка персонального предложения...
           </h2>
           <p className="mt-1 font-serif italic text-xs text-[#E5C378]">
-            Формируем рекомендованный календарь мероприятий и условия участия
+            Подготавливаем календарь мероприятий и условия участия
           </p>
         </div>
       </div>
@@ -189,17 +187,17 @@ export function ClientShowcasePage() {
 
   if (isError || !showcase) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] p-6 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0E12] bg-[radial-gradient(ellipse_80%_35%_at_50%_0%,rgba(124,90,32,0.06),transparent_70%)] p-6 text-white">
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-8 text-center shadow-sm max-w-md w-full">
           <AlertCircle
             className="mx-auto h-10 w-10 text-[#E5C378]"
             strokeWidth={1.5}
           />
           <h2 className="mt-3 font-serif text-base font-semibold text-white">
-            Персональная витрина не найдена
+            Страница не найдена
           </h2>
           <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-[#8E95A0]">
-            Проверьте корректность ссылки или обратитесь к вашему персональному продюсеру сопровождения ГК «СКАРТ».
+            Проверьте корректность ссылки или свяжитесь с вашим персональным куратором.
           </p>
         </div>
       </div>
@@ -207,42 +205,30 @@ export function ClientShowcasePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-16">
-      {/* 1. Шапка «Исполнительное досье» (Executive Briefing) */}
-      <ShowcaseExecutiveHeader
-        showcase={showcase}
-        onOpenConsultant={() => {
-          if (items[0]) openEventDrawer(items[0].event_id);
-        }}
-      />
+    <div className="min-h-screen bg-[#0B0E12] bg-[radial-gradient(ellipse_80%_35%_at_50%_0%,rgba(124,90,32,0.06),transparent_70%)] text-[#F3F4F6] pb-20">
+      {/* 1. Шапка витрины и сводный бюджет */}
+      <ShowcaseExecutiveHeader showcase={showcase} />
 
-      {/* 2. Визуальная шкала календаря без пересечений по датам */}
+      {/* 2. График участия по датам */}
       <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
         <CalendarTimeline items={timelineItems} />
       </div>
 
-      {/* 3. Секция «Рекомендовано для вас» (Карусель / Сетка в стиле Фото 8) */}
-      <section className="mx-auto max-w-7xl px-4 pt-7 sm:px-6">
+      {/* 3. Секция рекомендованных мероприятий */}
+      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 shadow-sm">
-          {/* Верхняя панель секции карточек: Заголовок + Фильтры ролей + Переключатель вида + Стрелки < > */}
+          {/* Верхняя панель: Заголовок + Плавные селекторы без вспышек */}
           <div className="flex flex-col justify-between gap-4 border-b border-[#21262F] pb-4 lg:flex-row lg:items-center">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="ebGold" className="text-[10px]">
-                  ВЫБОР АГЕНТСТВА
-                </Badge>
-                <h2 className="font-serif text-xl font-bold tracking-tight text-white sm:text-2xl">
-                  Рекомендовано для вас
-                </h2>
-              </div>
-              <p className="mt-1 text-xs text-[#8E95A0] font-serif italic">
-                Площадки отобраны с учетом ваших целевых ориентиров, аудитории и лимита бюджета
-              </p>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
+              <h2 className="font-serif text-lg font-bold tracking-tight text-white sm:text-xl">
+                Рекомендовано для вас
+              </h2>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Быстрый фильтр по ролям */}
-              <div className="flex items-center rounded-[8px] border border-[#262D35] bg-[#12161A] p-0.5">
+              {/* Плавный селектор ролей без скачков рамки */}
+              <div className="flex items-center rounded-[8px] border border-[#232931] bg-[#12161A] p-1 gap-0.5 shadow-inner">
                 {(
                   [
                     { id: "all", label: "Все" },
@@ -250,59 +236,99 @@ export function ClientShowcasePage() {
                     { id: "delegate", label: "Делегат" },
                     { id: "sponsor", label: "Стенд / Партнёр" },
                   ] as { id: ShowcaseRoleFilter; label: string }[]
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setRoleFilter(tab.id)}
-                    className={cn(
-                      "rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
-                      roleFilter === tab.id
-                        ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
-                        : "text-[#8E95A0] hover:text-white"
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                ).map((tab) => {
+                  const isActive = roleFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setRoleFilter(tab.id)}
+                      className={cn(
+                        "relative rounded-[6px] px-3 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-200 outline-none",
+                        isActive
+                          ? "text-white"
+                          : "text-[#8E95A0] hover:text-white"
+                      )}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="showcaseRoleSelectorPill"
+                          transition={{
+                            type: "spring",
+                            stiffness: 380,
+                            damping: 32,
+                          }}
+                          className="absolute inset-0 rounded-[6px] bg-[#1A2128] shadow-sm"
+                        >
+                          <span className="absolute bottom-0 left-1.5 right-1.5 h-[2px] rounded-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37]" />
+                        </motion.span>
+                      )}
+                      <span className="relative z-10">{tab.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Переключатель Карусель / Сетка */}
-              <div className="flex items-center rounded-[8px] border border-[#262D35] bg-[#12161A] p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setLayoutMode("carousel")}
-                  title="Горизонтальная карусель"
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
-                    layoutMode === "carousel"
-                      ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
-                      : "text-[#8E95A0] hover:text-white"
-                  )}
-                >
-                  <GalleryHorizontalEnd
-                    className="h-3.5 w-3.5"
-                    strokeWidth={1.5}
-                  />
-                  <span className="hidden sm:inline">Карусель</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayoutMode("grid")}
-                  title="Сетка карточек"
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-xs font-serif italic transition-all select-none cursor-pointer",
-                    layoutMode === "grid"
-                      ? "bg-[#261E0F] text-[#E5C378] border border-[#7C5A20]/60 font-semibold shadow-xs"
-                      : "text-[#8E95A0] hover:text-white"
-                  )}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  <span className="hidden sm:inline">Сетка</span>
-                </button>
+              {/* Плавный переключатель Карусель / Сетка */}
+              <div className="flex items-center rounded-[8px] border border-[#232931] bg-[#12161A] p-1 gap-0.5 shadow-inner">
+                {(
+                  [
+                    {
+                      id: "carousel",
+                      label: "Карусель",
+                      icon: GalleryHorizontalEnd,
+                    },
+                    {
+                      id: "grid",
+                      label: "Сетка",
+                      icon: LayoutGrid,
+                    },
+                  ] as const
+                ).map((mode) => {
+                  const Icon = mode.icon;
+                  const isActive = layoutMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setLayoutMode(mode.id)}
+                      title={mode.label}
+                      className={cn(
+                        "relative inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-200 outline-none",
+                        isActive
+                          ? "text-white"
+                          : "text-[#8E95A0] hover:text-white"
+                      )}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="showcaseLayoutSelectorPill"
+                          transition={{
+                            type: "spring",
+                            stiffness: 380,
+                            damping: 32,
+                          }}
+                          className="absolute inset-0 rounded-[6px] bg-[#1A2128] shadow-sm"
+                        >
+                          <span className="absolute bottom-0 left-1.5 right-1.5 h-[2px] rounded-full bg-gradient-to-r from-[#D4AF37] via-[#E5C378] to-[#D4AF37]" />
+                        </motion.span>
+                      )}
+                      <Icon
+                        className={cn(
+                          "relative z-10 h-3.5 w-3.5 transition-colors duration-200",
+                          isActive ? "text-[#E5C378]" : "text-[#8E95A0]"
+                        )}
+                        strokeWidth={1.75}
+                      />
+                      <span className="relative z-10 hidden sm:inline">
+                        {mode.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Стрелки прокрутки карусели < > (как на Фото 8) */}
+              {/* Стрелки прокрутки карусели < > */}
               {layoutMode === "carousel" && (
                 <div className="flex items-center gap-1">
                   <button
@@ -310,7 +336,7 @@ export function ClientShowcasePage() {
                     onClick={() => emblaApi?.scrollPrev()}
                     disabled={!canScrollPrev}
                     aria-label="Предыдущая карточка"
-                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors duration-150 hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
                   </button>
@@ -319,7 +345,7 @@ export function ClientShowcasePage() {
                     onClick={() => emblaApi?.scrollNext()}
                     disabled={!canScrollNext}
                     aria-label="Следующая карточка"
-                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#262D35] bg-[#12161A] text-white transition-colors duration-150 hover:border-[#E5C378] hover:text-[#E5C378] disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
                   </button>
@@ -332,25 +358,25 @@ export function ClientShowcasePage() {
           <div className="mt-5">
             {filteredItems.length === 0 ? (
               <div className="py-10 text-center font-serif italic text-xs text-[#8E95A0]">
-                В пакете нет площадок с выбранным фильтром роли
+                В подборке нет мероприятий с выбранным форматом участия
               </div>
             ) : (
               <AnimatePresence mode="wait">
                 {layoutMode === "carousel" ? (
                   <motion.div
-                    key="showcase-carousel"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
+                    key={`showcase-carousel-${roleFilter}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                     className="overflow-hidden"
                     ref={emblaRef}
                   >
-                    <div className="-ml-4 flex">
+                    <div className="-ml-4 flex items-stretch">
                       {filteredItems.map((item) => (
                         <div
                           key={item.selection_item_id}
-                          className="min-w-0 shrink-0 grow-0 basis-[88%] pl-4 sm:basis-[56%] lg:basis-1/3"
+                          className="min-w-0 shrink-0 grow-0 basis-[88%] pl-4 sm:basis-[56%] lg:basis-1/3 flex"
                         >
                           <ShowcaseEventCard
                             item={item}
@@ -379,7 +405,6 @@ export function ClientShowcasePage() {
                                 initialQuestion
                               )
                             }
-                            quickChips={showcase.faq_quick_chips}
                           />
                         </div>
                       ))}
@@ -387,22 +412,26 @@ export function ClientShowcasePage() {
                   </motion.div>
                 ) : (
                   <motion.div
-                    key="showcase-grid"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                    key={`showcase-grid-${roleFilter}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch"
                   >
                     {filteredItems.map((item) => (
                       <ShowcaseEventCard
                         key={item.selection_item_id}
                         item={item}
                         selectedAgencyServices={
-                          selectedAgencyServicesByItem[item.selection_item_id] || []
+                          selectedAgencyServicesByItem[item.selection_item_id] ||
+                          []
                         }
                         onToggleAgencyService={(tag) =>
-                          toggleAgencyServiceForItem(item.selection_item_id, tag)
+                          toggleAgencyServiceForItem(
+                            item.selection_item_id,
+                            tag
+                          )
                         }
                         onReact={(reaction, comment) =>
                           handleReactToItem(
@@ -418,7 +447,6 @@ export function ClientShowcasePage() {
                             initialQuestion
                           )
                         }
-                        quickChips={showcase.faq_quick_chips}
                       />
                     ))}
                   </motion.div>
@@ -429,22 +457,40 @@ export function ClientShowcasePage() {
         </div>
       </section>
 
-      {/* 4. Блок «Этапы совместной работы и подготовка под задачи бизнеса» */}
+      {/* 4. Блок сопровождения агентства */}
       <AgencyWorkflowStepsSection />
 
-      {/* 5. Плавающая кнопка запуска ИИ-консультанта по регламентам в стиле обсидианового монолита */}
-      {!activeDrawerEventId && items.length > 0 && (
-        <button
-          type="button"
-          onClick={() => openEventDrawer(items[0].event_id, "regulation")}
-          className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-xl btn-monolith px-4 py-3 text-xs font-semibold shadow-2xl active:scale-[0.98] transition-transform"
-        >
-          <MessageSquareText className="h-4 w-4 text-[#E5C378] monolith-icon" strokeWidth={2} />
-          <span>Вопросы по регламенту и тарифам</span>
-        </button>
-      )}
+      {/* 5. Стильная боковая закладка справа для открытия вопросов по условиям */}
+      <AnimatePresence>
+        {!activeDrawerEventId && items.length > 0 && (
+          <motion.button
+            initial={{ x: 40, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 40, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            type="button"
+            onClick={() => openEventDrawer(items[0].event_id, "regulation")}
+            className="group fixed bottom-8 right-0 z-30 flex items-center gap-2.5 rounded-l-[10px] border border-r-0 border-[#7C5A20]/60 bg-[#12161A]/95 py-2.5 pl-3 pr-4 text-left shadow-[-6px_6px_24px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200 hover:border-[#E5C378] hover:bg-[#181E25] hover:pr-5 active:scale-[0.99] cursor-pointer"
+          >
+            {/* Золотой корешок закладки */}
+            <span className="h-6 w-[3px] shrink-0 rounded-full bg-gradient-to-b from-[#E5C378] to-[#8C6A28]" />
+            <MessageSquareText
+              className="h-4 w-4 shrink-0 text-[#E5C378] transition-transform duration-200 group-hover:scale-105"
+              strokeWidth={1.75}
+            />
+            <div className="leading-tight">
+              <span className="block text-xs font-semibold text-[#F4EFE6] transition-colors group-hover:text-white">
+                Вопросы по условиям
+              </span>
+              <span className="mt-0.5 block font-serif italic text-[10px] text-[#8E95A0]">
+                Тарифы и документация
+              </span>
+            </div>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-      {/* 6. Выдвижная панель «Паспорт участия и ИИ-консультант по регламенту» */}
+      {/* 6. Выдвижная панель деталей тарифа и консультанта */}
       <RegulationConsultantDrawer
         isOpen={Boolean(activeDrawerEventId)}
         onClose={closeEventDrawer}
