@@ -80,11 +80,11 @@ export function BundleConstructorSection({
       {/* Переключатель вариантов пакета (Шаг 05 «Сравнение вариантов») */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
-          <div className="flex items-baseline gap-2.5">
-            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
               02
             </span>
-            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
+            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378] leading-snug">
               Сравнение вариантов и выбор тарифов
             </h2>
           </div>
