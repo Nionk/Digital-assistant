@@ -166,7 +166,17 @@ class TestD05APIContracts(unittest.TestCase):
         data_esc = res_esc.json()
         self.assertFalse(data_esc["is_answer_found"])
         self.assertIsNone(data_esc["source_quote"])
-        self.assertTrue(data_esc["escalated_to_telegram"])
+        # Автоматическая эскалация отключена: по умолчанию False
+        self.assertFalse(data_esc["escalated_to_telegram"])
+
+        # 3. Осознанная эскалация клиентом через эндпоинт escalate-question
+        res_manual = self.client.post(
+            f"/api/public/s/{self.valid_token}/events/101/escalate-question",
+            json={"question_text": "Предоставляется ли вертолетный трансфер из аэропорта?"},
+        )
+        self.assertEqual(res_manual.status_code, 200)
+        data_manual = res_manual.json()
+        self.assertTrue(data_manual["success"])
 
     def test_10_openapi_specification_completeness(self):
         """Проверка полноты схемы OpenAPI: наличие всех 7 роутов и схемы BearerAuth."""
@@ -181,6 +191,7 @@ class TestD05APIContracts(unittest.TestCase):
             "/api/public/s/{magic_token}",
             "/api/public/s/{magic_token}/items/{item_id}/react",
             "/api/public/s/{magic_token}/events/{event_id}/ask",
+            "/api/public/s/{magic_token}/events/{event_id}/escalate-question",
         ]
 
         for endpoint in required_endpoints:
