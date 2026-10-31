@@ -483,22 +483,25 @@ async def escalate_question_to_manager(
     )
     await send_manager_alert(alert_html, chat_id=manager_chat_id)
 
-    # 5. Помечаем последнее сообщение клиента в chat_messages
-    msg_stmt = (
-        select(ChatMessage)
-        .where(
-            ChatMessage.selection_id == selection.id,
-            ChatMessage.event_id == event_id,
-            ChatMessage.question == payload.question_text.strip(),
+    # 5. Помечаем последнее сообщение в chat_messages
+    try:
+        msg_stmt = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.selection_id == selection.id,
+                ChatMessage.event_id == event_id,
+                ChatMessage.message_text == payload.question_text.strip(),
+            )
+            .order_by(ChatMessage.id.desc())
+            .limit(1)
         )
-        .order_by(ChatMessage.id.desc())
-        .limit(1)
-    )
-    msg_res = await db.execute(msg_stmt)
-    chat_msg = msg_res.scalar_one_or_none()
-    if chat_msg is not None:
-        chat_msg.needs_attention = True
-        await db.commit()
+        msg_res = await db.execute(msg_stmt)
+        chat_msg = msg_res.scalar_one_or_none()
+        if chat_msg is not None:
+            chat_msg.needs_manager_attention = True
+            await db.commit()
+    except Exception as exc:
+        logger.warning(f"Не удалось обновить статус сообщения в chat_messages: {exc}")
 
     return EscalateQuestionOut(
         event_id=event_id,
