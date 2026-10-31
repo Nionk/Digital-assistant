@@ -15,6 +15,7 @@ import {
 import {
   useAskRegulationMutation,
   useClientReactionMutation,
+  useEscalateQuestionMutation,
   usePublicShowcase,
 } from "@/api/queries";
 import {
@@ -38,6 +39,7 @@ export function ClientShowcasePage() {
 
   const reactionMutation = useClientReactionMutation(magicToken || "");
   const askMutation = useAskRegulationMutation(magicToken || "");
+  const escalateMutation = useEscalateQuestionMutation(magicToken || "");
 
   const {
     layoutMode,
@@ -52,6 +54,8 @@ export function ClientShowcasePage() {
     startQuestionExchange,
     completeQuestionExchange,
     failQuestionExchange,
+    setExchangeEscalating,
+    setExchangeEscalated,
     toggleAgencyServiceForItem,
   } = useShowcaseStore();
 
@@ -149,6 +153,28 @@ export function ClientShowcasePage() {
         err instanceof Error
           ? err.message
           : "Не удалось получить ответ. Попробуйте еще раз."
+      );
+    }
+  };
+
+  const handleEscalateQuestion = async (exchangeId: string, questionText: string) => {
+    if (!activeDrawerEvent) return;
+    const eventId = activeDrawerEvent.event_id;
+    setExchangeEscalating(eventId, exchangeId, true);
+
+    try {
+      await escalateMutation.mutateAsync({
+        eventId,
+        payload: { question_text: questionText },
+      });
+      setExchangeEscalated(eventId, exchangeId);
+      toast.success("Вопрос передан персональному куратору");
+    } catch (err) {
+      setExchangeEscalating(eventId, exchangeId, false);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Не удалось передать вопрос куратору. Попробуйте еще раз."
       );
     }
   };
@@ -538,6 +564,7 @@ export function ClientShowcasePage() {
           handleReactToItem(ev.selection_item_id, "interested")
         }
         isReacting={reactionMutation.isPending}
+        onEscalateQuestion={handleEscalateQuestion}
       />
       </div>
     </div>

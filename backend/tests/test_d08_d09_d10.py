@@ -446,7 +446,8 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         )
         self.assertFalse(res_prov.is_answer_found)
         self.assertIsNone(res_prov.source_quote)
-        self.assertTrue(res_prov.escalated_to_telegram)
+        # Автоматическая эскалация отключена: по умолчанию False
+        self.assertFalse(res_prov.escalated_to_telegram)
         self.assertTrue(self.fake_db.chat_messages[-1].needs_manager_attention)
 
     async def test_04_manager_publish_validation_and_pricing(self):

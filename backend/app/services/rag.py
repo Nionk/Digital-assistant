@@ -26,9 +26,8 @@ from app.services.telegram import format_escalation_alert, send_manager_alert
 logger = logging.getLogger(__name__)
 
 POLITE_FALLBACK_TEXT = (
-    "Точных данных по этому вопросу нет в открытом регламенте мероприятия. "
-    "Я уже передал ваш вопрос персональному менеджеру — мы оперативно уточним детали "
-    "у организаторов и вернемся к вам с ответом."
+    "Точных данных по этому вопросу нет в открытом регламенте мероприятия (как правило, такие детали "
+    "согласовываются с оргкомитетом в индивидуальном порядке)."
 )
 
 
@@ -47,7 +46,7 @@ class RAGResponse(BaseModel):
         description=(
             "Вежливый и точный ответ клиенту строго по фактам регламента. "
             "Если is_answer_found=False, напиши вежливое сообщение о том, что точных данных нет в открытом регламенте "
-            "и вопрос уже передан персональному менеджеру для уточнения у организаторов."
+            "мероприятия и такие детали обычно согласовываются с оргкомитетом индивидуально."
         ),
     )
     source_quote: Optional[str] = Field(
@@ -183,11 +182,8 @@ async def ask_regulation_question(
             )
             await session.commit()
 
+        # Автоматическая эскалация отключена: клиент подтверждает передачу куратору вручную
         escalated = False
-        if not is_found:
-            alert_html = format_escalation_alert(company_name, event.canonical_title, question_clean)
-            await send_manager_alert(alert_html, chat_id=manager_chat_id)
-            escalated = True
 
         return AskRegulationQuestionOut(
             event_id=event_id,
@@ -311,12 +307,8 @@ async def ask_regulation_question(
         )
     await session.commit()
 
-    # 6. При отсутствии ответа в регламенте эскалируем вопрос менеджеру в Telegram
+    # 6. Автоматическая эскалация отключена: клиент подтверждает передачу куратору вручную
     escalated = False
-    if not llm_res.is_answer_found:
-        alert_html = format_escalation_alert(company_name, event.canonical_title, question_clean)
-        await send_manager_alert(alert_html, chat_id=manager_chat_id)
-        escalated = True
 
     return AskRegulationQuestionOut(
         event_id=event_id,

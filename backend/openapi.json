@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Digital Assistant API",
-    "description": "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании. Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам.",
+    "description": "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам.",
     "version": "0.1.0-demo"
   },
   "paths": {
@@ -348,6 +348,69 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AskRegulationQuestionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/s/{magic_token}/events/{event_id}/escalate-question": {
+      "post": {
+        "tags": [
+          "Client Public Showcase (Magic Link)"
+        ],
+        "summary": "Осознанная эскалация неотвеченного вопроса клиента персональному куратору в Telegram",
+        "description": "Клиент явно подтверждает желание передать вопрос персональному куратору. Сервис формирует Telegram-уведомление менеджеру, помечает сообщение в БД флагом needs_attention и возвращает статус успешной отправки.",
+        "operationId": "escalate_question_to_manager_api_public_s__magic_token__events__event_id__escalate_question_post",
+        "parameters": [
+          {
+            "name": "magic_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Magic Token"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EscalateQuestionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EscalateQuestionOut"
                 }
               }
             }
@@ -1005,6 +1068,59 @@
         ],
         "title": "ClientSummaryOut",
         "description": "Сводная карточка клиента в сайдбаре менеджера."
+      },
+      "EscalateQuestionIn": {
+        "properties": {
+          "question_text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Question Text",
+            "description": "Текст вопроса, требующего индивидуального уточнения у организаторов мероприятия",
+            "examples": [
+              "Есть ли индивидуальный трансфер от отеля до площадки?"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_text"
+        ],
+        "title": "EscalateQuestionIn",
+        "description": "Запрос клиента на осознанную передачу неотвеченного вопроса куратору в Telegram."
+      },
+      "EscalateQuestionOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID мероприятия"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text",
+            "description": "Текст эскалированного вопроса"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Статус успешной отправки уведомления куратору",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Сообщение для отображения клиенту на витрине",
+            "default": "Вопрос передан персональному куратору."
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "question_text"
+        ],
+        "title": "EscalateQuestionOut",
+        "description": "Результат передачи вопроса персональному куратору в Telegram."
       },
       "HTTPValidationError": {
         "properties": {

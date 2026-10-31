@@ -7,12 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import FAQ_QUICK_CHIPS
 from app.core.database import get_async_session
-from app.models.models import Client, Event, EventTariff, Selection, SelectionItem, User
+from app.models.models import ChatMessage, Client, Event, EventTariff, Selection, SelectionItem, User
 from app.schemas.showcase import (
     AskRegulationQuestionIn,
     AskRegulationQuestionOut,
     ClientReactionIn,
     ClientReactionOut,
+    EscalateQuestionIn,
+    EscalateQuestionOut,
     ShowcaseEventItemOut,
     ShowcaseViewOut,
 )
@@ -359,24 +361,17 @@ async def ask_event_regulation_question(
             )
         q_lower = payload.question_text.lower()
         if any(k in q_lower for k in ["вертолет", "трансфер", "проживание", "отель", "перелет"]):
-            alert_html = format_escalation_alert(
-                company_name="ГК «Пионер»",
-                event_title=f"Демо-мероприятие #{event_id}",
-                question_text=payload.question_text,
-            )
-            await send_manager_alert(alert_html)
             return AskRegulationQuestionOut(
                 event_id=event_id,
                 question_text=payload.question_text,
                 is_answer_found=False,
                 answer_text=(
-                    "Точных данных по этому вопросу нет в открытом регламенте мероприятия. "
-                    "Я уже передал ваш вопрос персональному менеджеру Анне Соколовой — мы оперативно уточним детали "
-                    "у организаторов и свяжемся с вами."
+                    "Точных данных по этому вопросу нет в открытом регламенте мероприятия (как правило, такие детали "
+                    "согласовываются с оргкомитетом в индивидуальном порядке)."
                 ),
                 source_quote=None,
                 from_cache=False,
-                escalated_to_telegram=True,
+                escalated_to_telegram=False,
             )
         return AskRegulationQuestionOut(
             event_id=event_id,
@@ -427,3 +422,88 @@ async def ask_event_regulation_question(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{magic_token}/events/{event_id}/escalate-question",
+    response_model=EscalateQuestionOut,
+    summary="Осознанная эскалация неотвеченного вопроса клиента персональному куратору в Telegram",
+    description=(
+        "Клиент явно подтверждает желание передать вопрос персональному куратору. "
+        "Сервис формирует Telegram-уведомление менеджеру, помечает сообщение в БД флагом needs_attention "
+        "и возвращает статус успешной отправки."
+    ),
+)
+async def escalate_question_to_manager(
+    magic_token: UUID,
+    event_id: int,
+    payload: EscalateQuestionIn,
+    db: AsyncSession = Depends(get_async_session),
+) -> EscalateQuestionOut:
+    # 1. Обработка демо-витрины
+    if magic_token == DEMO_FALLBACK_TOKEN:
+        alert_html = format_escalation_alert(
+            company_name="ГК «Пионер» (Демо-клиент)",
+            event_title=f"Мероприятие #{event_id}",
+            question_text=payload.question_text,
+        )
+        await send_manager_alert(alert_html)
+        return EscalateQuestionOut(
+            event_id=event_id,
+            question_text=payload.question_text,
+            success=True,
+            message="Вопрос успешно передан персональному куратору.",
+        )
+
+    # 2. Поиск подборки и клиента
+    stmt = (
+        select(Selection, Client, User)
+        .join(Client, Selection.client_id == Client.id)
+        .outerjoin(User, Client.manager_id == User.id)
+        .where(Selection.magic_token == magic_token)
+    )
+    res = await db.execute(stmt)
+    row = res.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
+
+    selection, client, manager = row
+
+    # 3. Проверка мероприятия
+    event = await db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Мероприятие не найдено")
+
+    # 4. Отправка алерта в Telegram куратору
+    manager_chat_id = manager.telegram_chat_id if manager else None
+    alert_html = format_escalation_alert(
+        company_name=client.company_name,
+        event_title=event.canonical_title,
+        question_text=payload.question_text,
+    )
+    await send_manager_alert(alert_html, chat_id=manager_chat_id)
+
+    # 5. Помечаем последнее сообщение клиента в chat_messages
+    msg_stmt = (
+        select(ChatMessage)
+        .where(
+            ChatMessage.selection_id == selection.id,
+            ChatMessage.event_id == event_id,
+            ChatMessage.question == payload.question_text.strip(),
+        )
+        .order_by(ChatMessage.id.desc())
+        .limit(1)
+    )
+    msg_res = await db.execute(msg_stmt)
+    chat_msg = msg_res.scalar_one_or_none()
+    if chat_msg is not None:
+        chat_msg.needs_attention = True
+        await db.commit()
+
+    return EscalateQuestionOut(
+        event_id=event_id,
+        question_text=payload.question_text,
+        success=True,
+        message="Вопрос успешно передан персональному куратору.",
+    )
+

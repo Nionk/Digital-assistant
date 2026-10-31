@@ -2,7 +2,6 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
-  BellRing,
   MapPin,
   Calendar,
   Loader2,
@@ -38,6 +37,7 @@ interface RegulationConsultantDrawerProps {
   managerFullName: string;
   onApproveEvent?: (event: ShowcaseEventItemOut) => void;
   isReacting?: boolean;
+  onEscalateQuestion?: (exchangeId: string, questionText: string) => void;
 }
 
 export function RegulationConsultantDrawer({
@@ -53,6 +53,7 @@ export function RegulationConsultantDrawer({
   managerFullName,
   onApproveEvent,
   isReacting,
+  onEscalateQuestion,
 }: RegulationConsultantDrawerProps) {
   const [inputQuestion, setInputQuestion] = React.useState("");
   const [isEventSelectorOpen, setIsEventSelectorOpen] = React.useState(false);
@@ -454,19 +455,39 @@ export function RegulationConsultantDrawer({
                         </div>
                       )}
 
-                      {/* Вежливое уведомление о передаче вопроса куратору */}
-                      {ex.response.escalated_to_telegram && (
-                        <div className="flex items-start gap-2.5 rounded-[8px] border border-[#7C5A20]/50 bg-[#1B1710] p-3 text-[11px] leading-relaxed text-[#D1D5DB]">
-                          <BellRing
-                            className="mt-0.5 h-4 w-4 shrink-0 text-[#E5C378]"
-                            strokeWidth={1.75}
-                          />
+                      {/* Если в регламенте нет ответа — предложение передать вопрос куратору */}
+                      {!ex.response.is_answer_found && !ex.isEscalated && onEscalateQuestion && (
+                        <div className="rounded-[10px] border border-[#7C5A20]/40 bg-[#161B22] p-3.5 space-y-2.5 transition-colors">
+                          <div className="flex items-start gap-2.5">
+                            <HelpCircle className="h-4 w-4 shrink-0 text-[#E5C378] mt-0.5" strokeWidth={1.75} />
+                            <p className="text-xs text-[#D1D5DB] leading-relaxed">
+                              Хотите, чтобы ваш куратор <strong className="font-semibold text-white">{cleanManagerName}</strong> официально уточнила этот вопрос у оргкомитета?
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="monolith"
+                            size="sm"
+                            disabled={ex.isEscalating}
+                            onClick={() => onEscalateQuestion(ex.id, ex.questionText)}
+                            className="w-full text-xs font-semibold cursor-pointer"
+                          >
+                            {ex.isEscalating ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E5C378]" />
+                            ) : (
+                              <Send className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" strokeWidth={2} />
+                            )}
+                            <span>Передать вопрос куратору</span>
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Подтверждение осознанной передачи вопроса куратору */}
+                      {ex.isEscalated && (
+                        <div className="flex items-start gap-2.5 rounded-[10px] border border-[#1E5241] bg-[#0E241E] p-3 text-xs text-[#34D399] leading-relaxed">
+                          <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#34D399]" strokeWidth={2.5} />
                           <span>
-                            Этих деталей нет в общем документе. Мы уже передали ваш вопрос персональному куратору (
-                            <strong className="font-semibold text-white">
-                              {cleanManagerName}
-                            </strong>
-                            ) для индивидуального уточнения у организаторов.
+                            Вопрос передан куратору (<strong className="font-semibold text-white">{cleanManagerName}</strong>). Мы свяжемся с вами, как только получим официальный ответ площадки.
                           </span>
                         </div>
                       )}
