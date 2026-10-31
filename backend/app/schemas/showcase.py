@@ -131,3 +131,25 @@ class AskRegulationQuestionOut(BaseModel):
         default=False,
         description="True, если неотвеченный вопрос отправлен в виде пуша в Telegram менеджеру"
     )
+
+class EscalateQuestionIn(BaseModel):
+    """Запрос клиента на осознанную передачу неотвеченного вопроса куратору в Telegram."""
+    question_text: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="Текст вопроса, требующего индивидуального уточнения у организаторов мероприятия",
+        examples=["Есть ли индивидуальный трансфер от отеля до площадки?"]
+    )
+
+
+class EscalateQuestionOut(BaseModel):
+    """Результат передачи вопроса персональному куратору в Telegram."""
+    event_id: int = Field(..., description="ID мероприятия")
+    question_text: str = Field(..., description="Текст эскалированного вопроса")
+    success: bool = Field(default=True, description="Статус успешной отправки уведомления куратору")
+    message: str = Field(
+        default="Вопрос передан персональному куратору.",
+        description="Сообщение для отображения клиенту на витрине"
+    )
+

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 import type {
   AskRegulationQuestionIn,
+  EscalateQuestionIn,
   ClientReactionIn,
   MatchRequestIn,
   PublishSelectionIn,
@@ -136,3 +137,14 @@ export function useAskRegulationMutation(magicToken: string) {
   });
 }
 
+export function useEscalateQuestionMutation(magicToken: string) {
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      payload,
+    }: {
+      eventId: number;
+      payload: EscalateQuestionIn;
+    }) => apiClient.escalateQuestion(magicToken, eventId, payload),
+  });
+}

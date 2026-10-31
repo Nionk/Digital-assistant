@@ -11,6 +11,8 @@ export interface RegulationChatExchange {
   isLoading: boolean;
   error: string | null;
   createdAt: string;
+  isEscalated?: boolean;
+  isEscalating?: boolean;
 }
 
 interface ShowcaseState {
@@ -39,6 +41,9 @@ interface ShowcaseState {
     response: AskRegulationQuestionOut
   ) => void;
   failQuestionExchange: (eventId: number, id: string, errorMsg: string) => void;
+
+  setExchangeEscalating: (eventId: number, exchangeId: string, isEscalating: boolean) => void;
+  setExchangeEscalated: (eventId: number, exchangeId: string) => void;
 
   toggleAgencyServiceForItem: (selectionItemId: number, serviceTag: string) => void;
 }
@@ -104,6 +109,34 @@ export const useShowcaseStore = create<ShowcaseState>((set) => ({
           ...state.chatByEventId,
           [eventId]: prev.map((item) =>
             item.id === id ? { ...item, isLoading: false, error: errorMsg } : item
+          ),
+        },
+      };
+    }),
+
+  setExchangeEscalating: (eventId, exchangeId, isEscalating) =>
+    set((state) => {
+      const prev = state.chatByEventId[eventId] || [];
+      return {
+        chatByEventId: {
+          ...state.chatByEventId,
+          [eventId]: prev.map((item) =>
+            item.id === exchangeId ? { ...item, isEscalating } : item
+          ),
+        },
+      };
+    }),
+
+  setExchangeEscalated: (eventId, exchangeId) =>
+    set((state) => {
+      const prev = state.chatByEventId[eventId] || [];
+      return {
+        chatByEventId: {
+          ...state.chatByEventId,
+          [eventId]: prev.map((item) =>
+            item.id === exchangeId
+              ? { ...item, isEscalated: true, isEscalating: false }
+              : item
           ),
         },
       };

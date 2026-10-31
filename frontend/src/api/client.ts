@@ -1,6 +1,8 @@
 import type {
   AskRegulationQuestionIn,
   AskRegulationQuestionOut,
+  EscalateQuestionIn,
+  EscalateQuestionOut,
   ClientReactionIn,
   ClientReactionOut,
   ManagerDashboardOut,
@@ -106,6 +108,20 @@ export const apiClient = {
   ): Promise<AskRegulationQuestionOut> {
     return requestJson<AskRegulationQuestionOut>(
       `/api/public/s/${encodeURIComponent(magicToken)}/events/${eventId}/ask`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  escalateQuestion(
+    magicToken: string,
+    eventId: number,
+    payload: EscalateQuestionIn
+  ): Promise<EscalateQuestionOut> {
+    return requestJson<EscalateQuestionOut>(
+      `/api/public/s/${encodeURIComponent(magicToken)}/events/${eventId}/escalate-question`,
       {
         method: "POST",
         body: JSON.stringify(payload),

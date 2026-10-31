@@ -221,3 +221,13 @@ export interface AskRegulationQuestionOut {
   escalated_to_telegram: boolean;
 }
 
+export interface EscalateQuestionIn {
+  question_text: string;
+}
+
+export interface EscalateQuestionOut {
+  event_id: number;
+  question_text: string;
+  success: boolean;
+  message: string;
+}
