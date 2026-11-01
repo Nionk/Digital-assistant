@@ -1,0 +1,337 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Градиент фона -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080C14"/>
+      <stop offset="50%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#080C14"/>
+    </linearGradient>
+
+    <!-- Свечения для колонок -->
+    <linearGradient id="gradBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="gradIndigo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="gradGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064E3B"/>
+      <stop offset="100%" stop-color="#022C22"/>
+    </linearGradient>
+    <linearGradient id="gradAmber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#451A03"/>
+      <stop offset="100%" stop-color="#1C0A00"/>
+    </linearGradient>
+
+    <!-- Тени -->
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- Маркеры стрелок -->
+    <marker id="arrowSky" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#38BDF8"/>
+    </marker>
+    <marker id="arrowIndigo" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#818CF8"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#34D399"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#F59E0B"/>
+    </marker>
+  </defs>
+
+  <style>
+    .title { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 34px; font-weight: 800; fill: #FFFFFF; letter-spacing: 0.5px; }
+    .subtitle { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 16px; font-weight: 500; fill: #94A3B8; }
+    .col-header { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; }
+    .card-title { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 17px; font-weight: 700; fill: #FFFFFF; }
+    .card-subtitle { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 12px; font-weight: 500; fill: #94A3B8; }
+    .badge-text { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; }
+    .conn-label { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; fill: #64748B; }
+  </style>
+
+  <!-- Фон -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+  
+  <!-- Декоративная тонкая сетка -->
+  <g opacity="0.05" stroke="#FFFFFF" stroke-width="1">
+    <line x1="0" y1="216" x2="1920" y2="216" />
+    <line x1="0" y1="432" x2="1920" y2="432" />
+    <line x1="0" y1="648" x2="1920" y2="648" />
+    <line x1="0" y1="864" x2="1920" y2="864" />
+    <line x1="480" y1="0" x2="480" y2="1080" />
+    <line x1="960" y1="0" x2="960" y2="1080" />
+    <line x1="1440" y1="0" x2="1440" y2="1080" />
+  </g>
+
+  <!-- Шапка -->
+  <g transform="translate(100, 65)">
+    <text class="title" x="0" y="0">АРХИТЕКТУРА СИСТЕМЫ DIGITAL ASSISTANT</text>
+    <text class="subtitle" x="0" y="28">Двухконтурная платформа пакетного подбора мероприятий и RAG-сопровождения (Zero-Local-ML)</text>
+    <rect x="0" y="46" width="1720" height="2" fill="#1E293B"/>
+  </g>
+
+  <!-- ==================== КОЛОНКА 1: ИНТЕРФЕЙСЫ ==================== -->
+  <g transform="translate(100, 150)">
+    <!-- Фон колонки -->
+    <rect width="360" height="850" rx="20" fill="#0D131F" stroke="#1E293B" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="360" height="56" rx="20" fill="#131C2E" stroke="#1E293B" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="6" fill="#38BDF8"/>
+    <text class="col-header" x="46" y="34" fill="#38BDF8">1. Интерфейсы</text>
+
+    <!-- Карточка 1: Менеджер -->
+    <g transform="translate(20, 80)">
+      <rect width="320" height="180" rx="14" fill="url(#gradBlue)" stroke="#38BDF8" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#0284C7" fill-opacity="0.2"/>
+      <text x="34" y="39" font-size="20" text-anchor="middle" fill="#38BDF8">💻</text>
+      <text class="card-title" x="64" y="34">Кабинет менеджера</text>
+      <text class="card-subtitle" x="64" y="50">React 18 • TypeScript • Vite</text>
+      <text class="card-subtitle" x="16" y="85" fill="#CBD5E1">• Конструктор пакетов мероприятий</text>
+      <text class="card-subtitle" x="16" y="110" fill="#CBD5E1">• Анализ конспектов созвонов</text>
+      <text class="card-subtitle" x="16" y="135" fill="#CBD5E1">• Монитор статусов витрин и дедлайнов</text>
+      <rect x="16" y="148" width="85" height="18" rx="4" fill="#0369A1" fill-opacity="0.3"/>
+      <text class="badge-text" x="58" y="161" text-anchor="middle" fill="#38BDF8">SPA /admin</text>
+    </g>
+
+    <!-- Карточка 2: Клиент -->
+    <g transform="translate(20, 280)">
+      <rect width="320" height="180" rx="14" fill="url(#gradBlue)" stroke="#38BDF8" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#0284C7" fill-opacity="0.2"/>
+      <text x="34" y="39" font-size="20" text-anchor="middle" fill="#38BDF8">✨</text>
+      <text class="card-title" x="64" y="34">Витрина клиента</text>
+      <text class="card-subtitle" x="64" y="50">Исполнительное досье компании</text>
+      <text class="card-subtitle" x="16" y="85" fill="#CBD5E1">• Беспарольный вход по Magic Link</text>
+      <text class="card-subtitle" x="16" y="110" fill="#CBD5E1">• Карусель карточек и выбор опций</text>
+      <text class="card-subtitle" x="16" y="135" fill="#CBD5E1">• AI-консультант по условиям и ценам</text>
+      <rect x="16" y="148" width="115" height="18" rx="4" fill="#0369A1" fill-opacity="0.3"/>
+      <text class="badge-text" x="73" y="161" text-anchor="middle" fill="#38BDF8">UUIDv4 /s/:token</text>
+    </g>
+
+    <!-- Карточка 3: Telegram -->
+    <g transform="translate(20, 480)">
+      <rect width="320" height="160" rx="14" fill="url(#gradBlue)" stroke="#38BDF8" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#0284C7" fill-opacity="0.2"/>
+      <text x="34" y="39" font-size="20" text-anchor="middle" fill="#38BDF8">📲</text>
+      <text class="card-title" x="64" y="34">Telegram куратора</text>
+      <text class="card-subtitle" x="64" y="50">Мобильный канал оповещений</text>
+      <text class="card-subtitle" x="16" y="85" fill="#CBD5E1">• Мгновенный пуш реакций (👍 / 👎)</text>
+      <text class="card-subtitle" x="16" y="110" fill="#CBD5E1">• Заявки на услуги спикерства</text>
+      <text class="card-subtitle" x="16" y="135" fill="#CBD5E1">• Эскалация нестандартных вопросов</text>
+    </g>
+
+    <!-- Плашка внизу -->
+    <g transform="translate(20, 660)">
+      <rect width="320" height="160" rx="12" fill="#131C2E" stroke="#1E293B" stroke-dasharray="4 4"/>
+      <text x="160" y="45" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">КЛИЕНТСКИЙ ОПЫТ (UX)</text>
+      <text x="160" y="75" font-size="12" fill="#64748B" text-anchor="middle">Вход в 1 клик со смартфона</text>
+      <text x="160" y="95" font-size="12" fill="#64748B" text-anchor="middle">Без логинов, паролей и SMS</text>
+      <text x="160" y="125" font-size="11" font-weight="700" fill="#38BDF8" text-anchor="middle">Синхронизация через Polling 10s</text>
+    </g>
+  </g>
+
+  <!-- ==================== КОЛОНКА 2: ШЛЮЗ И БЭКЕНД ==================== -->
+  <g transform="translate(500, 150)">
+    <rect width="460" height="850" rx="20" fill="#0E1222" stroke="#1E293B" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="460" height="56" rx="20" fill="#181B34" stroke="#1E293B" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="6" fill="#818CF8"/>
+    <text class="col-header" x="46" y="34" fill="#818CF8">2. Шлюз и Сервер (FastAPI Monolith)</text>
+
+    <!-- Nginx блок -->
+    <g transform="translate(20, 75)">
+      <rect width="420" height="70" rx="12" fill="#181B34" stroke="#818CF8" stroke-width="1"/>
+      <text class="card-title" x="20" y="32">Nginx Reverse Proxy</text>
+      <text class="card-subtitle" x="20" y="52">Контейнер 1 • Раздача статики React SPA • SSL Let's Encrypt • Прокси /api/</text>
+    </g>
+
+    <!-- FastAPI ядро -->
+    <g transform="translate(20, 160)">
+      <rect width="420" height="660" rx="14" fill="url(#gradIndigo)" stroke="#818CF8" stroke-width="1.5"/>
+      <rect x="20" y="16" width="380" height="38" rx="8" fill="#312E81" fill-opacity="0.4"/>
+      <text x="210" y="40" class="card-title" text-anchor="middle" font-size="15">Бизнес-роутеры (/api/manager, /api/public/s)</text>
+
+      <!-- Модуль 1: Profiler -->
+      <g transform="translate(20, 70)">
+        <rect width="380" height="120" rx="10" fill="#13162E" stroke="#4F46E5" stroke-width="1"/>
+        <text class="card-title" x="16" y="28">1. Profiler (NER-извлечение)</text>
+        <text class="card-subtitle" x="16" y="48">Pydantic v2 • Instructor • Временной якорь</text>
+        <text class="card-subtitle" x="16" y="72" fill="#CBD5E1">• Разбор неструктурированных заметок менеджера</text>
+        <text class="card-subtitle" x="16" y="94" fill="#CBD5E1">• Канонизация городов normalize_city() O(1)</text>
+      </g>
+
+      <!-- Модуль 2: Matcher & Knapsack -->
+      <g transform="translate(20, 205)">
+        <rect width="380" height="140" rx="10" fill="#13162E" stroke="#4F46E5" stroke-width="1"/>
+        <text class="card-title" x="16" y="28">2. Matcher &amp; Combinatorial Knapsack</text>
+        <text class="card-subtitle" x="16" y="48">Reciprocal Rank Fusion (k=60) • itertools</text>
+        <text class="card-subtitle" x="16" y="72" fill="#CBD5E1">• Детерминированный расчет бюджета (без LLM)</text>
+        <text class="card-subtitle" x="16" y="94" fill="#CBD5E1">• Исключение пространственно-временных коллизий</text>
+        <text class="card-subtitle" x="16" y="116" fill="#CBD5E1">• 2 пакета: Макс. охват vs Макс. экономия Early Bird</text>
+      </g>
+
+      <!-- Модуль 3: RAG Engine -->
+      <g transform="translate(20, 360)">
+        <rect width="380" height="130" rx="10" fill="#13162E" stroke="#4F46E5" stroke-width="1"/>
+        <text class="card-title" x="16" y="28">3. Изолированный RAG-движок</text>
+        <text class="card-subtitle" x="16" y="48">Context Stuffing (35k) • Strict RAGResponse</text>
+        <text class="card-subtitle" x="16" y="72" fill="#CBD5E1">• Жесткий фильтр WHERE event_id = :id (0% галлюцинаций)</text>
+        <text class="card-subtitle" x="16" y="94" fill="#CBD5E1">• Точная выдержка цитаты source_quote</text>
+        <text class="card-subtitle" x="16" y="116" fill="#CBD5E1">• Контролируемая эскалация куратору в 1 клик</text>
+      </g>
+
+      <!-- Модуль 4: Smart Ingest & Telegram -->
+      <g transform="translate(20, 505)">
+        <rect width="380" height="135" rx="10" fill="#13162E" stroke="#4F46E5" stroke-width="1"/>
+        <text class="card-title" x="16" y="28">4. Smart Ingest, Скрейпер &amp; Telegram</text>
+        <text class="card-subtitle" x="16" y="48">APScheduler • PyMuPDF • httpx Async</text>
+        <text class="card-subtitle" x="16" y="72" fill="#CBD5E1">• Импорт URL, текста или PDF за 15 секунд</text>
+        <text class="card-subtitle" x="16" y="94" fill="#CBD5E1">• Нечеткая дедупликация RapidFuzz (82%)</text>
+        <text class="card-subtitle" x="16" y="116" fill="#CBD5E1">• Асинхронная отправка пушей в Telegram Bot API</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ==================== КОЛОНКА 3: БАЗА ДАННЫХ ==================== -->
+  <g transform="translate(1000, 150)">
+    <rect width="400" height="850" rx="20" fill="#081714" stroke="#1E293B" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="400" height="56" rx="20" fill="#0C251F" stroke="#1E293B" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="6" fill="#34D399"/>
+    <text class="col-header" x="46" y="34" fill="#34D399">3. PostgreSQL 16 + pgvector</text>
+
+    <!-- Карточка 1: Реляционная модель -->
+    <g transform="translate(20, 80)">
+      <rect width="360" height="180" rx="14" fill="url(#gradGreen)" stroke="#34D399" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#059669" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#34D399">🗄️</text>
+      <text class="card-title" x="64" y="34">Реляционная схема</text>
+      <text class="card-subtitle" x="64" y="50">9 таблиц • SQLAlchemy 2.0 Async</text>
+      <text class="card-subtitle" x="16" y="85" fill="#E2E8F0">• Разделение events и event_tariffs</text>
+      <text class="card-subtitle" x="16" y="110" fill="#E2E8F0">• Тарифные сетки: delegate, speaker, sponsor</text>
+      <text class="card-subtitle" x="16" y="135" fill="#E2E8F0">• Таблицы selections, items, chat_messages</text>
+      <rect x="16" y="148" width="125" height="18" rx="4" fill="#047857" fill-opacity="0.4"/>
+      <text class="badge-text" x="78" y="161" text-anchor="middle" fill="#34D399">Cascade Foreign Keys</text>
+    </g>
+
+    <!-- Карточка 2: Индексы поиска -->
+    <g transform="translate(20, 280)">
+      <rect width="360" height="210" rx="14" fill="url(#gradGreen)" stroke="#34D399" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#059669" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#34D399">⚡</text>
+      <text class="card-title" x="64" y="34">Гибридные индексы</text>
+      <text class="card-subtitle" x="64" y="50">Векторный поиск + Полнотекст</text>
+      <text class="card-subtitle" x="16" y="85" fill="#E2E8F0">• HNSW Индекс (vector_cosine_ops)</text>
+      <text class="card-subtitle" x="16" y="105" fill="#A7F3D0" font-size="11">   Векторы summary_embedding 1024-dim</text>
+      <text class="card-subtitle" x="16" y="135" fill="#E2E8F0">• GIN Индекс (tsvector FTS)</text>
+      <text class="card-subtitle" x="16" y="155" fill="#A7F3D0" font-size="11">   Полнотекстовый русский стемминг (КРТ, ИЖС)</text>
+      <text class="card-subtitle" x="16" y="185" fill="#E2E8F0">• B-Tree индексы на дедлайны Early Bird</text>
+    </g>
+
+    <!-- Карточка 3: Кэш ответов -->
+    <g transform="translate(20, 510)">
+      <rect width="360" height="160" rx="14" fill="url(#gradGreen)" stroke="#34D399" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#059669" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#34D399">🚀</text>
+      <text class="card-title" x="64" y="34">Таблица llm_cache</text>
+      <text class="card-subtitle" x="64" y="50">Мгновенные ответы без вызова LLM</text>
+      <text class="card-subtitle" x="16" y="85" fill="#E2E8F0">• SHA-256(event_id + tariff_id + query)</text>
+      <text class="card-subtitle" x="16" y="110" fill="#E2E8F0">• Время отклика: менее 50 миллисекунд</text>
+      <text class="card-subtitle" x="16" y="135" fill="#E2E8F0">• Авто-очистка при обновлении регламента</text>
+    </g>
+
+    <!-- Плашка внизу -->
+    <g transform="translate(20, 690)">
+      <rect width="360" height="130" rx="12" fill="#0C251F" stroke="#105743" stroke-dasharray="4 4"/>
+      <text x="180" y="40" font-size="13" font-weight="700" fill="#34D399" text-anchor="middle">БЕЗ REDIS В КОНТЕЙНЕРАХ</text>
+      <text x="180" y="65" font-size="12" fill="#6EE7B7" text-anchor="middle">Надёжность ACID в единой базе</text>
+      <text x="180" y="85" font-size="12" fill="#6EE7B7" text-anchor="middle">Нулевые накладные расходы</text>
+      <text x="180" y="108" font-size="11" fill="#A7F3D0" text-anchor="middle">Хранение сессий, кэша и векторов в PostgreSQL</text>
+    </g>
+  </g>
+
+  <!-- ==================== КОЛОНКА 4: ОБЛАЧНЫЕ ШЛЮЗЫ ==================== -->
+  <g transform="translate(1440, 150)">
+    <rect width="380" height="850" rx="20" fill="#180F08" stroke="#1E293B" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="380" height="56" rx="20" fill="#2E1B0E" stroke="#1E293B" stroke-width="1.5"/>
+    <circle cx="28" cy="28" r="6" fill="#F59E0B"/>
+    <text class="col-header" x="46" y="34" fill="#F59E0B">4. Облачные API (Zero-Local)</text>
+
+    <!-- Шлюз 1: LLM -->
+    <g transform="translate(20, 80)">
+      <rect width="340" height="160" rx="14" fill="url(#gradAmber)" stroke="#F59E0B" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#D97706" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#F59E0B">🧠</text>
+      <text class="card-title" x="64" y="34">Cloud LLM Gateway</text>
+      <text class="card-subtitle" x="64" y="50">OpenRouter / YandexGPT Pro</text>
+      <text class="card-subtitle" x="16" y="85" fill="#FEF3C7">• DeepSeek-Chat / Qwen 2.5 72B</text>
+      <text class="card-subtitle" x="16" y="110" fill="#FEF3C7">• Режим Instructor Mode.MD_JSON</text>
+      <text class="card-subtitle" x="16" y="135" fill="#FEF3C7">• Строгие Pydantic v2 схемы ответов</text>
+    </g>
+
+    <!-- Шлюз 2: Embeddings -->
+    <g transform="translate(20, 260)">
+      <rect width="340" height="160" rx="14" fill="url(#gradAmber)" stroke="#F59E0B" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#D97706" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#F59E0B">📐</text>
+      <text class="card-title" x="64" y="34">Embeddings API</text>
+      <text class="card-subtitle" x="64" y="50">Jina AI / Cloud Vectors</text>
+      <text class="card-subtitle" x="16" y="85" fill="#FEF3C7">• Векторизация jina-embeddings-v3</text>
+      <text class="card-subtitle" x="16" y="110" fill="#FEF3C7">• 1024 измерения с L2-нормализацией</text>
+      <text class="card-subtitle" x="16" y="135" fill="#FEF3C7">• Защита семафором asyncio.Semaphore(3)</text>
+    </g>
+
+    <!-- Шлюз 3: Telegram Bot API -->
+    <g transform="translate(20, 440)">
+      <rect width="340" height="150" rx="14" fill="url(#gradAmber)" stroke="#F59E0B" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#D97706" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#F59E0B">🤖</text>
+      <text class="card-title" x="64" y="34">Telegram Bot API</text>
+      <text class="card-subtitle" x="64" y="50">httpx асинхронный клиент</text>
+      <text class="card-subtitle" x="16" y="85" fill="#FEF3C7">• Мгновенная доставка пушей</text>
+      <text class="card-subtitle" x="16" y="110" fill="#FEF3C7">• Экранирование html.escape(quote=True)</text>
+      <text class="card-subtitle" x="16" y="132" fill="#FEF3C7">• Фолбэк на chat_id куратора</text>
+    </g>
+
+    <!-- Шлюз 4: Сайты мероприятий -->
+    <g transform="translate(20, 610)">
+      <rect width="340" height="210" rx="14" fill="url(#gradAmber)" stroke="#F59E0B" stroke-width="1.5"/>
+      <rect x="16" y="16" width="36" height="36" rx="8" fill="#D97706" fill-opacity="0.3"/>
+      <text x="34" y="40" font-size="20" text-anchor="middle" fill="#F59E0B">🌐</text>
+      <text class="card-title" x="64" y="34">Внешний рынок</text>
+      <text class="card-subtitle" x="64" y="50">9 утвержденных площадок заказчика</text>
+      <text class="card-subtitle" x="16" y="85" fill="#FEF3C7">• Expomap (Строительство, Дизайн)</text>
+      <text class="card-subtitle" x="16" y="105" fill="#FEF3C7">• ARCHITIME (декодирование cp1251)</text>
+      <text class="card-subtitle" x="16" y="125" fill="#FEF3C7">• Архи.ру (обход ХостАдмин через jina)</text>
+      <text class="card-subtitle" x="16" y="145" fill="#FEF3C7">• Хелпинвер (поддержка Beget-cookies)</text>
+      <text class="card-subtitle" x="16" y="165" fill="#FEF3C7">• АрхДиалог (Timepad), ВотКуда, ArchDaily</text>
+      <text class="card-subtitle" x="16" y="190" fill="#FCD34D" font-weight="700">• 2-Hop скрейпинг сайтов и буклетов</text>
+    </g>
+  </g>
+
+  <!-- ==================== СВЯЗИ И СТРЕЛКИ ==================== -->
+  <!-- Из Интерфейсов в Nginx -->
+  <path d="M 460 320 C 480 320, 480 255, 500 255" fill="none" stroke="#38BDF8" stroke-width="2.5" marker-end="url(#arrowSky)"/>
+  <path d="M 460 520 C 480 520, 480 260, 500 260" fill="none" stroke="#38BDF8" stroke-width="2.5" marker-end="url(#arrowSky)"/>
+
+  <!-- Из Nginx в Бэкенд -->
+  <line x1="730" y1="295" x2="730" y2="315" stroke="#818CF8" stroke-width="2.5" marker-end="url(#arrowIndigo)"/>
+
+  <!-- Из Бэкенда в Базу Данных -->
+  <path d="M 960 420 L 1000 420" fill="none" stroke="#34D399" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <path d="M 960 580 L 1000 580" fill="none" stroke="#34D399" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <path d="M 960 740 L 1000 740" fill="none" stroke="#34D399" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- Из Бэкенда в Облачные шлюзы -->
+  <path d="M 960 300 C 1200 120, 1300 280, 1440 290" fill="none" stroke="#F59E0B" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowAmber)"/>
+  <path d="M 960 720 C 1200 950, 1300 750, 1440 730" fill="none" stroke="#F59E0B" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowAmber)"/>
+
+  <!-- Из Telegram Bot в Интерфейс куратора -->
+  <path d="M 1440 635 C 1000 1100, 400 1050, 460 710" fill="none" stroke="#38BDF8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowSky)"/>
+</svg>

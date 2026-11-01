@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Архитектура решения Digital Assistant</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background-color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #0F172A;
+      position: relative;
+      overflow: hidden;
+      padding: 36px 48px;
+    }
+
+    /* Верхняя панель */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #E2E8F0;
+      margin-bottom: 24px;
+    }
+    .header-left h1 {
+      font-size: 30px;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.5px;
+    }
+    .header-left p {
+      font-size: 15px;
+      color: #475569;
+      margin-top: 4px;
+      font-weight: 500;
+    }
+    .header-badges {
+      display: flex;
+      gap: 10px;
+    }
+    .top-badge {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid #CBD5E1;
+      background: #FFFFFF;
+      color: #334155;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .top-badge.accent {
+      background: #0284C7;
+      color: #FFFFFF;
+      border-color: #0284C7;
+    }
+
+    /* Основная сетка колонок */
+    .columns-grid {
+      display: grid;
+      grid-template-columns: 370px 490px 450px 420px;
+      gap: 30px;
+      height: 920px;
+      position: relative;
+    }
+
+    /* Колонка */
+    .col {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+      overflow: hidden;
+    }
+
+    .col-header {
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .col-blue .col-header { background: #F0F9FF; color: #0284C7; border-color: #BAE6FD; }
+    .col-blue .dot { background: #0284C7; }
+    .col-indigo .col-header { background: #EEF2FF; color: #4F46E5; border-color: #C7D2FE; }
+    .col-indigo .dot { background: #4F46E5; }
+    .col-emerald .col-header { background: #ECFDF5; color: #059669; border-color: #A7F3D0; }
+    .col-emerald .dot { background: #059669; }
+    .col-amber .col-header { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+    .col-amber .dot { background: #D97706; }
+
+    .col-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex: 1;
+    }
+
+    /* Карточки */
+    .card {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+    }
+    .card.highlight-blue { border-left: 4px solid #0284C7; background: #FAFDFE; }
+    .card.highlight-indigo { border-left: 4px solid #4F46E5; background: #FAFAFF; }
+    .card.highlight-emerald { border-left: 4px solid #059669; background: #FAFFFD; }
+    .card.highlight-amber { border-left: 4px solid #D97706; background: #FFFCF7; }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0F172A;
+    }
+    .card-tech {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748B;
+      background: #E2E8F0;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .card-desc {
+      font-size: 12.5px;
+      color: #334155;
+      line-height: 1.45;
+    }
+    .card-desc li {
+      margin-left: 16px;
+      margin-top: 3px;
+    }
+
+    /* Монолитный контейнер для FastAPI */
+    .inner-block {
+      background: #FFFFFF;
+      border: 1px solid #CBD5E1;
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 4px;
+    }
+    .inner-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .service-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .service-item {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .service-item-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1E293B;
+      display: flex;
+      justify-content: space-between;
+    }
+    .service-item-sub {
+      font-size: 11.5px;
+      color: #64748B;
+      margin-top: 2px;
+    }
+
+    /* Полоса соединений / подвал */
+    .footer-note {
+      margin-top: auto;
+      padding: 10px 14px;
+      background: #F1F5F9;
+      border-radius: 8px;
+      border: 1px dashed #CBD5E1;
+      font-size: 11.5px;
+      color: #475569;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    /* Стрелки SVG */
+    .svg-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Верхняя строка -->
+  <div class="header">
+    <div class="header-left">
+      <h1>АРХИТЕКТУРА РЕШЕНИЯ DIGITAL ASSISTANT</h1>
+      <p>Двухконтурная система безанкетарного подбора деловых событий и RAG-сопровождения</p>
+    </div>
+    <div class="header-badges">
+      <div class="top-badge accent">Zero-Local-ML</div>
+      <div class="top-badge">FastAPI + React</div>
+      <div class="top-badge">PostgreSQL 16 + pgvector</div>
+      <div class="top-badge">RuOpenRouter • Jina AI</div>
+    </div>
+  </div>
+
+  <!-- 4 колонки -->
+  <div class="columns-grid">
+
+    <!-- КОЛОНКА 1: ИНТЕРФЕЙСЫ -->
+    <div class="col col-blue">
+      <div class="col-header">
+        <div class="dot"></div>
+        1. Интерфейсы и каналы
+      </div>
+      <div class="col-body">
+
+        <!-- Кабинет менеджера -->
+        <div class="card highlight-blue">
+          <div class="card-top">
+            <span class="card-title">Кабинет менеджера</span>
+            <span class="card-tech">React SPA</span>
+          </div>
+          <div class="card-desc">
+            Рабочее место куратора (/admin):
+            <ul>
+              <li>Ввод свободных заметок созвона</li>
+              <li>Конструктор пакетов и выбор тарифов</li>
+              <li>Сверка календаря и дедлайнов Early Bird</li>
+              <li>Публикация персональной витрины</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Веб-интерфейс клиента -->
+        <div class="card highlight-blue">
+          <div class="card-top">
+            <span class="card-title">Веб-интерфейс клиента</span>
+            <span class="card-tech">Magic Link</span>
+          </div>
+          <div class="card-desc">
+            Исполнительное досье (/s/:token):
+            <ul>
+              <li>Беспарольный вход без регистрации</li>
+              <li>Прозрачный бюджет и фиксация цены</li>
+              <li>Добавление в план и заказ услуг спикера</li>
+              <li>ИИ-консультант по регламентам площадок</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ТГ бот куратора -->
+        <div class="card highlight-blue">
+          <div class="card-top">
+            <span class="card-title">ТГ бот куратора</span>
+            <span class="card-tech">Telegram Bot</span>
+          </div>
+          <div class="card-desc">
+            Оперативные мобильные алерты:
+            <ul>
+              <li>Мгновенный пуш реакций клиента (👍 / 👎)</li>
+              <li>Заявки на подготовку спикера и стенда</li>
+              <li>Эскалация нестандартных вопросов</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-note">
+          🔄 Синхронизация: Polling 10 сек (TanStack Query) + Push-уведомления в Telegram
+        </div>
+
+      </div>
+    </div>
+
+    <!-- КОЛОНКА 2: ШЛЮЗ И СЕРВЕР -->
+    <div class="col col-indigo">
+      <div class="col-header">
+        <div class="dot"></div>
+        2. Веб-сервер и Бэкенд
+      </div>
+      <div class="col-body">
+
+        <!-- Nginx -->
+        <div class="card highlight-indigo" style="padding: 10px 14px;">
+          <div class="card-top">
+            <span class="card-title">Nginx Reverse Proxy</span>
+            <span class="card-tech">Контейнер 1</span>
+          </div>
+          <div class="card-desc">
+            Раздача скомпилированной статики React SPA • SSL Let's Encrypt • Проксирование /api/
+          </div>
+        </div>
+
+        <!-- FastAPI Монолит -->
+        <div class="inner-block" style="flex: 1; display: flex; flex-direction: column;">
+          <div class="inner-title">
+            <span>FastAPI Сервер (Python 3.12)</span>
+            <span>Контейнер 2</span>
+          </div>
+          
+          <div class="service-grid">
+            <!-- Роутеры -->
+            <div class="service-item" style="background: #EEF2FF; border-color: #C7D2FE;">
+              <div class="service-item-title" style="color: #3730A3;">
+                <span>REST API Роутеры</span>
+                <span style="font-size: 11px;">/api/manager & /api/public/s</span>
+              </div>
+              <div class="service-item-sub" style="color: #4F46E5;">
+                Авторизация, управление клиентами, генерация ссылок, эндпоинты витрины
+              </div>
+            </div>
+
+            <!-- Profiler -->
+            <div class="service-item">
+              <div class="service-item-title">
+                <span>1. Profiler (NER-профайлер)</span>
+                <span class="card-tech" style="font-size: 10px;">Pydantic v2</span>
+              </div>
+              <div class="service-item-sub">
+                Извлечение бюджета, дат, ролей спикера из свободных заметок • Нормализация городов
+              </div>
+            </div>
+
+            <!-- Matcher -->
+            <div class="service-item">
+              <div class="service-item-title">
+                <span>2. Matcher & Knapsack</span>
+                <span class="card-tech" style="font-size: 10px;">RRF k=60</span>
+              </div>
+              <div class="service-item-sub">
+                Гибридное ранжирование • Комбинаторика на Python • Расчет скидок Early Bird и дедлайнов
+              </div>
+            </div>
+
+            <!-- RAG -->
+            <div class="service-item">
+              <div class="service-item-title">
+                <span>3. Изолированный RAG</span>
+                <span class="card-tech" style="font-size: 10px;">0% галлюцинаций</span>
+              </div>
+              <div class="service-item-sub">
+                Ответы строго внутри event_id • Дословные цитаты регламентов • Осознанная эскалация
+              </div>
+            </div>
+
+            <!-- Ingest -->
+            <div class="service-item">
+              <div class="service-item-title">
+                <span>4. Умный импорт & Скрейпер</span>
+                <span class="card-tech" style="font-size: 10px;">PyMuPDF</span>
+              </div>
+              <div class="service-item-sub">
+                Импорт по URL, тексту и PDF-буклетам • Скрейпинг 9 сайтов • Дедупликация RapidFuzz
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-note" style="margin-top: auto;">
+            ⚡ Асинхронное ядро: Uvicorn • SQLAlchemy 2.0 Async • httpx.AsyncClient
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- КОЛОНКА 3: БАЗА ДАННЫХ -->
+    <div class="col col-emerald">
+      <div class="col-header">
+        <div class="dot"></div>
+        3. База данных (PostgreSQL 16)
+      </div>
+      <div class="col-body">
+
+        <!-- Реляционная схема -->
+        <div class="card highlight-emerald">
+          <div class="card-top">
+            <span class="card-title">Реляционная схема</span>
+            <span class="card-tech">9 таблиц</span>
+          </div>
+          <div class="card-desc">
+            Структурированное хранение сущностей:
+            <ul>
+              <li><strong>events</strong>: мероприятия, даты, регламенты</li>
+              <li><strong>event_tariffs</strong>: роли (delegate, speaker), цены</li>
+              <li><strong>clients</strong>: компании, профили, конспекты созвонов</li>
+              <li><strong>selections</strong> & <strong>items</strong>: подборки и варианты</li>
+              <li><strong>chat_messages</strong>: протокол вопросов и эскалаций</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- HNSW Векторы -->
+        <div class="card highlight-emerald">
+          <div class="card-top">
+            <span class="card-title">pgvector HNSW Индекс</span>
+            <span class="card-tech">1024-dim</span>
+          </div>
+          <div class="card-desc">
+            Векторный поиск по смысловой близости:
+            <ul>
+              <li>Косинусное расстояние (&lt;=&gt;) с L2-нормализацией</li>
+              <li>Индексация summary_embedding описаний событий</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- GIN Полнотекст -->
+        <div class="card highlight-emerald">
+          <div class="card-top">
+            <span class="card-title">FTS GIN Индекс</span>
+            <span class="card-tech">tsvector</span>
+          </div>
+          <div class="card-desc">
+            Полнотекстовый поиск по отраслевым терминам:
+            <ul>
+              <li>Точный поиск аббревиатур девелопмента (КРТ, ИЖС)</li>
+              <li>Комбинирование рангов по формуле RRF (k=60)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Таблица llm_cache -->
+        <div class="card highlight-emerald">
+          <div class="card-top">
+            <span class="card-title">Таблица llm_cache</span>
+            <span class="card-tech">SHA-256</span>
+          </div>
+          <div class="card-desc">
+            Точный хэш-кэш проверенных ответов RAG:
+            <ul>
+              <li>Мгновенный ответ клиенту за &lt; 50 мс без вызова LLM</li>
+              <li>Автоматическая инвалидация при обновлении тарифа</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-note">
+          🛡️ Единое хранилище: ACID транзакции, отказ от Redis, нулевые потери данных
+        </div>
+
+      </div>
+    </div>
+
+    <!-- КОЛОНКА 4: ОБЛАЧНЫЕ ШЛЮЗЫ -->
+    <div class="col col-amber">
+      <div class="col-header">
+        <div class="dot"></div>
+        4. Внешние сервисы (Zero-Local)
+      </div>
+      <div class="col-body">
+
+        <!-- RuOpenRouter -->
+        <div class="card highlight-amber">
+          <div class="card-top">
+            <span class="card-title">RuOpenRouter</span>
+            <span class="card-tech">Cloud LLM</span>
+          </div>
+          <div class="card-desc">
+            Облачные языковые модели:
+            <ul>
+              <li>DeepSeek-Chat / Qwen 2.5 72B</li>
+              <li>Структурированный вывод (Mode.MD_JSON)</li>
+              <li>Генерация персональных сопроводительных писем</li>
+              <li>RAG-консультант по регламентам площадок</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Jina AI -->
+        <div class="card highlight-amber">
+          <div class="card-top">
+            <span class="card-title">Jina AI</span>
+            <span class="card-tech">Embeddings</span>
+          </div>
+          <div class="card-desc">
+            Векторизация текстов и поиск:
+            <ul>
+              <li>Модель jina-embeddings-v3 (1024-dim)</li>
+              <li>Jina Reader (r.jina.ai) для обхода JS-защит</li>
+              <li>Семафор контроля частоты запросов (Semaphore=3)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Telegram Bot API -->
+        <div class="card highlight-amber">
+          <div class="card-top">
+            <span class="card-title">Telegram Bot API</span>
+            <span class="card-tech">HTTP API</span>
+          </div>
+          <div class="card-desc">
+            Канал оперативной связи:
+            <ul>
+              <li>Асинхронная отправка HTML-уведомлений</li>
+              <li>Оповещение куратора о выборах клиента</li>
+              <li>Экранирование html.escape для безопасности</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Площадки рынка -->
+        <div class="card highlight-amber">
+          <div class="card-top">
+            <span class="card-title">9 площадок рынка</span>
+            <span class="card-tech">Скрейпинг</span>
+          </div>
+          <div class="card-desc">
+            Мониторинг утвержденных порталов:
+            <ul>
+              <li>Expomap (Строительство, Дизайн)</li>
+              <li>Архи.ру, ARCHITIME (cp1251), Хелпинвер (Beget)</li>
+              <li>АрхДиалог (Timepad), ВотКуда, Design Mate, ArchDaily</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-note">
+          ☁️ Zero-Local-ML: Никаких GPU на ноутбуках менеджеров, экономия памяти
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
