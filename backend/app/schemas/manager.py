@@ -3,18 +3,12 @@ from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
-
-# ============================================================================
-# 1. СХЕМЫ ДАШБОРДА МЕНЕДЖЕРА (GET /api/manager/clients)
-# ============================================================================
-
 class BurningDeadlineOut(BaseModel):
     """Информация о горящем дедлайне со скидкой Early Bird (< 72 часов)."""
     event_id: int = Field(..., description="ID мероприятия в БД")
     event_title: str = Field(..., description="Каноническое название мероприятия")
     early_bird_deadline: date = Field(..., description="Дата сгорания скидки Early Bird")
     potential_savings: float = Field(..., description="Сумма потери скидки в рублях при пропуске дедлайна")
-
 
 class ClientSummaryOut(BaseModel):
     """Сводная карточка клиента в сайдбаре менеджера."""
@@ -30,7 +24,6 @@ class ClientSummaryOut(BaseModel):
     )
     magic_token: UUID | None = Field(None, description="UUID токен витрины, если подборка опубликована")
 
-
 class ManagerDashboardOut(BaseModel):
     """Ответ дашборда менеджера: клиенты и горящие дедлайны."""
     clients: list[ClientSummaryOut] = Field(..., description="Список закрепленных клиентов")
@@ -38,11 +31,6 @@ class ManagerDashboardOut(BaseModel):
         default_factory=list,
         description="Алерты: мероприятия, у которых скидка Early Bird сгорает менее чем через 72 часа"
     )
-
-
-# ============================================================================
-# 2. СХЕМЫ ИИ-ПРОФИЛИРОВАНИЯ И МАТЧИНГА (POST /api/manager/clients/{id}/match)
-# ============================================================================
 
 class ClientQueryExtracted(BaseModel):
     """
@@ -76,7 +64,6 @@ class ClientQueryExtracted(BaseModel):
         description="Развернутый поисковый запрос для векторного поиска (pgvector cosine ops)"
     )
 
-
 class MatchRequestIn(BaseModel):
     """Входной запрос на подбор пакетов деловых мероприятий."""
     raw_manager_notes: str = Field(
@@ -93,7 +80,6 @@ class MatchRequestIn(BaseModel):
         description="Передается, если менеджер скорректировал распознанные теги в UI и нажал 'Пересобрать пакеты'"
     )
 
-
 class TariffOptionOut(BaseModel):
     """Тариф участия в мероприятии."""
     model_config = ConfigDict(from_attributes=True)
@@ -107,7 +93,6 @@ class TariffOptionOut(BaseModel):
     actual_price: float | None = Field(None, description="Актуальная цена на сегодня с учетом даты Early Bird")
     savings: float = Field(default=0.0, description="Экономия в рублях при бронировании до дедлайна Early Bird")
     included_benefits: str | None = Field(None, description="Что включено в тариф (билеты, нетворкинг, опции)")
-
 
 class BundleEventItemOut(BaseModel):
     """Мероприятие, предложенное в составе пакета."""
@@ -131,7 +116,10 @@ class BundleEventItemOut(BaseModel):
         ...,
         description="Обоснование ИИ, какую конкретно бизнес-задачу клиента решает данное мероприятие"
     )
-
+    website_url: str | None = Field(
+        default=None,
+        description="Официальный сайт мероприятия или страница регистрации"
+    )
 
 class BundleVariantOut(BaseModel):
     """Один из сгенерированных вариантов пакета мероприятий."""
@@ -150,7 +138,6 @@ class BundleVariantOut(BaseModel):
         description="True, если пакет превышает бюджет клиента в пределах допустимых +10% (требует согласования)"
     )
 
-
 class MatchResponseOut(BaseModel):
     """Результат подбора: извлеченный профиль, два варианта пакета, бонусный слот и черновик КП."""
     selection_id: int = Field(..., description="ID созданного черновика подборки в таблице selections")
@@ -168,17 +155,11 @@ class MatchResponseOut(BaseModel):
         description="Сгенерированный ИИ текст приветственного КП с подтвержденными Python-цифрами"
     )
 
-
-# ============================================================================
-# 3. СХЕМЫ ПУБЛИКАЦИИ ВИТРИНЫ (PUT /api/manager/selections/{id}/publish)
-# ============================================================================
-
 class SelectedEventTariffPairIn(BaseModel):
     """Пара (мероприятие, выбранный тариф), утвержденная менеджером для публикации."""
     event_id: int = Field(..., description="ID события")
     tariff_id: int = Field(..., description="ID выбранного тарифа")
     ai_rationale: str | None = Field(None, description="Отредактированное менеджером обоснование")
-
 
 class PublishSelectionIn(BaseModel):
     """Запрос на фиксацию и публикацию персональной витрины клиенту."""
@@ -195,7 +176,6 @@ class PublishSelectionIn(BaseModel):
         description="Финальный текст сопроводительного письма, отредактированный менеджером"
     )
 
-
 class PublishSelectionOut(BaseModel):
     """Результат публикации: ссылка Magic Link и параметры опубликованной витрины."""
     selection_id: int = Field(..., description="ID опубликованной подборки")
@@ -204,11 +184,6 @@ class PublishSelectionOut(BaseModel):
     public_showcase_url: str = Field(..., description="Относительный URL витрины для копирования (/s/{magic_token})")
     total_package_price: float = Field(..., description="Итоговая сумма утвержденного пакета")
     total_package_savings: float = Field(..., description="Суммарная экономия по раннему бронированию")
-
-
-# ============================================================================
-# 4. СХЕМЫ КАТАЛОГА МЕРОПРИЯТИЙ В КАБИНЕТЕ МЕНЕДЖЕРА (GET /api/manager/events)
-# ============================================================================
 
 class CatalogEventItemOut(BaseModel):
     """Карточка мероприятия в базе отслеживаемых площадок менеджера."""
@@ -230,7 +205,10 @@ class CatalogEventItemOut(BaseModel):
         default_factory=list,
         description="Доступные тарифы организатора и условия раннего бронирования"
     )
-
+    website_url: str | None = Field(
+        default=None,
+        description="Официальный сайт мероприятия или страница регистрации"
+    )
 
 class ManagerEventsCatalogOut(BaseModel):
     """Список всех активных мероприятий, отслеживаемых агентством."""

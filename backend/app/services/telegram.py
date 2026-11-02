@@ -7,13 +7,11 @@ logger = logging.getLogger(__name__)
 
 DUMMY_SEED_CHAT_IDS = {None, "", 0, "0", 123456789, "123456789"}
 
-
 def escape_html(value: str | None) -> str:
     """Безопасное экранирование пользовательских строк для Telegram parse_mode='HTML'."""
     if not value:
         return ""
     return html.escape(str(value), quote=True)
-
 
 def format_reaction_alert(
     company_name: str,
@@ -49,7 +47,6 @@ def format_reaction_alert(
             )
     return "\n".join(lines)
 
-
 def format_escalation_alert(
     company_name: str,
     event_title: str,
@@ -62,7 +59,6 @@ def format_escalation_alert(
         f"Вопрос: <i>{escape_html(question_text.strip())}</i>\n"
         f"Ответьте клиенту в кабинете менеджера или свяжитесь с организаторами."
     )
-
 
 async def send_manager_alert(
     text: str,

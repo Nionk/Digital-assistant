@@ -26,11 +26,6 @@ from app.services.profiler import extract_client_profile
 
 logger = logging.getLogger(__name__)
 
-
-# ============================================================================
-# 1. ВСПОМОГАТЕЛЬНЫЕ СТРУКТУРЫ ДАННЫХ И СХЕМЫ LLM (ШАГ 3)
-# ============================================================================
-
 @dataclass
 class ScoredEventCandidate:
     """Кандидат мероприятия с рассчитанным RRF-рейтингом и разделенными тарифами."""
@@ -39,7 +34,6 @@ class ScoredEventCandidate:
     all_tariffs: list[TariffOptionOut]
     priced_tariffs: list[TariffOptionOut]
     on_request_tariffs: list[TariffOptionOut]
-
 
 @dataclass
 class EvaluatedCombo:
@@ -56,14 +50,12 @@ class EvaluatedCombo:
     has_date_conflict: bool = False
     matched_speaker_count: int = 0
 
-
 class EventRationaleLLMItem(BaseModel):
     event_id: int = Field(..., description="ID мероприятия из переданного списка")
     ai_rationale: str = Field(
         ...,
         description="Краткое (1-2 предложения) убедительное обоснование для клиента, почему выбрано это событие и эта роль участия."
     )
-
 
 class PitchAndRationalesLLMResponse(BaseModel):
     rationales: list[EventRationaleLLMItem] = Field(
@@ -77,11 +69,6 @@ class PitchAndRationalesLLMResponse(BaseModel):
             "Используй ТОЛЬКО переданные точные цифры общей стоимости, базовой стоимости, экономии Early Bird и дат."
         )
     )
-
-
-# ============================================================================
-# 2. ФУНКЦИИ НОРМАЛИЗАЦИИ И РАСЧЕТА ТАРИФОВ
-# ============================================================================
 
 def build_fts_or_query(profile: ClientQueryExtracted) -> str:
     """
@@ -105,7 +92,6 @@ def build_fts_or_query(profile: ClientQueryExtracted) -> str:
         cleaned_terms = [w for w in words if len(w) >= 3][:8]
 
     return " OR ".join(cleaned_terms) if cleaned_terms else "строительство OR девелопмент"
-
 
 def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut:
     """
@@ -140,7 +126,6 @@ def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut
         included_benefits=t.included_benefits,
     )
 
-
 def build_default_rationale(
     event: Event,
     tariff: TariffOptionOut,
@@ -164,7 +149,6 @@ def build_default_rationale(
     loc = "онлайн-формате" if event.is_online else f"г. {event.city}"
     return f"Приоритетная площадка по направлениям ({themes_str}) в {loc}: обеспечивает {role_label}."
 
-
 def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
     """Проверяет строгое соответствие мероприятия географическому фильтру клиента."""
     if profile.cities:
@@ -175,7 +159,6 @@ def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
         return not bool(ev.is_online)
     return True
 
-
 def _matches_date_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
     """Проверяет попадание мероприятия в календарный диапазон клиента."""
     if profile.date_from is not None and ev.start_date < profile.date_from:
@@ -183,11 +166,6 @@ def _matches_date_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
     if profile.date_to is not None and ev.end_date > profile.date_to:
         return False
     return True
-
-
-# ============================================================================
-# 3. ШАГ 1: ГИБРИДНЫЙ ПОИСК КАНДИДАТОВ В POSTGRESQL (pgvector + FTS RRF)
-# ============================================================================
 
 async def fetch_hybrid_rrf_candidates(
     session: AsyncSession,
@@ -287,7 +265,6 @@ async def fetch_hybrid_rrf_candidates(
     result = await session.execute(final_stmt)
     rows = result.all()
     return [(row[0], float(row[1])) for row in rows]
-
 
 async def get_scored_candidates(
     session: AsyncSession,
@@ -414,11 +391,6 @@ async def get_scored_candidates(
     candidates.sort(key=lambda c: c.rrf_score, reverse=True)
     return candidates
 
-
-# ============================================================================
-# 4. ШАГ 2: КОМБИНАТОРНЫЙ СБОРЩИК ПАКЕТОВ (COMBINATORIAL BUNDLE BUILDER)
-# ============================================================================
-
 def has_offline_date_conflict(candidates: Sequence[ScoredEventCandidate]) -> bool:
     """
     Проверяет пересечение дат между двумя ОЧНЫМИ мероприятиями в комбинации.
@@ -432,7 +404,6 @@ def has_offline_date_conflict(candidates: Sequence[ScoredEventCandidate]) -> boo
             if e1.start_date <= e2.end_date and e2.start_date <= e1.end_date:
                 return True
     return False
-
 
 def pick_best_tariff_for_role(
     priced_tariffs: list[TariffOptionOut],
@@ -459,7 +430,6 @@ def pick_best_tariff_for_role(
         return best_any, False
 
     return None, False
-
 
 def evaluate_candidate_tuple(
     combo: tuple[ScoredEventCandidate, ...],
@@ -539,7 +509,6 @@ def evaluate_candidate_tuple(
 
     return valid_evaluations
 
-
 def build_bundles(
     candidates: list[ScoredEventCandidate],
     profile: ClientQueryExtracted,
@@ -573,7 +542,6 @@ def build_bundles(
 
     for k in range(target_k, 0, -1):
         for combo_tuple in itertools.combinations(priced_pool, k):
-            # 1. Сначала пробуем строгое соблюдение ролей и непересечение дат
             evals = evaluate_candidate_tuple(
                 combo=combo_tuple,
                 min_speaker_events=profile.min_speaker_events,
@@ -582,7 +550,6 @@ def build_bundles(
                 check_dates=True,
                 allow_role_fallback=False,
             )
-            # 2. Если строгая комбинация ролей невозможна, ослабляем роль, СОХРАНЯЯ запрет пересечения дат
             if not evals:
                 evals = evaluate_candidate_tuple(
                     combo=combo_tuple,
@@ -592,7 +559,6 @@ def build_bundles(
                     check_dates=True,
                     allow_role_fallback=True,
                 )
-            # 3. Только если все очные события пересекаются по датам, допускаем фолбэк дат
             if not evals:
                 evals = evaluate_candidate_tuple(
                     combo=combo_tuple,
@@ -613,12 +579,6 @@ def build_bundles(
     selected_variants: list[EvaluatedCombo] = []
 
     # Сортировочный ключ приоритета:
-    # 1. Строгое соблюдение ролей (speaker/delegate)
-    # 2. Число фактически подобранных спикерских слотов (matched_speaker_count)
-    # 3. Отсутствие конфликта дат
-    # 4. Максимальный суммарный RRF-рейтинг
-    # 5. Максимальная скидка Early Bird
-    # 6. Меньшая итоговая стоимость
     def _v1_sort_key(x: EvaluatedCombo):
         return (
             x.roles_strictly_matched,
@@ -729,14 +689,8 @@ def build_bundles(
 
     return selected_variants, bonus_pairs
 
-
 # Алиас для обратной совместимости со спецификацией d_07_matcher_py.md
 assemble_bundles_and_bonus = build_bundles
-
-
-# ============================================================================
-# 5. ШАГ 3: ГЕНЕРАЦИЯ ОБОСНОВАНИЙ И ПИТЧА (1 ВЫЗОВ LLM С ФОЛБЭКОМ)
-# ============================================================================
 
 def build_fallback_pitch(
     client_name: str,
@@ -776,7 +730,6 @@ def build_fallback_pitch(
     )
     return pitch
 
-
 async def generate_pitch_and_rationales(
     client_name: str,
     raw_notes: str,
@@ -798,7 +751,6 @@ async def generate_pitch_and_rationales(
         if cand.event.id not in unique_events_info:
             unique_events_info[cand.event.id] = (cand.event, tariff)
 
-    # 1. Заполняем безотказными детерминированными обоснованиями
     rationales_map: dict[int, str] = {
         ev_id: build_default_rationale(ev, tar, profile)
         for ev_id, (ev, tar) in unique_events_info.items()
@@ -888,11 +840,6 @@ async def generate_pitch_and_rationales(
         logger.warning("LLM Pitch generation fallback triggered (%s): %s", type(exc).__name__, exc)
         return rationales_map, fallback_pitch
 
-
-# ============================================================================
-# 6. ГЛАВНАЯ ТОЧКА ВХОДА ПАЙПЛАЙНА ПОДБОРА (ДЛЯ РОУТЕРА /match)
-# ============================================================================
-
 def _to_bundle_event_item(
     cand: ScoredEventCandidate,
     recommended_tariff: TariffOptionOut,
@@ -903,6 +850,7 @@ def _to_bundle_event_item(
     valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
     fmt = ev.event_format if ev.event_format in valid_formats else "conference"
 
+    primary_url = ev.source_urls[0] if (ev.source_urls and len(ev.source_urls) > 0) else None
     return BundleEventItemOut(
         event_id=ev.id,
         canonical_title=ev.canonical_title,
@@ -916,8 +864,8 @@ def _to_bundle_event_item(
         recommended_tariff=recommended_tariff,
         available_tariffs=cand.all_tariffs,
         ai_rationale=rationale,
+        website_url=primary_url,
     )
-
 
 async def run_client_matching_pipeline(
     session: AsyncSession,
@@ -934,13 +882,11 @@ async def run_client_matching_pipeline(
     """
     today = datetime.date.today()
 
-    # 1. Получаем клиента из БД (или используем дефолтное имя, если клиент не найден)
     client_stmt = select(Client).where(Client.id == client_id)
     client_res = await session.execute(client_stmt)
     client_obj = client_res.scalar_one_or_none()
     client_name = client_obj.company_name if client_obj else f"Клиент #{client_id}"
 
-    # 2. Извлечение или переопределение профиля
     if payload.override_profile is not None:
         extracted_profile = payload.override_profile
     else:
@@ -950,13 +896,10 @@ async def run_client_matching_pipeline(
         client_obj.raw_manager_notes = payload.raw_manager_notes
         client_obj.extracted_profile = extracted_profile.model_dump(mode="json")
 
-    # 3. Гибридный поиск кандидатов (RRF)
     candidates = await get_scored_candidates(session, extracted_profile, today)
 
-    # 4. Комбинаторная сборка пакетов (< 15 мс)
     evaluated_variants, bonus_pairs = build_bundles(candidates, extracted_profile)
 
-    # 5. Генерация обоснований и черновика КП
     rationales_map, pitch_text = await generate_pitch_and_rationales(
         client_name=client_name,
         raw_notes=payload.raw_manager_notes,
@@ -965,7 +908,6 @@ async def run_client_matching_pipeline(
         bonus_pairs=bonus_pairs,
     )
 
-    # 6. Формирование выходных структур BundleVariantOut
     bundle_variants_out: list[BundleVariantOut] = []
     for idx, ev_var in enumerate(evaluated_variants, start=1):
         items_out = [
@@ -1008,7 +950,6 @@ async def run_client_matching_pipeline(
         for cand, tar in bonus_pairs
     ]
 
-    # 7. Сохранение черновика Selection и SelectionItem в БД
     selection_id = 10  # fallback ID, если вызвано для несуществующего в БД клиента
     if client_obj is not None:
         new_selection = Selection(

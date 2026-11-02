@@ -2,7 +2,6 @@ from datetime import date
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, model_validator
 
-
 class TariffExtracted(BaseModel):
     """Тариф участия в мероприятии, извлеченный из HTML или PDF."""
     tariff_name: str = Field(..., description="Название пакета участия (например, 'Вездеход Бизнес', 'Пакет Спикер').")
@@ -21,13 +20,11 @@ class TariffExtracted(BaseModel):
     )
     included_benefits: str = Field(..., description="Подробный перечень опций, входящих в тариф, одной строкой.")
 
-
 class FAQCacheItem(BaseModel):
     """Готовый ответ на типовой вопрос для предзаполнения llm_cache."""
     question: str = Field(..., description="Вопрос по регламенту мероприятия (нормализуется к каноническому чипсу при совпадении).")
     answer: str = Field(..., description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.")
     source_quote: str = Field(..., description="Дословная цитата из регламента, подтверждающая ответ.")
-
 
     @model_validator(mode="before")
     @classmethod
@@ -54,7 +51,6 @@ class FAQCacheItem(BaseModel):
                 elif "спикер" in q_lower or "доклад" in q_lower:
                     data["question"] = "Формат участия и требования к спикеру"
         return data
-
 
 class EventIngestionSchema(BaseModel):
     """

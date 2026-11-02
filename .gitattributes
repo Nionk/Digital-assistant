@@ -1,0 +1,4 @@
+# Exclude large data seeds, package locks, and generated specs from repository stats and line counting
+backend/scripts/seed_data.json linguist-generated=true
+frontend/package-lock.json linguist-generated=true
+backend/openapi.json linguist-generated=true

@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict
 # но auto_error=False позволяет выполнять запросы без токена на этапе Демо.
 security_scheme = HTTPBearer(auto_error=False)
 
-
 class ManagerUser(BaseModel):
     """
     Модель пользователя-менеджера.
@@ -19,7 +18,6 @@ class ManagerUser(BaseModel):
     email: str
     full_name: str
     telegram_chat_id: int | None = None
-
 
 async def get_current_manager(
     auth: HTTPAuthorizationCredentials | None = Depends(security_scheme)
@@ -41,7 +39,6 @@ async def get_current_manager(
         full_name="Анна Соколова (Ведущий менеджер сопровождения)",
         telegram_chat_id=123456789,
     )
-
 
 # Типизированный псевдоним зависимости для внедрения в защищенные роуты кабинета менеджера
 CurrentManagerDep = Annotated[ManagerUser, Depends(get_current_manager)]

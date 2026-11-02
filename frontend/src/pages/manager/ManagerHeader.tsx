@@ -53,7 +53,6 @@ export function ManagerHeader({
       {/* Деликатная бронзово-золотая нить переплёта, отделяющая хедер от контента */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
 
-      {/* 1. Левая часть: ТОЛЬКО logo.png, клик ведет на подбор клиентам */}
       <div className="flex items-center">
         <button
           type="button"
@@ -69,7 +68,6 @@ export function ManagerHeader({
         </button>
       </div>
 
-      {/* 2. Центральная часть: Селекторы строго по центру шапки */}
       <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner z-10">
         {/* Вкладка: Подбор клиентам */}
         <button
@@ -140,7 +138,6 @@ export function ManagerHeader({
         </button>
       </nav>
 
-      {/* 3. Правая часть: Дедлайны (fire.png + золотая цифра) + Разделитель + Профиль */}
       <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
         {/* Кнопка дедлайнов Early Bird */}
         <div className="relative" ref={dropdownRef}>

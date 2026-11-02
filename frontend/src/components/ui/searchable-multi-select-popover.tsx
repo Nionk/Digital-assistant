@@ -234,7 +234,6 @@ export function SearchableMultiSelectPopover({
               popoverClassName
             )}
           >
-            {/* 1. Поисковая строка */}
             <div className="p-2 border-b border-[#21262F] bg-[#161B22]/90">
               <div className="relative flex items-center">
                 <Search className="absolute left-2.5 h-3.5 w-3.5 text-[#8E95A0]" />
@@ -258,7 +257,6 @@ export function SearchableMultiSelectPopover({
               </div>
             </div>
 
-            {/* 2. Секция выбранных меток (чипсы с крестиками) */}
             {selectedValues.length > 0 && (
               <div className="px-2.5 py-1.5 border-b border-[#21262F] bg-[#161510]/80">
                 <div className="flex items-center justify-between mb-1">
@@ -297,7 +295,6 @@ export function SearchableMultiSelectPopover({
               </div>
             )}
 
-            {/* 3. Кнопка создания новой темы (если включено) */}
             {canCreateNew && (
               <div className="p-1.5 border-b border-[#21262F] bg-[#161E28]/60">
                 <button
@@ -313,7 +310,6 @@ export function SearchableMultiSelectPopover({
               </div>
             )}
 
-            {/* 4. Прокручиваемый список доступных вариантов */}
             <div className="max-h-56 overflow-y-auto p-1 scrollbar-thin space-y-0.5">
               {filteredOptions.length === 0 && !canCreateNew ? (
                 <div className="py-4 text-center text-xs text-[#6B7280]">
@@ -364,7 +360,6 @@ export function SearchableMultiSelectPopover({
               )}
             </div>
 
-            {/* 5. Подвал панели */}
             <div className="border-t border-[#21262F] bg-[#12161A] px-2.5 py-1.5 flex items-center justify-between text-[10px] text-[#8E95A0]">
               <span className="font-serif italic text-[#727985]">
                 Esc для закрытия

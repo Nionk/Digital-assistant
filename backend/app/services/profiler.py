@@ -37,7 +37,6 @@ _THEME_PATTERNS: list[tuple[str, str]] = [
     (r"операционн[а-яё]*|управлен[а-яё]*|персонал|hr\b", "управление"),
 ]
 
-
 def extract_profile_heuristic(
     raw_notes: str,
     today: datetime.date | None = None,
@@ -51,14 +50,12 @@ def extract_profile_heuristic(
     text = raw_notes or ""
     low = text.lower()
 
-    # 1. Города
     cities: list[str] = []
     for pattern, canonical in _CITY_PATTERNS:
         if re.search(pattern, low):
             if canonical not in cities:
                 cities.append(canonical)
 
-    # 2. Онлайн-формат
     strict_offline = bool(
         re.search(
             r"только\s+(в\s+)?(москв|мск|спб|питер|санкт|екатеринбург|казан|сочи|очно|офф?лайн)|без\s+онлайн|строго\s+очно|строго\s+офф?лайн",
@@ -68,7 +65,6 @@ def extract_profile_heuristic(
     explicit_online = bool(re.search(r"онлайн|вебинар|трансляц", low))
     include_online = False if (strict_offline and not explicit_online) else True
 
-    # 3. Бюджет (total_budget_max)
     budget = 400000.0
     if "полтора миллиона" in low or "полтора млн" in low:
         budget = 1500000.0
@@ -88,7 +84,6 @@ def extract_profile_heuristic(
                     budget = val
                     break
 
-    # 4. Период дат (date_from, date_to)
     date_from = today
     date_to = today + datetime.timedelta(days=120)
 
@@ -102,7 +97,6 @@ def extract_profile_heuristic(
     elif "декабр" in low:
         date_to = datetime.date(today.year, 12, 31)
 
-    # 5. Количество мероприятий и спикерство
     target_count = 3
     m_better = re.search(r"лучше\s*(\d+)\s*(?:мероприят|площад|событ|форум)?", low)
     m_count = re.search(r"\b([1-5])\s*(?:небольш[а-яё]+\s+|профильн[а-яё]+\s+|ключев[а-яё]+\s+)?(?:мероприят|площад|событ|форум|встреч)", low)
@@ -115,7 +109,6 @@ def extract_profile_heuristic(
     elif "одно мероприятие" in low or "одну площадку" in low:
         target_count = 1
 
-    # 6. Роли участия и min_speaker_events
     roles: list[str] = []
     wants_speaker = bool(re.search(r"спик[а-яё]*|спискер[а-яё]*|выступ[а-яё]*|доклад[а-яё]*", low))
     wants_sponsor = bool(re.search(r"стенд[а-яё]*|спонсор[а-яё]*|партнерск[а-яё]*|партнёрск[а-яё]*|делов[а-яё]+\s+игр", low))
@@ -137,7 +130,6 @@ def extract_profile_heuristic(
         if min_speaker < target_count and "delegate" not in roles:
             roles.append("delegate")
 
-    # 7. Предпочитаемые форматы
     formats: list[str] = []
     if re.search(r"кругл[а-яё]+\s+стол|камерн[а-яё]+|закрыт[а-яё]+", low):
         formats.append("roundtable")
@@ -148,7 +140,6 @@ def extract_profile_heuristic(
     if re.search(r"конференц[а-яё]*|конкурс[а-яё]*|преми[яию]", low):
         formats.append("conference")
 
-    # 8. Темы и семантический запрос
     themes: list[str] = []
     for pattern, tag in _THEME_PATTERNS:
         if re.search(pattern, low) and tag not in themes:
@@ -178,7 +169,6 @@ def extract_profile_heuristic(
         themes_keywords=themes,
         semantic_search_query=semantic_query,
     )
-
 
 async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
     today = datetime.date.today()

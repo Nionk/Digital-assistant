@@ -232,36 +232,26 @@ export function ClientShowcasePage() {
 
   return (
     <div className="relative min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-20 overflow-x-hidden selection:bg-[#E5C378]/25 selection:text-white">
-      {/* ========================================================================= */}
       {/* ВАРИАНТ 1: АТМОСФЕРНЫЙ АРХИТЕКТУРНЫЙ СВЕТ И ДЕЛИКАТНЫЙ ЭМБИЕНТ           */}
-      {/* ========================================================================= */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        {/* 1. Верхний коньячно-золотой световой купол (акцент на статусе и бюджете) */}
         <div className="absolute -top-[12%] left-1/2 -translate-x-1/2 h-[680px] w-[1200px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(229,195,120,0.065)_0%,rgba(124,90,32,0.025)_45%,transparent_72%)] blur-2xl" />
 
-        {/* 2. Левый глубокий хвойно-изумрудный отсвет (символ выгоды и партнерства) */}
         <div className="absolute top-[35%] -left-[12%] h-[750px] w-[750px] rounded-full bg-[radial-gradient(circle_at_center,rgba(45,106,79,0.045)_0%,rgba(22,56,44,0.015)_50%,transparent_70%)] blur-3xl" />
 
-        {/* 3. Правый теплый бронзово-терракотовый ореол */}
         <div className="absolute top-[60%] -right-[10%] h-[650px] w-[650px] rounded-full bg-[radial-gradient(circle_at_center,rgba(124,90,32,0.035)_0%,transparent_70%)] blur-3xl" />
 
-        {/* 4. Нижний хвойно-обсидиановый рассеянный свет в блоке этапов агентства */}
         <div className="absolute -bottom-[10%] left-1/3 h-[500px] w-[800px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(45,106,79,0.03)_0%,transparent_70%)] blur-2xl" />
 
-        {/* 5. Тактильное микрозерно (Luxury Grain) */}
         <div className="luxury-noise-bg absolute inset-0 opacity-40 mix-blend-overlay" />
       </div>
 
       <div className="relative z-10">
-        {/* 1. Шапка витрины и сводный бюджет */}
         <ShowcaseExecutiveHeader showcase={showcase} />
 
-        {/* 2. График участия по датам */}
         <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
           <CalendarTimeline items={timelineItems} />
         </div>
 
-      {/* 3. Секция рекомендованных мероприятий */}
       <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 shadow-sm">
           {/* Верхняя панель: Заголовок + Плавные селекторы без вспышек */}
@@ -507,10 +497,8 @@ export function ClientShowcasePage() {
         </div>
       </section>
 
-      {/* 4. Блок сопровождения агентства */}
       <AgencyWorkflowStepsSection />
 
-      {/* 5. Стильная боковая закладка справа для открытия вопросов по условиям */}
       <AnimatePresence>
         {!activeDrawerEventId && items.length > 0 && (
           <motion.button
@@ -540,7 +528,6 @@ export function ClientShowcasePage() {
         )}
       </AnimatePresence>
 
-      {/* 6. Выдвижная панель деталей тарифа и консультанта */}
       <RegulationConsultantDrawer
         isOpen={Boolean(activeDrawerEventId)}
         onClose={closeEventDrawer}

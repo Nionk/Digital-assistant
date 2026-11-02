@@ -133,7 +133,6 @@ export function ShowcaseEventCard({
     >
       {/* Верхняя и средняя часть карточки (растягивается через flex-1 для идеального выравнивания низа) */}
       <div className="flex flex-1 flex-col">
-        {/* 1. Обложка мероприятия */}
         <div
           className="relative h-44 w-full shrink-0 overflow-hidden"
           style={{ background: cover.fallbackGradient }}
@@ -210,7 +209,6 @@ export function ShowcaseEventCard({
           </div>
         </div>
 
-        {/* 2. Основной контент карточки */}
         <div className="flex flex-1 flex-col p-4 sm:p-5">
           {/* Заголовок и площадка */}
           <h3 className="font-serif text-lg font-bold leading-snug text-white transition-colors group-hover:text-[#E5C378] sm:text-[19px]">
@@ -306,7 +304,6 @@ export function ShowcaseEventCard({
               </div>
             </div>
 
-            {/* 3. Выровненная интуитивная кнопка перехода к условиям тарифа и чату */}
             <button
               type="button"
               onClick={() => onOpenRegulationDrawer()}
@@ -337,7 +334,6 @@ export function ShowcaseEventCard({
         </div>
       </div>
 
-      {/* 4. Нижняя панель решения клиента (при добавлении становится изумрудной вместе с окном) */}
       <div
         className={cn(
           "border-t p-4 pt-3.5 transition-colors duration-200",

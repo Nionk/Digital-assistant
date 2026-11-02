@@ -6,7 +6,6 @@ from app.api import manager_router, showcase_router
 from app.core.database import engine
 from app.models import models
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -17,7 +16,6 @@ async def lifespan(app: FastAPI):
     yield
     # Очистка ресурсов при завершении работы сервера
     await engine.dispose()
-
 
 app = FastAPI(
     title="Digital Assistant API",
@@ -43,7 +41,6 @@ app.add_middleware(
 @app.get("/health", tags=["System"])
 async def health_check():
     return {"status": "ok"}
-
 
 # Подключение бизнес-роутеров системы
 app.include_router(manager_router)

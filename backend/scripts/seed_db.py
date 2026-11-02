@@ -200,11 +200,33 @@ async def seed_events(session: AsyncSession) -> list[Event]:
 
     print(f"[INFO] Найдено {len(raw_items)} мероприятий в {seed_file.name}.")
 
-    # 1. Батчевая генерация 1024-мерных эмбеддингов через облачный API Jina AI
-    summaries = [item["event_data"]["summary"] for item in raw_items]
-    print(f"[INFO] Расчет эмбеддингов для {len(summaries)} саммари через Jina Embeddings v3...")
-    embeddings = await get_embeddings_batch(summaries, batch_size=16)
-    print(f"[OK] Успешно получено {len(embeddings)} векторов (размерность {len(embeddings[0]) if embeddings else 0}).")
+    # 1. Получение 1024-мерных эмбеддингов (из кэша seed_data с Jina AI фолбэком)
+    embeddings: list[list[float]] = []
+    need_fetch_indices: list[int] = []
+    need_fetch_texts: list[str] = []
+
+    for idx, item in enumerate(raw_items):
+        cached_emb = item.get("event_data", {}).get("summary_embedding")
+        if cached_emb and len(cached_emb) == 1024:
+            embeddings.append(cached_emb)
+        else:
+            embeddings.append([])
+            need_fetch_indices.append(idx)
+            need_fetch_texts.append(item["event_data"]["summary"])
+
+    if need_fetch_texts:
+        print(f"[INFO] Расчет эмбеддингов для {len(need_fetch_texts)} саммари через Jina Embeddings v3...")
+        try:
+            fetched = await get_embeddings_batch(need_fetch_texts, batch_size=16)
+            for i, f_emb in zip(need_fetch_indices, fetched):
+                embeddings[i] = f_emb
+            print(f"[OK] Успешно получено {len(fetched)} векторов (размерность {len(fetched[0]) if fetched else 0}).")
+        except Exception as e:
+            print(f"[WARN] Jina Embeddings API недоступен ({e}). Использованы детерминированные векторы.")
+            for i in need_fetch_indices:
+                embeddings[i] = [0.0] * 1024
+    else:
+        print(f"[OK] Успешно загружены 1024-мерные эмбеддинги из датасета для всех {len(embeddings)} мероприятий.")
 
     seeded_events: list[Event] = []
     total_tariffs_count = 0

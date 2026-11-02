@@ -4,9 +4,6 @@ from openai import AsyncOpenAI
 import instructor
 from app.core.config import settings
 
-# ==========================================
-# 1. КЛИЕНТ ДЛЯ ГЕНЕРАЦИИ ТЕКСТА (LLM)
-# ==========================================
 # Базовый клиент (использует Ru-OpenRouter)
 raw_openai_client = AsyncOpenAI(
     api_key=settings.LLM_API_KEY,
@@ -20,9 +17,6 @@ structured_llm_client = instructor.from_openai(
     mode=instructor.Mode.MD_JSON
 )
 
-# ==========================================
-# 2. КЛИЕНТ ДЛЯ ЭМБЕДДИНГОВ (ВЕКТОРОВ)
-# ==========================================
 # Отдельный клиент, так как OpenRouter не поддерживает эмбеддинги, 
 # мы идем напрямую в Jina AI
 embedding_client = AsyncOpenAI(
@@ -30,9 +24,6 @@ embedding_client = AsyncOpenAI(
     base_url=settings.EMBEDDING_BASE_URL,
 )
 
-# ==========================================
-# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И ОГРАНИЧИТЕЛИ (RULES.MD SECTION 3)
-# ==========================================
 # Ограничитель параллельных запросов к API эмбеддингов для предотвращения HTTP 429
 EMBEDDING_SEMAPHORE = asyncio.Semaphore(3)
 
