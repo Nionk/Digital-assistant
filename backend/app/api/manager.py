@@ -32,7 +32,6 @@ router = APIRouter(prefix="/api/manager", tags=["Manager Cabinet"])
 
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
 
-
 def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) -> MatchResponseOut:
     """Резервный ответ для прогона контрактных тестов D-05 при остановленном контейнере PostgreSQL."""
     profile = payload.override_profile or extract_profile_heuristic(payload.raw_manager_notes)
@@ -82,6 +81,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         recommended_tariff=t_speaker,
         available_tariffs=[t_speaker, t_delegate],
         ai_rationale="Прямое попадание в запрос на выступление спикером по теме КРТ и строительства в Москве.",
+        website_url="https://events.vedomosti.ru/",
     )
     item_2_spb = BundleEventItemOut(
         event_id=102,
@@ -96,6 +96,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         recommended_tariff=t_delegate,
         available_tariffs=[t_delegate],
         ai_rationale="Профильная площадка в Санкт-Петербурге в рамках бюджета.",
+        website_url="https://events.kommersant.ru/",
     )
     item_3_msk = BundleEventItemOut(
         event_id=103,
@@ -110,6 +111,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         recommended_tariff=t_delegate,
         available_tariffs=[t_speaker, t_delegate],
         ai_rationale="Флагманская строительная площадка в Москве без пересечений по датам.",
+        website_url="https://events.rbc.ru/",
     )
     bonus_item = BundleEventItemOut(
         event_id=105,
@@ -124,6 +126,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         recommended_tariff=t_on_req,
         available_tariffs=[t_on_req],
         ai_rationale="Флагманский саммит с тарифом по индивидуальному запросу.",
+        website_url="https://events.rbc.ru/",
     )
 
     available_demo_items = [
@@ -193,7 +196,6 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         ),
     )
 
-
 @router.get(
     "/clients",
     response_model=ManagerDashboardOut,
@@ -216,7 +218,6 @@ async def get_manager_clients(
     burning_deadlines_out: list[BurningDeadlineOut] = []
 
     try:
-        # 1. Выборка клиентов из БД
         clients_stmt = select(Client).order_by(Client.id.asc())
         clients_res = await db.execute(clients_stmt)
         db_clients = clients_res.scalars().all()
@@ -251,7 +252,6 @@ async def get_manager_clients(
                 )
             )
 
-        # 2. Выборка ближайших горящих дедлайнов Early Bird из БД
         eb_stmt = (
             select(EventTariff, Event)
             .join(Event, Event.id == EventTariff.event_id)
@@ -321,7 +321,6 @@ async def get_manager_clients(
         burning_deadlines=burning_deadlines_out,
     )
 
-
 @router.post(
     "/clients/{client_id}/match",
     response_model=MatchResponseOut,
@@ -366,7 +365,6 @@ async def match_events_for_client(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при подборе мероприятий: {exc}",
         ) from exc
-
 
 @router.put(
     "/selections/{selection_id}/publish",
@@ -491,7 +489,6 @@ async def publish_selection(
         total_package_savings=round(total_savings, 2),
     )
 
-
 @router.get(
     "/events",
     response_model=ManagerEventsCatalogOut,
@@ -527,6 +524,7 @@ async def get_manager_events_catalog(
 
         for ev in db_events:
             fmt = ev.event_format if ev.event_format in valid_formats else "conference"
+            primary_url = ev.source_urls[0] if (ev.source_urls and len(ev.source_urls) > 0) else None
             events_out.append(
                 CatalogEventItemOut(
                     event_id=ev.id,
@@ -540,6 +538,7 @@ async def get_manager_events_catalog(
                     summary=ev.summary,
                     themes=list(ev.themes or []),
                     tariffs=tariffs_by_event.get(ev.id, []),
+                    website_url=primary_url,
                 )
             )
     except OSError as exc:
@@ -571,6 +570,7 @@ async def get_manager_events_catalog(
                         included_benefits="Выступление 15 минут в целевой сессии, 2 делегатских билета.",
                     )
                 ],
+                website_url="https://events.vedomosti.ru/",
             )
         ]
 

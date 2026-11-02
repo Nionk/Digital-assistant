@@ -37,6 +37,7 @@ env/
 *.sqlite
 *.sqlite3
 *.db
+*.sql
 
 .vscode/
 .idea/
@@ -63,6 +64,7 @@ artefact.md
 plan.md
 rules.md
 seed_data*.json
+backend/scripts/seed_data*.json
 json_example*.json
 пример*.json
 prompt_*.md
@@ -70,3 +72,22 @@ CODEBASE_GUIDE.md
 d_*.md
 get_data.md
 
+
+# IDE rules & assistant files
+.cursorrules
+
+# Architecture diagrams & export previews
+architecture_diagram*
+
+# Docs & Markdown reports (keep root README.md only)
+docs/
+*.md
+!README.md
+backend/tests/*.md
+backend/alembic/README
+
+# Build artifacts & temporary duplicates
+/openapi.json
+*.tsbuildinfo
+/fire.png
+/logo.png

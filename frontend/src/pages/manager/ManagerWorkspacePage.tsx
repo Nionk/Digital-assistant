@@ -61,7 +61,6 @@ export function ManagerWorkspacePage() {
   const clients = dashboard?.clients || [];
   const burningDeadlines = dashboard?.burning_deadlines || [];
 
-  // Состояние выпадающего меню списка клиентов (стиль Early Bird Popover)
   const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
   const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
     React.useState<number | null>(null);

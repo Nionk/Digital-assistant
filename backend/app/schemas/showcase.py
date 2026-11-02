@@ -3,10 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.core.constants import FAQ_QUICK_CHIPS
 
-
-# ============================================================================
 # СХЕМЫ ПУБЛИЧНОЙ ИНТЕРАКТИВНОЙ ВИТРИНЫ КЛИЕНТА (/api/public/s/{magic_token})
-# ============================================================================
 
 class ShowcaseEventItemOut(BaseModel):
     """Карточка мероприятия на интерактивной витрине клиента."""
@@ -47,7 +44,6 @@ class ShowcaseEventItemOut(BaseModel):
     )
     client_comment: str | None = Field(None, description="Текстовый комментарий клиента к реакции")
 
-
 class ShowcaseViewOut(BaseModel):
     """
     Полная структура данных для отрисовки витрины клиента по ссылке /s/{magic_token}.
@@ -73,7 +69,6 @@ class ShowcaseViewOut(BaseModel):
         description="3 фиксированные кнопки быстрых вопросов для выдвижной панели чата"
     )
 
-
 class ClientReactionIn(BaseModel):
     """Входные данные при клике клиентом кнопки 'Интересно' или 'Заменить'."""
     reaction: Literal["interested", "rejected"] = Field(
@@ -85,7 +80,6 @@ class ClientReactionIn(BaseModel):
         description="Опциональный комментарий клиента (например: 'В эти даты командировка, подберите замену')"
     )
 
-
 class ClientReactionOut(BaseModel):
     """Результат сохранения реакции клиента."""
     selection_item_id: int = Field(..., description="ID элемента подборки")
@@ -94,7 +88,6 @@ class ClientReactionOut(BaseModel):
         ...,
         description="True, если уведомление о реакции успешно отправлено менеджеру в Telegram"
     )
-
 
 class AskRegulationQuestionIn(BaseModel):
     """Вопрос клиента по регламенту конкретного мероприятия."""
@@ -105,7 +98,6 @@ class AskRegulationQuestionIn(BaseModel):
         description="Текст вопроса клиента или текст выбранного быстрого чипса",
         examples=["Что входит в рекомендованный тариф?"]
     )
-
 
 class AskRegulationQuestionOut(BaseModel):
     """Ответ ИИ-ассистента по регламенту события (изолированный RAG)."""
@@ -141,7 +133,6 @@ class EscalateQuestionIn(BaseModel):
         description="Текст вопроса, требующего индивидуального уточнения у организаторов мероприятия",
         examples=["Есть ли индивидуальный трансфер от отеля до площадки?"]
     )
-
 
 class EscalateQuestionOut(BaseModel):
     """Результат передачи вопроса персональному куратору в Telegram."""

@@ -27,7 +27,6 @@ router = APIRouter(prefix="/api/public/s", tags=["Client Public Showcase (Magic 
 
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
 
-
 def _build_demo_fallback_showcase() -> ShowcaseViewOut:
     """Демонстрационный фолбэк витрины для изолированных контрактных тестов D-05."""
     return ShowcaseViewOut(
@@ -117,7 +116,6 @@ def _build_demo_fallback_showcase() -> ShowcaseViewOut:
         ],
         faq_quick_chips=list(FAQ_QUICK_CHIPS),
     )
-
 
 @router.get(
     "/{magic_token}",
@@ -238,7 +236,6 @@ async def get_public_showcase(
         faq_quick_chips=list(FAQ_QUICK_CHIPS),
     )
 
-
 @router.post(
     "/{magic_token}/items/{item_id}/react",
     response_model=ClientReactionOut,
@@ -333,7 +330,6 @@ async def react_to_showcase_item(
         manager_notified=notified,
     )
 
-
 @router.post(
     "/{magic_token}/events/{event_id}/ask",
     response_model=AskRegulationQuestionOut,
@@ -423,7 +419,6 @@ async def ask_event_regulation_question(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-
 @router.post(
     "/{magic_token}/events/{event_id}/escalate-question",
     response_model=EscalateQuestionOut,
@@ -440,7 +435,6 @@ async def escalate_question_to_manager(
     payload: EscalateQuestionIn,
     db: AsyncSession = Depends(get_async_session),
 ) -> EscalateQuestionOut:
-    # 1. Обработка демо-витрины
     if magic_token == DEMO_FALLBACK_TOKEN:
         alert_html = format_escalation_alert(
             company_name="ГК «Пионер» (Демо-клиент)",
@@ -455,7 +449,6 @@ async def escalate_question_to_manager(
             message="Вопрос успешно передан персональному куратору.",
         )
 
-    # 2. Поиск подборки и клиента
     stmt = (
         select(Selection, Client, User)
         .join(Client, Selection.client_id == Client.id)
@@ -469,12 +462,10 @@ async def escalate_question_to_manager(
 
     selection, client, manager = row
 
-    # 3. Проверка мероприятия
     event = await db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Мероприятие не найдено")
 
-    # 4. Отправка алерта в Telegram куратору
     manager_chat_id = manager.telegram_chat_id if manager else None
     alert_html = format_escalation_alert(
         company_name=client.company_name,
@@ -483,7 +474,6 @@ async def escalate_question_to_manager(
     )
     await send_manager_alert(alert_html, chat_id=manager_chat_id)
 
-    # 5. Помечаем последнее сообщение в chat_messages
     try:
         msg_stmt = (
             select(ChatMessage)

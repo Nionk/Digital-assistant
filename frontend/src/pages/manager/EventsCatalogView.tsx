@@ -241,7 +241,6 @@ export function EventsCatalogView() {
 
   return (
     <div className="mx-auto max-w-[1440px] p-4 lg:p-5 space-y-3.5">
-      {/* 1. Компактная консоль управления: поиск, фильтры и переключатель вида */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 sm:p-4 shadow-sm space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -438,7 +437,6 @@ export function EventsCatalogView() {
         </div>
       </div>
 
-      {/* 2. Контентная область: загрузка / пусто / реестр / карточки */}
       {isLoading ? (
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-12 text-center shadow-sm">
           <div className="mx-auto h-7 w-7 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
@@ -469,9 +467,7 @@ export function EventsCatalogView() {
       ) : (
         <AnimatePresence mode="wait" initial={false}>
           {viewMode === "table" ? (
-            /* ========================================================================= */
             /* РЕЖИМ 1: РЕЕСТР (ТАБЛИЦА) — Высокая плотность, до 15 событий на экран    */
-            /* ========================================================================= */
             <motion.div
               key="catalog-table"
               initial={{ opacity: 0 }}
@@ -512,7 +508,6 @@ export function EventsCatalogView() {
                               : "hover:bg-[#1A2128]"
                           )}
                         >
-                          {/* 1. Дата события (Сроки) — единый стиль и единая высота */}
                           <td className="py-3 pl-4 pr-3 align-middle tabular-nums whitespace-nowrap">
                             <div className="flex items-baseline gap-1.5 font-serif text-xs">
                               <span
@@ -534,7 +529,6 @@ export function EventsCatalogView() {
                             </div>
                           </td>
 
-                      {/* 2. Название и тематика с полным тултипом */}
                       <td className="py-3 px-3 align-middle">
                         <div className="min-w-0 max-w-lg">
                           <span
@@ -562,7 +556,6 @@ export function EventsCatalogView() {
                         </div>
                       </td>
 
-                      {/* 3. Формат и город: кликабельный адрес с копированием в буфер */}
                       <td className="py-3 px-3 align-middle whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-[#D1D5DB]">
                           <button
@@ -597,7 +590,6 @@ export function EventsCatalogView() {
                         </div>
                       </td>
 
-                      {/* 4. Стоимость (от X) */}
                       <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
                         {minPrice !== null ? (
                           <div>
@@ -615,7 +607,6 @@ export function EventsCatalogView() {
                         )}
                       </td>
 
-                      {/* 5. Early Bird выгода */}
                       <td className="py-3 px-3 align-middle whitespace-nowrap">
                         {savings > 0 ? (
                           <Badge variant="ebEmerald" className="text-[9px]">
@@ -629,7 +620,6 @@ export function EventsCatalogView() {
                         )}
                       </td>
 
-                      {/* 6. Кнопка «Детали» */}
                       <td className="py-3 pr-4 pl-2 align-middle text-right whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 text-[11px] font-serif italic text-[#8E95A0] group-hover:text-[#E5C378] group-hover:translate-x-0.5 transition-all">
                           <span>Детали</span>
@@ -644,9 +634,7 @@ export function EventsCatalogView() {
               </div>
             </motion.div>
           ) : (
-            /* ========================================================================= */
             /* РЕЖИМ 2: КАРТОЧКИ (ОБЛЕГЧЕННЫЕ) — Без простыней из тарифов, высота ~140px */
-            /* ========================================================================= */
             <motion.div
               key="catalog-cards"
               initial={{ opacity: 0 }}
@@ -796,7 +784,6 @@ export function EventsCatalogView() {
         </AnimatePresence>
       )}
 
-      {/* 3. Выдвижная шторка детального просмотра мероприятия (Slide-over Drawer) */}
       <EventDetailsDrawer
         event={selectedEventForDrawer}
         isOpen={Boolean(selectedEventForDrawer)}

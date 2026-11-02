@@ -68,7 +68,6 @@ export function FinancialAndPitchPanel({
 
   return (
     <div className="sticky top-[80px] space-y-3">
-      {/* 1. Финансовый блок коммерческого предложения */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 text-white shadow-sm">
         <div className="flex items-center justify-between border-b border-[#21262F] pb-2.5">
           <div>
@@ -174,7 +173,6 @@ export function FinancialAndPitchPanel({
         </p>
       </div>
 
-      {/* 2. Редактор сопроводительного письма и кнопка публикации (Шаг 06–07) */}
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[#21262F]">
           <div className="flex items-baseline gap-2.5 min-w-0">

@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   Layers,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { CatalogEventItemOut } from "@/api/types";
@@ -73,7 +74,7 @@ export function EventDetailsDrawer({
   const maxSavings = Math.max(0, ...event.tariffs.map((t) => t.savings || 0));
 
   const handleCopySummary = () => {
-    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}Тарифы: ${formatMinPrice(minPrice)}\n\nОписание:\n${event.summary}`;
+    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}${event.website_url ? `Сайт: ${event.website_url}\n` : ""}Тарифы: ${formatMinPrice(minPrice)}\n\nОписание:\n${event.summary}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -105,7 +106,6 @@ export function EventDetailsDrawer({
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 flex h-full w-full max-w-[540px] flex-col border-l border-[#7C5A20]/60 bg-[#161B22] text-white shadow-2xl"
           >
-            {/* 1. Шапка шторки */}
             <div className="border-b border-[#21262F] bg-[#12161A] p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs">
@@ -184,6 +184,18 @@ export function EventDetailsDrawer({
                         </>
                       )}
                     </button>
+                    {event.website_url && (
+                      <a
+                        href={event.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] px-2 py-0.5 text-[11px] text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white transition-all select-none cursor-pointer"
+                        title="Перейти на официальный сайт мероприятия в новой вкладке"
+                      >
+                        <ExternalLink className="h-3 w-3 stroke-[2]" />
+                        <span>Сайт события</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
@@ -209,7 +221,6 @@ export function EventDetailsDrawer({
               </div>
             </div>
 
-            {/* 2. Тело шторки (скроллируемая область) */}
             <div className="flex-1 space-y-5 overflow-y-auto p-5 scrollbar-thin">
               {/* Концепция и описание площадки */}
               <div>
@@ -318,7 +329,6 @@ export function EventDetailsDrawer({
               </div>
             </div>
 
-            {/* 3. Подвал шторки: лаконичное целевое действие */}
             <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex items-center justify-center">
               <Button
                 type="button"

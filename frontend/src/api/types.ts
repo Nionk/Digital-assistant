@@ -15,10 +15,6 @@ export type SelectionStatus = "draft" | "published";
 
 export type ClientReactionStatus = "pending" | "interested" | "rejected";
 
-// ============================================================================
-// 1. ДАШБОРД МЕНЕДЖЕРА И КАТАЛОГ МЕРОПРИЯТИЙ (/api/manager/clients, /events)
-// ============================================================================
-
 export interface BurningDeadlineOut {
   event_id: number;
   event_title: string;
@@ -65,16 +61,13 @@ export interface CatalogEventItemOut {
   summary: string;
   themes: string[];
   tariffs: TariffOptionOut[];
+  website_url?: string | null;
 }
 
 export interface ManagerEventsCatalogOut {
   total_count: number;
   events: CatalogEventItemOut[];
 }
-
-// ============================================================================
-// 2. ИИ-ПРОФИЛИРОВАНИЕ И СБОРКА ПАКЕТОВ (POST /api/manager/clients/{id}/match)
-// ============================================================================
 
 export interface ClientQueryExtracted {
   cities: string[];
@@ -108,6 +101,7 @@ export interface BundleEventItemOut {
   recommended_tariff: TariffOptionOut;
   available_tariffs: TariffOptionOut[];
   ai_rationale: string;
+  website_url?: string | null;
 }
 
 export interface BundleVariantOut {
@@ -130,10 +124,6 @@ export interface MatchResponseOut {
   generated_pitch_text: string;
 }
 
-// ============================================================================
-// 3. ПУБЛИКАЦИЯ ВИТРИНЫ (PUT /api/manager/selections/{id}/publish)
-// ============================================================================
-
 export interface SelectedEventTariffPairIn {
   event_id: number;
   tariff_id: number;
@@ -154,10 +144,6 @@ export interface PublishSelectionOut {
   total_package_price: number;
   total_package_savings: number;
 }
-
-// ============================================================================
-// 4. ПУБЛИЧНАЯ ВИТРИНА КЛИЕНТА И ИЗОЛИРОВАННЫЙ RAG (/api/public/s/{magic_token})
-// ============================================================================
 
 export interface ShowcaseEventItemOut {
   selection_item_id: number;
