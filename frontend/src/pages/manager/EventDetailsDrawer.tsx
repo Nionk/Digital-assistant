@@ -43,6 +43,7 @@ export function EventDetailsDrawer({
   const [copied, setCopied] = React.useState(false);
   const [copiedAddress, setCopiedAddress] = React.useState(false);
 
+  // [AUDIT-FAKE]: Ошибка записи в буфер обмена проглатывается через .catch(() => {}), после чего безусловно показывается toast.success("Адрес скопирован")
   const handleCopyAddress = (addr: string) => {
     navigator.clipboard.writeText(addr).catch(() => {});
     setCopiedAddress(true);
@@ -73,6 +74,7 @@ export function EventDetailsDrawer({
 
   const maxSavings = Math.max(0, ...event.tariffs.map((t) => t.savings || 0));
 
+  // [AUDIT-STUB]: В карточке площадки отсутствует вывод полного регламента (full_regulation_markdown) и нет интерфейса ручного редактирования/обогащения тарифов из PDF (п. 11.4 artifact.md)
   const handleCopySummary = () => {
     const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}${event.website_url ? `Сайт: ${event.website_url}\n` : ""}Тарифы: ${formatMinPrice(minPrice)}\n\nОписание:\n${event.summary}`;
     navigator.clipboard.writeText(text);

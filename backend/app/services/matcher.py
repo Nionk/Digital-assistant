@@ -8,17 +8,17 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_, exists, and_
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.models import Event, EventTariff, Selection, SelectionItem, Client
+from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
 from app.schemas.manager import (
+    BundleEventItemOut,
+    BundleVariantOut,
     ClientQueryExtracted,
     MatchRequestIn,
     MatchResponseOut,
-    BundleVariantOut,
-    BundleEventItemOut,
     TariffOptionOut,
 )
 from app.services.ai_client import get_embedding, structured_llm_client
@@ -70,6 +70,7 @@ class PitchAndRationalesLLMResponse(BaseModel):
         )
     )
 
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
 def build_fts_or_query(profile: ClientQueryExtracted) -> str:
     """
     Формирует безопасную строку запроса для PostgreSQL websearch_to_tsquery('russian', ...).
@@ -91,6 +92,7 @@ def build_fts_or_query(profile: ClientQueryExtracted) -> str:
         ]
         cleaned_terms = [w for w in words if len(w) >= 3][:8]
 
+    # [AUDIT-FAKE]: При пустых ключевых словах и запросе подставляется захардкоженная строка "строительство OR девелопмент", нарушающая мультиотраслевую архитектуру.
     return " OR ".join(cleaned_terms) if cleaned_terms else "строительство OR девелопмент"
 
 def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut:
@@ -181,6 +183,7 @@ async def fetch_hybrid_rrf_candidates(
     с объединением рангов по формуле Reciprocal Rank Fusion (k=60).
     Использует нативные выражения SQLAlchemy 2.0 Core для защиты от ошибок типизации asyncpg.
     """
+    # [AUDIT-CRUTCH]: В условиях выборки отсутствует проверка Quality Gate (Event.data_status == 'ready' из get_data.md), из-за чего в подбор попадают сырые карточки со статусом NEEDS_ENRICHMENT.
     conditions = [
         Event.is_active.is_(True),
         Event.summary_embedding.is_not(None),
@@ -202,6 +205,7 @@ async def fetch_hybrid_rrf_candidates(
 
         # В строгом пуле для основных пакетов должен быть хотя бы один ЧИСЛОВОЙ тариф в рамках бюджета (+10%).
         # Это защищает Топ-15 от засорения дорогими форумами только из-за наличия у них спонсорского пакета base_price IS NULL.
+        # [AUDIT-CRUTCH]: Вопреки разделу 10.3 artifact.md подзапрос EXISTS отбрасывает события с base_price IS NULL (EventTariff.base_price.is_not(None)) и сразу закладывает +10% к бюджету в первичном SQL-фильтре.
         max_allowed_price = profile.total_budget_max * 1.10
         tariff_exists_stmt = exists(
             select(1).where(
@@ -266,6 +270,7 @@ async def fetch_hybrid_rrf_candidates(
     rows = result.all()
     return [(row[0], float(row[1])) for row in rows]
 
+# [AUDIT-CRUTCH]: Очень высокая цикломатическая сложность (ранг E в complexity_report.txt).
 async def get_scored_candidates(
     session: AsyncSession,
     profile: ClientQueryExtracted,
@@ -281,6 +286,7 @@ async def get_scored_candidates(
         query_vec = await get_embedding(profile.semantic_search_query)
     except Exception as exc:
         logger.warning("Embedding API fallback triggered (%s): %s", type(exc).__name__, exc)
+        # [AUDIT-FAKE]: При сбое API эмбеддингов ошибка глушится и подставляется фейковый константный вектор [1/sqrt(dim)] * dim, превращающий косинусный поиск pgvector в фикцию.
         dim = settings.EMBEDDING_DIM
         val = 1.0 / (dim ** 0.5)
         query_vec = [val] * dim
@@ -304,6 +310,7 @@ async def get_scored_candidates(
     }
 
     # Добираем из расширенного поиска (чтобы захватить чисто 'По запросу' события в ТОМ ЖЕ городе и периоде)
+    # [AUDIT-TIMEBOMB]: Повторный тяжелый RRF-запрос по всей таблице events без SQL-фильтров города и дат (strict_filters=False, limit=20) с последующей фильтрацией в Python: при росте БД события нужного города не попадут в глобальный Топ-20 и будут потеряны.
     relaxed_rows = await fetch_hybrid_rrf_candidates(
         session=session,
         profile=profile,
@@ -405,6 +412,7 @@ def has_offline_date_conflict(candidates: Sequence[ScoredEventCandidate]) -> boo
                 return True
     return False
 
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
 def pick_best_tariff_for_role(
     priced_tariffs: list[TariffOptionOut],
     target_role: str,
@@ -431,6 +439,7 @@ def pick_best_tariff_for_role(
 
     return None, False
 
+# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
 def evaluate_candidate_tuple(
     combo: tuple[ScoredEventCandidate, ...],
     min_speaker_events: int,
@@ -509,6 +518,7 @@ def evaluate_candidate_tuple(
 
     return valid_evaluations
 
+# [AUDIT-CRUTCH]: Экстремальная цикломатическая сложность (ранг F в complexity_report.txt).
 def build_bundles(
     candidates: list[ScoredEventCandidate],
     profile: ClientQueryExtracted,
@@ -565,6 +575,7 @@ def build_bundles(
                     min_speaker_events=profile.min_speaker_events,
                     required_roles=list(profile.required_roles),
                     budget_max=budget,
+                    # [AUDIT-FAKE]: Тихое отключение проверки пересечения дат (check_dates=False), при том что в КП и UI клиенту гарантируется "календарь сверен без пересечений по датам".
                     check_dates=False,
                     allow_role_fallback=True,
                 )
@@ -598,6 +609,7 @@ def build_bundles(
             break
 
     # Аварийная страховка (Уровень 4): если бюджет клиента экстремально мал, берем самый дешевый пакет
+    # [AUDIT-FAKE]: При нехватке бюджета возвращается самый дешевый пакет с любым превышением лимита (хоть в 5 раз дороже бюджета) под видом допустимого отклонения +10% (is_over_budget_tolerance = True).
     if not selected_variants and all_fallback_combos:
         all_fallback_combos.sort(
             key=lambda x: (x.total_actual_price, -int(x.roles_strictly_matched), -x.matched_speaker_count, -x.combo_score)
@@ -622,6 +634,7 @@ def build_bundles(
     all_budget_valid: list[EvaluatedCombo] = []
     for k in range(target_k, 0, -1):
         all_budget_valid.extend(strict_combos_by_k[k])
+        # [AUDIT-CRUTCH]: Смешивание строгих пакетов и пакетов с превышением +10% для Варианта №2 нарушает правило rules.md (п. 4.3): допуск +10% разрешен только если строгих вариантов меньше двух.
         all_budget_valid.extend(tolerance_combos_by_k[k])
 
     cheaper_alternatives = [
@@ -730,6 +743,7 @@ def build_fallback_pitch(
     )
     return pitch
 
+# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt), нестандартный extra_body={"reasoning": {"effort": "low"}} и тихое проглатывание ошибок LLM в except Exception.
 async def generate_pitch_and_rationales(
     client_name: str,
     raw_notes: str,
@@ -867,6 +881,7 @@ def _to_bundle_event_item(
         website_url=primary_url,
     )
 
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt); при каждом запуске создается новый черновик Selection без очистки старых draft-подборок клиента.
 async def run_client_matching_pipeline(
     session: AsyncSession,
     client_id: int,
@@ -950,6 +965,7 @@ async def run_client_matching_pipeline(
         for cand, tar in bonus_pairs
     ]
 
+    # [AUDIT-FAKE]: Захардкоженный фейковый selection_id = 10 при отсутствии клиента в БД вместо возврата HTTP 404 Not Found.
     selection_id = 10  # fallback ID, если вызвано для несуществующего в БД клиента
     if client_obj is not None:
         new_selection = Selection(

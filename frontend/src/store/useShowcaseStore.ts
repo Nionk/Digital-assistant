@@ -21,9 +21,11 @@ interface ShowcaseState {
 
   // Выдвижная панель «Паспорт участия и ИИ-консультант по регламенту»
   activeDrawerEventId: number | null;
+  // [AUDIT-STUB]: Поле drawerInitialTab ("regulation" | "benefits") записывается в стор, но компонент RegulationConsultantDrawer никогда его не читает и не имеет переключения вкладок
   drawerInitialTab: "regulation" | "benefits";
 
   // Сохраненная история вопросов/ответов по каждому event_id (не теряется при закрытии Drawer)
+  // [AUDIT-TIMEBOMB]: История чата с ИИ-консультантом (chatByEventId) и выбранные услуги Этапа 09 (selectedAgencyServicesByItem) живут только в памяти браузера и бесследно исчезают при перезагрузке страницы /s/:magicToken
   chatByEventId: Record<number, RegulationChatExchange[]>;
 
   // Выбранные услуги сопровождения агентства (Этап 09) по каждому selection_item_id

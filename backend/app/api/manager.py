@@ -1,6 +1,7 @@
 import datetime
 import logging
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,6 @@ from app.schemas.manager import (
     BundleVariantOut,
     BurningDeadlineOut,
     CatalogEventItemOut,
-    ClientQueryExtracted,
     ClientSummaryOut,
     ManagerDashboardOut,
     ManagerEventsCatalogOut,
@@ -30,8 +30,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/manager", tags=["Manager Cabinet"])
 
+# [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к демо-данным в обход БД.
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
 
+# [AUDIT-FAKE]: Гигантская функция-обманка (163 строки) в боевом контроллере, возвращающая захардкоженные мероприятия и цены при недоступности БД.
+# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
 def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) -> MatchResponseOut:
     """Резервный ответ для прогона контрактных тестов D-05 при остановленном контейнере PostgreSQL."""
     profile = payload.override_profile or extract_profile_heuristic(payload.raw_manager_notes)
@@ -205,6 +208,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
         "и панель срочных алертов по мероприятиям с активными скидками раннего бронирования (Early Bird)."
     ),
 )
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt) и неиспользуемый аргумент current_manager (dead_code.txt:209).
 async def get_manager_clients(
     current_manager: CurrentManagerDep,
     db: AsyncSession = Depends(get_async_session),
@@ -218,10 +222,12 @@ async def get_manager_clients(
     burning_deadlines_out: list[BurningDeadlineOut] = []
 
     try:
+        # [AUDIT-BACKDOOR]: Отсутствует фильтрация WHERE Client.manager_id == current_manager.id — любой менеджер получает доступ ко всем клиентам агентства (IDOR / утечка данных).
         clients_stmt = select(Client).order_by(Client.id.asc())
         clients_res = await db.execute(clients_stmt)
         db_clients = clients_res.scalars().all()
 
+        # [AUDIT-TIMEBOMB]: Классическая проблема N+1 SQL-запросов: внутри цикла по клиентам выполняется отдельный SELECT к таблице selections на каждую итерацию.
         for c in db_clients:
             sel_stmt = (
                 select(Selection)
@@ -252,6 +258,7 @@ async def get_manager_clients(
                 )
             )
 
+        # [AUDIT-FAKE]: В запросе горящих дедлайнов отсутствует верхняя граница <= today + 3 дня (< 72 часов по спецификации BurningDeadlineOut), из-за чего в "горящие" попадают любые дедлайны даже через несколько месяцев.
         eb_stmt = (
             select(EventTariff, Event)
             .join(Event, Event.id == EventTariff.event_id)
@@ -286,6 +293,7 @@ async def get_manager_clients(
             seen_events.values(),
             key=lambda x: (x.early_bird_deadline, -x.potential_savings),
         )[:5]
+    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
     except OSError as exc:
         logger.warning("БД недоступна при запросе /clients, используется демо-фолбэк: %s", exc)
 
@@ -331,6 +339,7 @@ async def get_manager_clients(
         "и бонусный слот 'Цена по запросу', генерирует текст КП и сохраняет черновик в БД."
     ),
 )
+# [AUDIT-BACKDOOR]: Аргумент current_manager не используется (dead_code.txt:337) — не проверяется принадлежность client_id текущему менеджеру (IDOR).
 async def match_events_for_client(
     client_id: int,
     payload: MatchRequestIn,
@@ -348,6 +357,7 @@ async def match_events_for_client(
         )
     except HTTPException:
         raise
+    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
     except OSError as exc:
         if isinstance(exc, TimeoutError):
             raise HTTPException(
@@ -359,6 +369,7 @@ async def match_events_for_client(
     except Exception as exc:
         try:
             await db.rollback()
+        # [AUDIT-FAKE]: Безусловное проглатывание ошибки отката транзакции через except Exception: pass.
         except Exception:
             pass
         raise HTTPException(
@@ -377,6 +388,8 @@ async def match_events_for_client(
         "и возвращает уникальный UUIDv4 токен витрины."
     ),
 )
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
+# [AUDIT-BACKDOOR]: Аргумент current_manager не используется (dead_code.txt:383) — отсутствует проверка принадлежности selection_id текущему менеджеру (IDOR).
 async def publish_selection(
     selection_id: int,
     payload: PublishSelectionIn,
@@ -393,6 +406,7 @@ async def publish_selection(
             detail="Список мероприятий для публикации (final_items) не может быть пустым",
         )
 
+    # [AUDIT-FAKE]: Захардкоженный бэкдор под конкретные ID (selection_id == 10, event_id in 101..103, tariff_id in 501..503) для фальсификации прохождения теста test_d05_contracts.py без обращения к БД.
     is_d05_contract_probe = (
         selection_id == 10
         and all(item.event_id in (101, 102, 103) and item.tariff_id in (501, 502, 503) for item in payload.final_items)
@@ -420,6 +434,7 @@ async def publish_selection(
     validated_pairs: list[tuple[int, int, str | None]] = []
 
     # Валидируем все пары (event_id, tariff_id) до удаления старых строк
+    # [AUDIT-TIMEBOMB]: N+1 SQL-запросов в цикле — на каждый элемент вызываются отдельные db.get(Event) и db.get(EventTariff).
     for item_in in payload.final_items:
         event = await db.get(Event, item_in.event_id)
         if not event:
@@ -498,6 +513,8 @@ async def publish_selection(
         "конференции, круглые столы) с доступными тарифами и актуальными условиями Early Bird."
     ),
 )
+# [AUDIT-STUB]: В роутере manager.py отсутствуют 4 обязательных эндпоинта из раздела 11.4 artifact.md (POST /events/upload-pdf, POST /scraper/run, GET /selections/{id}/activity, POST /selections/{id}/reply), а в GET /events нет параметров фильтрации по городу, датам, форматам и data_status.
+# [AUDIT-CRUTCH]: Неиспользуемый аргумент current_manager (dead_code.txt:502).
 async def get_manager_events_catalog(
     current_manager: CurrentManagerDep,
     db: AsyncSession = Depends(get_async_session),
@@ -514,6 +531,7 @@ async def get_manager_events_catalog(
         ev_res = await db.execute(ev_stmt)
         db_events = ev_res.scalars().all()
 
+        # [AUDIT-TIMEBOMB]: Полная выгрузка всех строк таблицы event_tariffs без фильтрации по event_id (select(EventTariff) без WHERE).
         tar_stmt = select(EventTariff).order_by(EventTariff.id.asc())
         tar_res = await db.execute(tar_stmt)
         db_tariffs = tar_res.scalars().all()
@@ -541,6 +559,7 @@ async def get_manager_events_catalog(
                     website_url=primary_url,
                 )
             )
+    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
     except OSError as exc:
         logger.warning("БД недоступна при запросе /events, используется демо-фолбэк: %s", exc)
 

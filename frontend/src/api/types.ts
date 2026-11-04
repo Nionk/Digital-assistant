@@ -2,6 +2,7 @@
  * Строгие TypeScript-контракты, на 100% синхронизированные с openapi.json (Pydantic v2).
  */
 
+// [AUDIT-CRUTCH]: Типы написаны и поддерживаются вручную вместо автогенерации через openapi-typescript (нарушение раздела 11.4 artifact.md и .cursorrules); часть полей (website_url, EscalateQuestion*) расходится с корневым openapi.json.
 export type EventFormat =
   | "roundtable"
   | "business_breakfast"

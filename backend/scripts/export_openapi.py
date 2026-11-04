@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.main import app
 
 
+# [AUDIT-CRUTCH]: Ручной экспорт двух копий openapi.json (backend/openapi.json и корневой openapi.json), которые в репозитории разъехались между собой по числу эндпоинтов.
 def export_openapi():
     """
     Экспортирует схему OpenAPI в формате JSON (UTF-8, indent=2).

@@ -1,9 +1,9 @@
 import asyncio
+import io
 import sys
 import time
-import io
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 # Force UTF-8 output on Windows consoles
 if sys.stdout.encoding != "utf-8":
@@ -11,17 +11,18 @@ if sys.stdout.encoding != "utf-8":
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select, func
 from app.core.database import async_session_maker, engine
 from app.models.models import Client, Selection, SelectionItem
 from app.schemas.manager import ClientQueryExtracted, MatchRequestIn
 from app.services.matcher import (
-    get_scored_candidates,
     build_bundles,
+    get_scored_candidates,
     run_client_matching_pipeline,
 )
+from sqlalchemy import func, select
 
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции run_tests — ранг D (radon).
 async def run_tests() -> None:
     print("🚀 [Test Matcher] Starting standalone verification of Hybrid RRF & Combinatorial Bundle Builder...\n")
 
@@ -174,6 +175,7 @@ async def run_tests() -> None:
             payload=payload_3,
         )
         assert len(response_3.bundle_variants) >= 1, "Expected graceful bundle even on tiny budget!"
+        # [AUDIT-FAKE]: В стресс-тесте с бюджетом 15 000 ₽ отсутствует assert на непревышение бюджета (v1_tiny.total_actual_price <= 15000 * 1.10), тест рапортует Passed даже при возврате фолбэк-пакета в десятки раз дороже лимита.
         v1_tiny = response_3.bundle_variants[0]
         print(
             f"✅ Scenario 3 Passed! Assembled {len(v1_tiny.items)} events within {v1_tiny.total_actual_price:,.0f} ₽ "

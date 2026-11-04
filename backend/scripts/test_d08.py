@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
+
 import httpx
 
 # Настройка путей и UTF-8 консоли Windows
@@ -8,16 +9,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from app.main import app
 from app.core.database import engine, get_async_session
+from app.main import app
 from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции main — ранг C (radon); скрипт дублирует проверки из backend/tests/test_d08_d09_d10.py.
 async def main() -> None:
     print("=== Тест D-08: Бизнес-эндпоинты менеджера (/clients, /match, /publish) ===\n")
 
     pg_up = is_postgres_online()
     fake_db = InMemoryAsyncSession()
+    # [AUDIT-FAKE]: При остановленном PostgreSQL скрипт прозрачно подменяет БД на InMemoryAsyncSession с хардкодными словарями и рапортует [SUCCESS] без реальной проверки SQL.
     if not pg_up:
         print("[INFO] PostgreSQL (порт 5432) остановлен — используем InMemoryAsyncSession для проверки бизнес-логики.\n")
 

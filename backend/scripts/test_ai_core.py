@@ -2,20 +2,19 @@ import asyncio
 import math
 import sys
 from pathlib import Path
+
 from pydantic import BaseModel
 
 # Обеспечиваем корректный импорт app.* при прямом запуске скрипта
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.services.ai_client import (
-    structured_llm_client,
-    embedding_client,
-    get_embedding,
-    get_embeddings_batch,
-    l2_normalize,
-)
 from app.core.config import settings
 from app.core.constants import normalize_city
+from app.services.ai_client import (
+    get_embedding,
+    get_embeddings_batch,
+    structured_llm_client,
+)
 
 
 class TestSchema(BaseModel):
@@ -23,6 +22,7 @@ class TestSchema(BaseModel):
     city: str
 
 
+# [AUDIT-CRUTCH]: Полный дубликат юнит- и интеграционных проверок из backend/tests/test_d03_ai_core.py, оформленный как ручной скрипт вместо единого тест-сьюта.
 def test_cities():
     print("--- [1/3] Тестирование канонизации городов (DoD: >= 10 вариаций) ---")
     test_cases = [

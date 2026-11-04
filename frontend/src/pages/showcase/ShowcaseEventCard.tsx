@@ -67,6 +67,7 @@ export function ShowcaseEventCard({
   const isRejected = item.client_reaction === "rejected";
 
   // Убираем технический префикс при отображении комментария клиенту
+  // [AUDIT-CRUTCH]: Костыльное хранение выбранных B2B-услуг сопровождения (Этап 09) прямо внутри текстового поля client_comment через префикс «Опции сопровождения: » вместо отдельного поля БД, что затирает текстовый комментарий клиента
   const cleanClientComment = React.useMemo(() => {
     if (!item.client_comment) return null;
     return item.client_comment
@@ -74,6 +75,7 @@ export function ShowcaseEventCard({
       .replace(/^Опции сопровождения:\s*/i, "");
   }, [item.client_comment]);
 
+  // [AUDIT-FAKE]: Вызов navigator.clipboard.writeText без await и без обработки ошибок с безусловным показом toast.success("Адрес скопирован в буфер")
   const handleCopyAddress = (e: React.MouseEvent) => {
     e.stopPropagation();
     const addressToCopy = item.venue

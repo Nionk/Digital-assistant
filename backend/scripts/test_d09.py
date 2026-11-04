@@ -2,6 +2,7 @@ import asyncio
 import sys
 import time
 from pathlib import Path
+
 from sqlalchemy import func, select
 
 # Настройка путей и UTF-8 консоли Windows
@@ -15,6 +16,7 @@ from app.services.rag import ask_regulation_question
 from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции run_rag_checks — ранг C (radon).
 async def run_rag_checks(session, selection_id: int, event_id: int, is_in_memory: bool = False) -> None:
     print(f"Тестируем на подборке selection_id={selection_id}, мероприятие event_id={event_id}\n")
 
@@ -96,6 +98,7 @@ async def run_rag_checks(session, selection_id: int, event_id: int, is_in_memory
     print(f"   Текст ответа: {resp3.answer_text[:100]}...\n")
     assert resp3.is_answer_found is False, "ИИ не должен выдумывать несуществующие услуги!"
     assert resp3.source_quote is None
+    # [AUDIT-TIMEBOMB]: Скрипт гарантированно падает с AssertionError, так как в app/services/rag.py автоматическая эскалация была отключена (escalated = False), а скрипт продолжает требовать True.
     assert resp3.escalated_to_telegram is True
 
     print("[SUCCESS] ВСЕ ТЕСТЫ D-09 ПРОЙДЕНЫ УСПЕШНО!")
@@ -104,6 +107,7 @@ async def run_rag_checks(session, selection_id: int, event_id: int, is_in_memory
 async def main() -> None:
     print("=== Тест D-09: Изолированный RAG, Context Stuffing и PostgreSQL llm_cache ===\n")
 
+    # [AUDIT-FAKE]: Подмена реальной PostgreSQL на фейковую InMemoryAsyncSession при недоступности порта 5432.
     if not is_postgres_online():
         print("[INFO] PostgreSQL (порт 5432) остановлен — используем InMemoryAsyncSession.\n")
         fake_db = InMemoryAsyncSession()

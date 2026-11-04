@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from typing import Optional
+
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +22,6 @@ from app.models.models import (
 )
 from app.schemas.showcase import AskRegulationQuestionOut
 from app.services.ai_client import structured_llm_client
-from app.services.telegram import format_escalation_alert, send_manager_alert
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ def build_rag_cache_key(event_id: int, tariff_id: int, question_text: str) -> st
     raw_key = f"{event_id}:{tariff_id}:{normalized_q}"
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
+# [AUDIT-CRUTCH]: Функция делает до 3 последовательных запросов в БД для получения company_name и manager_chat_id, которые затем вообще нигде не используются в ask_regulation_question.
 async def _resolve_selection_context(
     session: AsyncSession,
     selection_id: int,
@@ -109,6 +110,7 @@ async def _save_chat_message(
         )
     )
 
+# [AUDIT-CRUTCH]: Очень высокая цикломатическая сложность функции (ранг E в complexity_report.txt) и отсутствие в модуле механизма инвалидации кэша (DELETE FROM llm_cache WHERE event_id = :event_id).
 async def ask_regulation_question(
     session: AsyncSession,
     selection_id: int,
@@ -149,9 +151,11 @@ async def ask_regulation_question(
     primary_cache_key = build_rag_cache_key(event_id, tariff_id, question_clean)
     cache_keys_to_check = [primary_cache_key]
     if tariff_id != 0:
+        # [AUDIT-FAKE]: Фолбэк на ключ кэша с tariff_id=0 возвращает предзаписанный ответ для чужого/общего тарифа, нарушая изоляцию ответа по рекомендованному тарифу клиента.
         cache_keys_to_check.append(build_rag_cache_key(event_id, 0, question_clean))
 
     cached_entry: LLMCache | None = None
+    # [AUDIT-TIMEBOMB]: Выполнение SQL-запросов SELECT в цикле по ключам кэша вместо одного запроса WHERE cache_key IN (...), а также json.loads без защиты от JSONDecodeError.
     for ck in cache_keys_to_check:
         res = await session.execute(select(LLMCache).where(LLMCache.cache_key == ck))
         cached_entry = res.scalar_one_or_none()
@@ -176,7 +180,8 @@ async def ask_regulation_question(
             await session.commit()
 
         # Автоматическая эскалация отключена: клиент подтверждает передачу куратору вручную
-        escalated = False
+        # [AUDIT-FAKE]: Даже при промахе кэша и возврате от LLM is_answer_found=False (когда промпт обещает клиенту "вопрос уже передан персональному менеджеру") отправка в Telegram не вызывается, а возвращается константа False.
+    escalated = False
 
         return AskRegulationQuestionOut(
             event_id=event_id,
@@ -190,6 +195,8 @@ async def ask_regulation_question(
 
     regulation_text = (event.full_regulation_markdown or event.summary or "").strip()
     if len(regulation_text) > 35000:
+        # [AUDIT-STUB]: Вместо обязательного гибридного поиска Топ-5 чанков в таблице event_chunks (WHERE event_id = :event_id) при длине > 35 000 символов (раздел 10.4 artifact.md) текст тупо обрезается срезом [:35000].
+        # [AUDIT-FAKE]: Имитация работы с длинными регламентами — отсечение хвоста документа приводит к потере разделов с финансовыми условиями и требованиями к спикерам.
         regulation_text = regulation_text[:35000] + "\n...[Текст регламента сокращен до 35 000 символов]..."
 
     today = datetime.date.today()
@@ -254,6 +261,7 @@ async def ask_regulation_question(
             timeout=25.0,
         )
         llm_call_succeeded = True
+    # [AUDIT-FAKE]: Проглатывание сбоев LLM/сети с подменой на ответ "Точных данных нет в открытом регламенте", что вводит клиента в заблуждение при падении API.
     except Exception as exc:
         logger.error("Ошибка вызова LLM в RAG (event_id=%s): %s", event_id, exc)
         llm_res = RAGResponse(
@@ -297,6 +305,7 @@ async def ask_regulation_question(
         )
     await session.commit()
 
+    # [AUDIT-FAKE]: Даже при промахе кэша и возврате от LLM is_answer_found=False (когда промпт обещает клиенту "вопрос уже передан персональному менеджеру") отправка в Telegram не вызывается, а возвращается константа False.
     escalated = False
 
     return AskRegulationQuestionOut(

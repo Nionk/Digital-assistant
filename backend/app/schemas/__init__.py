@@ -1,31 +1,32 @@
+from app.schemas.event_ingestion import (
+    EventIngestionSchema,
+    FAQCacheItem,
+    TariffExtracted,
+)
 from app.schemas.manager import (
-    BurningDeadlineOut,
-    ClientSummaryOut,
-    ManagerDashboardOut,
-    ClientQueryExtracted,
-    MatchRequestIn,
-    TariffOptionOut,
     BundleEventItemOut,
     BundleVariantOut,
+    BurningDeadlineOut,
+    ClientQueryExtracted,
+    ClientSummaryOut,
+    ManagerDashboardOut,
+    MatchRequestIn,
     MatchResponseOut,
-    SelectedEventTariffPairIn,
     PublishSelectionIn,
     PublishSelectionOut,
+    SelectedEventTariffPairIn,
+    TariffOptionOut,
 )
 from app.schemas.showcase import (
-    ShowcaseEventItemOut,
-    ShowcaseViewOut,
-    ClientReactionIn,
-    ClientReactionOut,
     AskRegulationQuestionIn,
     AskRegulationQuestionOut,
-)
-from app.schemas.event_ingestion import (
-    TariffExtracted,
-    FAQCacheItem,
-    EventIngestionSchema,
+    ClientReactionIn,
+    ClientReactionOut,
+    ShowcaseEventItemOut,
+    ShowcaseViewOut,
 )
 
+# [AUDIT-CRUTCH]: В __all__ и импортах пропущены схемы CatalogEventItemOut, ManagerEventsCatalogOut, EscalateQuestionIn и EscalateQuestionOut.
 __all__ = [
     "BurningDeadlineOut",
     "ClientSummaryOut",

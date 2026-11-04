@@ -26,6 +26,7 @@ interface PublishedShowcaseMonitorProps {
  * Панель живого мониторинга опубликованной витрины клиента (TanStack Query Polling 10s).
  * Позволяет менеджеру сразу видеть статус согласования (Шаг 07) и запрошенные услуги подготовки (Шаг 09).
  */
+// [AUDIT-STUB]: Вместо выделенного менеджерского эндпоинта GET /api/manager/selections/{id}/activity используется публичный роут витрины; полностью отсутствуют лента эскалированных вопросов клиента (needs_manager_attention) и форма ответа менеджера в чат (POST /api/manager/selections/{id}/reply) из п. 7.1 и 11.4 artifact.md
 export function PublishedShowcaseMonitor({
   magicToken,
   onCopyLink,

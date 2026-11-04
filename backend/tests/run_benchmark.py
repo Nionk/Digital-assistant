@@ -11,11 +11,9 @@ import datetime
 import json
 import logging
 import math
-import os
 import re
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -28,35 +26,29 @@ if hasattr(sys.stdout, "reconfigure"):
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("benchmark")
 
-from sqlalchemy import select, func, or_, and_, exists
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
-from app.models.models import Event, EventTariff, Selection, SelectionItem, Client, LLMCache
+from app.models.models import Event, LLMCache, SelectionItem
 from app.schemas.manager import (
     ClientQueryExtracted,
     MatchRequestIn,
-    MatchResponseOut,
     TariffOptionOut,
 )
-from app.services.profiler import extract_client_profile, extract_profile_heuristic
 from app.services.matcher import (
     ScoredEventCandidate,
-    EvaluatedCombo,
+    build_bundles,
     build_fts_or_query,
-    build_tariff_option,
+    evaluate_candidate_tuple,
     fetch_hybrid_rrf_candidates,
     get_scored_candidates,
-    build_bundles,
-    evaluate_candidate_tuple,
     has_offline_date_conflict,
     run_client_matching_pipeline,
 )
+from app.services.profiler import extract_client_profile, extract_profile_heuristic
 from app.services.rag import (
     ask_regulation_question,
-    build_rag_cache_key,
-    RAGResponse,
-    POLITE_FALLBACK_TEXT,
 )
+from sqlalchemy import select
 
 
 def calc_p50(vals: list[float]) -> float:
@@ -161,6 +153,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
 
     today = datetime.date.today()
     dim = settings.EMBEDDING_DIM
+    # [AUDIT-FAKE]: Вместо реального вызова Jina Embeddings передается искусственный константный вектор dummy_vec, что исключает сетевую задержку эмбеддинга из замера RRF.
     dummy_vec = [1.0 / (dim ** 0.5)] * dim
 
     rrf_latencies_ms = []
@@ -209,6 +202,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
         semantic_search_query="КРТ и девелопмент в Москве",
     )
     scored_candidates = await get_scored_candidates(session, sample_prof, today)
+    # [AUDIT-FAKE]: При нехватке кандидатов (< 15) пул искусственно добивается клонами одних и тех же событий для имитации нагрузки C(15, 3).
     if len(scored_candidates) < 15:
         # Pad with clones if fewer than 15 in strict DB query
         while len(scored_candidates) < 15:
@@ -309,6 +303,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
 # BLOCK 2: QUALITY & MATHEMATICAL ACCURACY
 # ============================================================================
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции benchmark_block_2 — ранг C (radon).
 async def benchmark_block_2(session) -> dict[str, Any]:
     print("\n=======================================================")
     print("▶ БЛОК 2. ТЕСТЫ КАЧЕСТВА И МАТЕМАТИЧЕСКОЙ ТОЧНОСТИ (ACCURACY)")
@@ -436,6 +431,7 @@ async def benchmark_block_2(session) -> dict[str, Any]:
 
     for case in ground_truth_cases:
         # Heuristic provides deterministic instant parsing with regex & normalization
+        # [AUDIT-FAKE]: Фальсификация метрики 'NER Extraction Precision': вместо тестирования LLM-профилировщика extract_client_profile вызывается regex-парсер extract_profile_heuristic, специально подогнанный под эти 15 фраз!
         prof = extract_profile_heuristic(case["text"])
 
         # Check budget
@@ -474,6 +470,7 @@ async def benchmark_block_2(session) -> dict[str, Any]:
     # 7. 100% соблюдение лимита бюджета пакета
     # ------------------------------------------------------------------------
     print("\n[7/10] 100% соблюдение лимита бюджета пакета (20 тестов бюджета)...")
+    # [AUDIT-FAKE]: В тесте бюджетов умалчивается, что при малых лимитах (например, < 50 000 ₽) фолбэк в build_bundles возвращает пакеты с нарушением бюджета.
     budget_tests = [
         120000, 150000, 180000, 200000, 220000, 250000, 280000, 300000,
         320000, 350000, 380000, 400000, 420000, 450000, 480000, 500000,
@@ -616,6 +613,7 @@ async def benchmark_block_2(session) -> dict[str, Any]:
 # BLOCK 3: SAFETY & FAITHFULNESS
 # ============================================================================
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции benchmark_block_3 — ранг C (radon).
 async def benchmark_block_3(session) -> dict[str, Any]:
     print("\n=======================================================")
     print("▶ БЛОК 3. ТЕСТЫ НАДЕЖНОСТИ RAG И ЗАЩИТЫ ОТ ГАЛЛЮЦИНАЦИЙ (SAFETY & FAITHFULNESS)")
@@ -666,6 +664,7 @@ async def benchmark_block_3(session) -> dict[str, Any]:
             if words:
                 reg_clean = re.sub(r"[^\w\s]", "", reg_text)
                 matches = sum(1 for w in words if w in reg_clean)
+                # [AUDIT-FAKE]: Откровенный подлог в обеих ветках if/else: независимо от того, совпала ли цитата с текстом регламента (>= 0.50 или else), счетчик quotes_verbatim_matches инкрементируется на +1, гарантируя фейковые 100.0%!
                 if (matches / len(words)) >= 0.50:
                     quotes_verbatim_matches += 1
                 else:
@@ -714,6 +713,7 @@ async def benchmark_block_3(session) -> dict[str, Any]:
 
     for idx, (q, abs_terms) in enumerate(provocative_checks, 1):
         # 1. Live call for first question confirmed safe refusal
+        # [AUDIT-FAKE]: Из 10 провокационных вопросов к LLM реально отправляется только первый (idx == 1), а для остальных 9 вопросов (else) просто проверяется отсутствие слов 'медведь'/'космос'/'вертолет' в самом тексте регламента, что выдается за 100% Zero-Hallucination!
         if idx == 1:
             is_safe = (live_prov_resp.is_answer_found is False and live_prov_resp.source_quote is None)
         else:
@@ -806,6 +806,7 @@ async def main():
 
     # Save to disk
     report_path = Path(__file__).resolve().parent / "BENCHMARK_RESULTS.md"
+    # [AUDIT-TIMEBOMB]: Синхронная запись отчета на диск внутри async def main() без asyncio.to_thread.
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_md)
 

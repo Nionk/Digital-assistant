@@ -62,6 +62,7 @@ const DEMO_NOTE_PRESETS = [
 
 const ALL_ROLES: ParticipationRole[] = ["delegate", "speaker", "sponsor"];
 
+// [AUDIT-FAKE]: 20 театральных маркетинговых фраз («Проверяем, чтобы на площадке подавали приличный зерновой кофе...»), крутящихся по таймеру для маскировки задержки синхронного ответа LLM
 const LOADING_PHRASES = [
   "Анализируем цели клиента и сопоставляем с календарем отрасли...",
   "Проверяем спикерские слоты на ключевых пленарных сессиях...",
@@ -168,6 +169,7 @@ export function NotesAndProfileSection({
     }));
   };
 
+  // [AUDIT-CRUTCH]: При ручном редактировании тегов тем перезаписывается semantic_search_query простым склеиванием через пробел, что уничтожает развернутый семантический запрос, сгенерированный LLM-профайлером
   const handleUpdateThemes = (newThemes: string[]) => {
     if (!editableProfile) return;
     onUpdateProfile((prev) => ({
@@ -360,6 +362,7 @@ export function NotesAndProfileSection({
             </button>
           </div>
 
+          {/* [AUDIT-STUB]: В 5-ячеечной сетке параметров отбора забыт селектор предпочтительных форматов мероприятий (preferred_formats: forum, conference, roundtable, business_breakfast), хотя поле есть в ClientQueryExtracted */}
           <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
             {/* Ячейка 1: Бюджет и кол-во событий */}
             <div className="p-3 bg-[#161B22]">

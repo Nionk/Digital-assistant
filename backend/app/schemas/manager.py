@@ -1,7 +1,9 @@
 from datetime import date
 from typing import Literal
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class BurningDeadlineOut(BaseModel):
     """Информация о горящем дедлайне со скидкой Early Bird (< 72 часов)."""
@@ -41,6 +43,7 @@ class ClientQueryExtracted(BaseModel):
     include_online: bool = Field(default=True, description="Включать ли онлайн-мероприятия (вебинары, трансляции)")
     date_from: date | None = Field(None, description="Начало периода поиска (YYYY-MM-DD)")
     date_to: date | None = Field(None, description="Конец периода поиска (YYYY-MM-DD)")
+    # [AUDIT-CRUTCH]: Отсутствует ограничение gt=0 / ge=0 для бюджета, что позволяет передать нулевой или отрицательный лимит бюджета.
     total_budget_max: float = Field(..., description="Общий потолок бюджета на всю серию в рублях")
     target_events_count: int = Field(default=3, ge=1, le=10, description="Желаемое число событий в пакете")
     preferred_formats: list[Literal["roundtable", "business_breakfast", "forum", "conference", "session"]] = Field(
@@ -161,6 +164,7 @@ class SelectedEventTariffPairIn(BaseModel):
     tariff_id: int = Field(..., description="ID выбранного тарифа")
     ai_rationale: str | None = Field(None, description="Отредактированное менеджером обоснование")
 
+# [AUDIT-CRUTCH]: В схеме публикации отсутствуют ограничения Literal[1, 2] для selected_bundle_group и min_length=1 для final_items (можно опубликовать пустую витрину).
 class PublishSelectionIn(BaseModel):
     """Запрос на фиксацию и публикацию персональной витрины клиенту."""
     selected_bundle_group: int = Field(
@@ -185,6 +189,7 @@ class PublishSelectionOut(BaseModel):
     total_package_price: float = Field(..., description="Итоговая сумма утвержденного пакета")
     total_package_savings: float = Field(..., description="Суммарная экономия по раннему бронированию")
 
+# [AUDIT-STUB]: В схеме карточки каталога отсутствуют поля data_status (READY / NEEDS_ENRICHMENT) и missing_data_warnings, требуемые в get_data.md и задаче P-06.
 class CatalogEventItemOut(BaseModel):
     """Карточка мероприятия в базе отслеживаемых площадок менеджера."""
     model_config = ConfigDict(from_attributes=True)

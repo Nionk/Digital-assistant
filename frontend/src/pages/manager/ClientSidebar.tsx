@@ -14,6 +14,7 @@ interface ClientSidebarProps {
   onToggleSidebar?: () => void;
 }
 
+// [AUDIT-CRUTCH]: 100% МЕРТВЫЙ КОД — компонент ClientSidebar нигде не импортируется и не рендерится (в ManagerWorkspacePage вместо него сверстан инлайновый выпадающий поповер)
 export function ClientSidebar({
   clients,
   selectedClientId,

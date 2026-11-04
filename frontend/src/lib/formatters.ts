@@ -215,6 +215,7 @@ export interface DateSpanItem {
  * Детерминированная проверка отсутствия пересечений дат между очными мероприятиями
  * (Слайд 02, 03, 04 и Шаг 06 «Календарь без накладок»).
  */
+// [AUDIT-CRUTCH]: Проверка накладок дат во фронтенде игнорирует город проведения (city) и роль (role), помечая конфликтом любые два очных события в одну дату даже в одном городе, что противоречит алгоритму бэкенда (п. 9.3.1 artifact.md)
 export function checkDateConflicts(items: DateSpanItem[]): {
   hasConflict: boolean;
   conflictDescription: string | null;

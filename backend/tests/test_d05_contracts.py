@@ -2,6 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 from uuid import UUID
+
 from fastapi.testclient import TestClient
 
 # Добавляем backend в sys.path
@@ -20,6 +21,7 @@ class TestD05APIContracts(unittest.TestCase):
     def setUpClass(cls):
         cls._tc = TestClient(app)
         cls.client = cls._tc.__enter__()
+        # [AUDIT-FAKE]: Контрактный тест проходит без заголовка Authorization (JWT) и использует несуществующие в сидах ID (selection_id=10, event_id=101, tariff_id=501, item_id=1001, magic_token=550e8400...), рассчитывая на хардкодные фолбэки и моки внутри API.
         cls.valid_token = "550e8400-e29b-41d4-a716-446655440000"
 
     @classmethod
@@ -183,6 +185,7 @@ class TestD05APIContracts(unittest.TestCase):
         schema = app.openapi()
         paths = schema.get("paths", {})
 
+        # [AUDIT-CRUTCH]: В списке проверяемых роутов отсутствует GET /api/manager/events (поэтому рассинхрон корневого openapi.json на 8 путей и backend/openapi.json на 7 путей остается незамеченным).
         required_endpoints = [
             "/health",
             "/api/manager/clients",

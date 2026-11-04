@@ -15,6 +15,7 @@ const queryClient = new QueryClient({
   },
 });
 
+// [AUDIT-TIMEBOMB]: В корневом рендере отсутствует ErrorBoundary — любая ошибка рендеринга в дочерних компонентах уронит все SPA в белый экран
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

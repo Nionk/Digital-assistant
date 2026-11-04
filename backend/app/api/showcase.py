@@ -1,13 +1,22 @@
 import datetime
 import logging
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import FAQ_QUICK_CHIPS
 from app.core.database import get_async_session
-from app.models.models import ChatMessage, Client, Event, EventTariff, Selection, SelectionItem, User
+from app.models.models import (
+    ChatMessage,
+    Client,
+    Event,
+    EventTariff,
+    Selection,
+    SelectionItem,
+    User,
+)
 from app.schemas.showcase import (
     AskRegulationQuestionIn,
     AskRegulationQuestionOut,
@@ -19,14 +28,20 @@ from app.schemas.showcase import (
     ShowcaseViewOut,
 )
 from app.services.rag import ask_regulation_question
-from app.services.telegram import format_escalation_alert, format_reaction_alert, send_manager_alert
+from app.services.telegram import (
+    format_escalation_alert,
+    format_reaction_alert,
+    send_manager_alert,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public/s", tags=["Client Public Showcase (Magic Link)"])
 
+# [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к мокам во всех 4 публичных эндпоинтах витрины.
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
 
+# [AUDIT-FAKE]: Функция-обманка (89 строк), возвращающая захардкоженную витрину для "ГК Пионер" в обход базы данных.
 def _build_demo_fallback_showcase() -> ShowcaseViewOut:
     """Демонстрационный фолбэк витрины для изолированных контрактных тестов D-05."""
     return ShowcaseViewOut(
@@ -126,6 +141,7 @@ def _build_demo_fallback_showcase() -> ShowcaseViewOut:
         "Возвращает сопроводительное письмо, сводную плашку бюджета, карточки мероприятий и чипсы быстрых вопросов FAQ."
     ),
 )
+# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
 async def get_public_showcase(
     magic_token: UUID,
     db: AsyncSession = Depends(get_async_session),
@@ -169,6 +185,8 @@ async def get_public_showcase(
     total_savings = 0.0
     earliest_deadline: datetime.date | None = None
 
+    # [AUDIT-TIMEBOMB]: Проблема N+1 SQL-запросов — внутри цикла по элементам подборки выполняются отдельные db.get(Event) и db.get(EventTariff).
+    # [AUDIT-CRUTCH]: Условие if not event or not tariff: continue молча выбрасывает из витрины мероприятия, у которых recommended_tariff_id равен NULL.
     for item in items:
         event = await db.get(Event, item.event_id)
         tariff = await db.get(EventTariff, item.recommended_tariff_id) if item.recommended_tariff_id else None
@@ -246,6 +264,7 @@ async def get_public_showcase(
         "и отправляет уведомление персональному менеджеру в Telegram."
     ),
 )
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
 async def react_to_showcase_item(
     magic_token: UUID,
     item_id: int,
@@ -356,6 +375,7 @@ async def ask_event_regulation_question(
                 detail="Данное мероприятие не входит в указанную витрину",
             )
         q_lower = payload.question_text.lower()
+        # [AUDIT-FAKE]: Хардкод ключевых слов из бенчмарка ("вертолет", "трансфер", "проживание", "отель", "перелет") для имитации работы Zero-Hallucination RAG на демо-токене.
         if any(k in q_lower for k in ["вертолет", "трансфер", "проживание", "отель", "перелет"]):
             return AskRegulationQuestionOut(
                 event_id=event_id,
@@ -383,6 +403,7 @@ async def ask_event_regulation_question(
             escalated_to_telegram=False,
         )
 
+    # [AUDIT-BACKDOOR]: Отсутствует проверка Selection.status == "published", что позволяет задавать вопросы в RAG по еще не опубликованным черновым подборкам (status == "draft").
     stmt = select(Selection).where(Selection.magic_token == magic_token)
     res = await db.execute(stmt)
     selection = res.scalar_one_or_none()
@@ -429,6 +450,7 @@ async def ask_event_regulation_question(
         "и возвращает статус успешной отправки."
     ),
 )
+# [AUDIT-BACKDOOR]: Уязвимость IDOR и отсутствие проверки статуса публикации — не проверяется Selection.status == "published" и не проверяется, входит ли event_id в selection_items данной подборки.
 async def escalate_question_to_manager(
     magic_token: UUID,
     event_id: int,
@@ -472,6 +494,7 @@ async def escalate_question_to_manager(
         event_title=event.canonical_title,
         question_text=payload.question_text,
     )
+    # [AUDIT-FAKE]: Результат вызова send_manager_alert игнорируется, ошибка обновления БД глушится в except Exception, а клиенту всегда возвращается success=True.
     await send_manager_alert(alert_html, chat_id=manager_chat_id)
 
     try:

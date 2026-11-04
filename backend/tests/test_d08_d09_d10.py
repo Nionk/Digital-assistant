@@ -5,13 +5,14 @@ import sys
 import unittest
 from pathlib import Path
 from uuid import UUID, uuid4
+
 import httpx
 
 # Добавляем backend в sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.main import app
 from app.core.database import engine, get_async_session
+from app.main import app
 from app.models.models import (
     ChatMessage,
     Client,
@@ -31,6 +32,7 @@ from app.services.telegram import (
 )
 
 
+# [AUDIT-TIMEBOMB]: Синхронная проверка сокета (socket.create_connection с таймаутом до 3x0.5=1.5 сек) вызывается как в декораторах импорта, так и внутри async-функций тестовых скриптов.
 def is_postgres_online() -> bool:
     """Проверяет доступность TCP-порта PostgreSQL (5432) на localhost или db."""
     for host in ("localhost", "127.0.0.1", "db"):
@@ -66,6 +68,7 @@ class InMemoryResult:
         return list(self._items)
 
 
+# [AUDIT-FAKE]: Поддельная in-memory база данных, подменяющая реальные SQL-запросы, индексы pgvector/FTS и транзакции PostgreSQL примитивным поиском подстрок в str(stmt).lower().
 class InMemoryAsyncSession:
     """
     Легковесная in-memory сессия для тестирования всех ветвей бизнес-логики
@@ -249,6 +252,7 @@ class InMemoryAsyncSession:
                     return it
         return None
 
+    # [AUDIT-CRUTCH]: Экстремальная цикломатическая сложность метода execute — ранг F (radon), антипаттерн ручного парсинга скомпилированных SQL-выражений через if 'from ...' in sql_str.
     async def execute(self, stmt):
         sql_str = str(stmt).lower()
         params = stmt.compile().params

@@ -1,7 +1,10 @@
-import os
 import asyncio
+import os
+
 from openai import AsyncOpenAI
 
+
+# [AUDIT-CRUTCH]: Самописный парсер .env через split('=') вместо использования централизованного app.core.config.settings (pydantic-settings), ломающийся на кавычках и комментариях в конце строки.
 def load_env_simple(filepath=".env"):
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
@@ -24,6 +27,7 @@ async def test_embedding():
         print("[FAIL] EMBEDDING_API_KEY не задан в .env!")
         return False
         
+    # [AUDIT-CRUTCH]: Ручное создание нового экземпляра AsyncOpenAI внутри функции вместо использования синглтона из app.services.ai_client.
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     try:
         resp = await client.embeddings.create(
@@ -52,6 +56,7 @@ async def test_llm():
         print("-> Вставьте ваш API-ключ от Ru-OpenRouter в файл .env в строку LLM_API_KEY=...")
         return False
         
+    # [AUDIT-CRUTCH]: Ручное создание нового экземпляра AsyncOpenAI внутри функции вместо использования синглтона из app.services.ai_client.
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     try:
         resp = await client.chat.completions.create(
