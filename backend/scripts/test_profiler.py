@@ -75,7 +75,7 @@ async def main():
             
             print("\n[OK] Проверки пройдены успешно!\n")
             
-        except Exception as e:
+        except (AssertionError, OSError, RuntimeError, ValueError) as e:
             failed_tests += 1
             print(f"\n[FAIL] Ошибка: {e}\n")
 

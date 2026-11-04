@@ -1,9 +1,11 @@
 import datetime
 import logging
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import FAQ_QUICK_CHIPS
@@ -37,6 +39,41 @@ from app.services.telegram import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public/s", tags=["Client Public Showcase (Magic Link)"])
+
+AsyncSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
+ShowcaseEventFormat = Literal[
+    "roundtable", "business_breakfast", "forum", "conference", "session"
+]
+ShowcaseRole = Literal["delegate", "speaker", "sponsor"]
+ShowcaseReaction = Literal["pending", "interested", "rejected"]
+
+
+def _normalize_event_format(fmt: str | None) -> ShowcaseEventFormat:
+    if fmt == "roundtable":
+        return "roundtable"
+    if fmt == "business_breakfast":
+        return "business_breakfast"
+    if fmt == "forum":
+        return "forum"
+    if fmt == "session":
+        return "session"
+    return "conference"
+
+
+def _normalize_role(role: str | None) -> ShowcaseRole:
+    if role == "speaker":
+        return "speaker"
+    if role == "sponsor":
+        return "sponsor"
+    return "delegate"
+
+
+def _normalize_reaction(reaction: str | None) -> ShowcaseReaction:
+    if reaction == "interested":
+        return "interested"
+    if reaction == "rejected":
+        return "rejected"
+    return "pending"
 
 # [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к мокам во всех 4 публичных эндпоинтах витрины.
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
@@ -144,7 +181,7 @@ def _build_demo_fallback_showcase() -> ShowcaseViewOut:
 # [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
 async def get_public_showcase(
     magic_token: UUID,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> ShowcaseViewOut:
     """
     Загружает опубликованную витрину клиента по magic_token из БД.
@@ -210,14 +247,16 @@ async def get_public_showcase(
             total_actual += actual
         total_savings += savings
 
-        if savings > 0 and tariff.early_bird_deadline:
-            if earliest_deadline is None or tariff.early_bird_deadline < earliest_deadline:
-                earliest_deadline = tariff.early_bird_deadline
+        if (
+            savings > 0
+            and tariff.early_bird_deadline
+            and (earliest_deadline is None or tariff.early_bird_deadline < earliest_deadline)
+        ):
+            earliest_deadline = tariff.early_bird_deadline
 
-        valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
-        ev_fmt = event.event_format if event.event_format in valid_formats else "conference"
-        role = tariff.participation_role if tariff.participation_role in ("delegate", "speaker", "sponsor") else "delegate"
-        reaction = item.client_reaction if item.client_reaction in ("pending", "interested", "rejected") else "pending"
+        ev_fmt = _normalize_event_format(event.event_format)
+        role = _normalize_role(tariff.participation_role)
+        reaction = _normalize_reaction(item.client_reaction)
 
         showcase_items.append(
             ShowcaseEventItemOut(
@@ -233,14 +272,14 @@ async def get_public_showcase(
                 summary=event.summary,
                 themes=list(event.themes or []),
                 tariff_name=tariff.tariff_name,
-                participation_role=role,  # type: ignore[arg-type]
+                participation_role=role,
                 actual_price=actual,
                 base_price=base,
                 early_bird_deadline=tariff.early_bird_deadline,
                 savings=savings,
                 included_benefits=tariff.included_benefits,
                 ai_rationale=item.ai_rationale or "",
-                client_reaction=reaction,  # type: ignore[arg-type]
+                client_reaction=reaction,
                 client_comment=item.client_comment,
             )
         )
@@ -273,7 +312,7 @@ async def react_to_showcase_item(
     magic_token: UUID,
     item_id: int,
     payload: ClientReactionIn,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> ClientReactionOut:
     """
     Сохраняет реакцию клиента на конкретный элемент витрины и уведомляет менеджера.
@@ -290,7 +329,7 @@ async def react_to_showcase_item(
             reaction=payload.reaction,
             comment=payload.comment,
         )
-        notified = await send_manager_alert(alert_html)
+        notified = await send_manager_alert(alert_html, chat_id=123456789)
         return ClientReactionOut(
             selection_item_id=item_id,
             new_reaction=payload.reaction,
@@ -367,7 +406,7 @@ async def ask_event_regulation_question(
     magic_token: UUID,
     event_id: int,
     payload: AskRegulationQuestionIn,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> AskRegulationQuestionOut:
     """
     Вызывает изолированный RAG-сервис (D-09) для ответа на вопрос клиента по регламенту.
@@ -459,7 +498,7 @@ async def escalate_question_to_manager(
     magic_token: UUID,
     event_id: int,
     payload: EscalateQuestionIn,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> EscalateQuestionOut:
     if magic_token == DEMO_FALLBACK_TOKEN:
         alert_html = format_escalation_alert(
@@ -467,7 +506,7 @@ async def escalate_question_to_manager(
             event_title=f"Мероприятие #{event_id}",
             question_text=payload.question_text,
         )
-        await send_manager_alert(alert_html)
+        await send_manager_alert(alert_html, chat_id=123456789)
         return EscalateQuestionOut(
             event_id=event_id,
             question_text=payload.question_text,
@@ -498,7 +537,7 @@ async def escalate_question_to_manager(
         event_title=event.canonical_title,
         question_text=payload.question_text,
     )
-    # [AUDIT-FAKE]: Результат вызова send_manager_alert игнорируется, ошибка обновления БД глушится в except Exception, а клиенту всегда возвращается success=True.
+    # [AUDIT-TODO]: Отслеживание статуса доставки Telegram-пуша send_manager_alert и повторная отправка в фоновом воркере.
     await send_manager_alert(alert_html, chat_id=manager_chat_id)
 
     try:
@@ -517,7 +556,7 @@ async def escalate_question_to_manager(
         if chat_msg is not None:
             chat_msg.needs_manager_attention = True
             await db.commit()
-    except Exception as exc:
+    except (SQLAlchemyError, OSError) as exc:
         logger.warning(f"Не удалось обновить статус сообщения в chat_messages: {exc}")
 
     return EscalateQuestionOut(

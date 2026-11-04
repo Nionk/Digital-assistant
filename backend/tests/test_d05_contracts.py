@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 # Добавляем backend в sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from unittest.mock import patch
+
+from app.core.config import settings
 from app.main import app
 
 
@@ -23,9 +26,15 @@ class TestD05APIContracts(unittest.TestCase):
         cls.client = cls._tc.__enter__()
         # [AUDIT-FAKE]: Контрактный тест проходит без заголовка Authorization (JWT) и использует несуществующие в сидах ID (selection_id=10, event_id=101, tariff_id=501, item_id=1001, magic_token=550e8400...), рассчитывая на хардкодные фолбэки и моки внутри API.
         cls.valid_token = "550e8400-e29b-41d4-a716-446655440000"
+        cls._emb_patcher = patch(
+            "app.services.matcher.get_embedding",
+            return_value=[1.0] + [0.0] * (settings.EMBEDDING_DIM - 1),
+        )
+        cls._emb_patcher.start()
 
     @classmethod
     def tearDownClass(cls):
+        cls._emb_patcher.stop()
         cls._tc.__exit__(None, None, None)
 
     def test_01_system_health(self):

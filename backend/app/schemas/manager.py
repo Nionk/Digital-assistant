@@ -73,8 +73,10 @@ class MatchRequestIn(BaseModel):
         min_length=10,
         description="Сырой текст заметки менеджера после звонка с клиентом",
         examples=[
-            "Созвонились с ГК Пионер. Ищут на ноябрь-декабрь в Москве или СПб 3 мероприятия по КРТ и урбанистике. "
-            "Хотя бы на одном хотят выступить спикером. Общий бюджет на всё — 400 000 руб."
+            (
+                "Созвонились с ГК Пионер. Ищут на ноябрь-декабрь в Москве или СПб 3 мероприятия по КРТ и урбанистике. "
+                "Хотя бы на одном хотят выступить спикером. Общий бюджет на всё — 400 000 руб."
+            )
         ]
     )
     override_profile: ClientQueryExtracted | None = Field(
@@ -125,7 +127,6 @@ class BundleEventItemOut(BaseModel):
     data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
     missing_data_warnings: list[str] = Field(
         default_factory=list, description="Список предупреждений о недостающих данных"
-    
     )
 
 class BundleVariantOut(BaseModel):
@@ -168,7 +169,6 @@ class SelectedEventTariffPairIn(BaseModel):
     tariff_id: int = Field(..., description="ID выбранного тарифа")
     ai_rationale: str | None = Field(None, description="Отредактированное менеджером обоснование")
 
-# [AUDIT-CRUTCH]: В схеме публикации отсутствуют ограничения Literal[1, 2] для selected_bundle_group и min_length=1 для final_items (можно опубликовать пустую витрину).
 class PublishSelectionIn(BaseModel):
     """Запрос на фиксацию и публикацию персональной витрины клиенту."""
     selected_bundle_group: Literal[1, 2] = Field(
@@ -193,7 +193,6 @@ class PublishSelectionOut(BaseModel):
     total_package_price: float = Field(..., description="Итоговая сумма утвержденного пакета")
     total_package_savings: float = Field(..., description="Суммарная экономия по раннему бронированию")
 
-# [AUDIT-STUB]: В схеме карточки каталога отсутствуют поля data_status (READY / NEEDS_ENRICHMENT) и missing_data_warnings, требуемые в get_data.md и задаче P-06.
 class CatalogEventItemOut(BaseModel):
     """Карточка мероприятия в базе отслеживаемых площадок менеджера."""
     model_config = ConfigDict(from_attributes=True)
@@ -221,7 +220,6 @@ class CatalogEventItemOut(BaseModel):
     data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
     missing_data_warnings: list[str] = Field(
         default_factory=list, description="Список предупреждений о недостающих данных"
-    
     )
 
 class ManagerEventsCatalogOut(BaseModel):

@@ -18,10 +18,10 @@ class Settings(BaseSettings):
 
     # Database (PostgreSQL 16 + pgvector)
     # Хост по умолчанию задается через .env (localhost:5432 для локальной разработки, db:5432 внутри Docker)
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
 
     # Security & JWT
-    SECRET_KEY: str
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # При False (Production): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
     # [TODO-PHASE-P01]: Переключить в False по умолчанию после добавления экрана входа во фронтенде (Шаг 6).
     ALLOW_DEMO_AUTH_BYPASS: bool = True
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """Валидация наличия строки подключения к БД."""
+        if not v or not v.strip():
+            raise ValueError("DATABASE_URL must be configured in environment or .env.")
+        return v
 
     @field_validator("SECRET_KEY", mode="after")
     @classmethod
@@ -102,4 +110,4 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()

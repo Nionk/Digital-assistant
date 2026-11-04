@@ -190,7 +190,7 @@ async def run_tests() -> None:
         print("------------------------------------------------------------")
         candidates = await get_scored_candidates(db, profile_1, today)
         t0 = time.perf_counter()
-        bundles, bonus = build_bundles(candidates, profile_1)
+        _bundles, _bonus = build_bundles(candidates, profile_1)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         print(f"⚡ Pure build_bundles() execution time: {elapsed_ms:.3f} ms (SLA limit: 15.000 ms)")
         assert elapsed_ms < 15.0, f"SLA breached! build_bundles took {elapsed_ms:.3f} ms (> 15 ms)"

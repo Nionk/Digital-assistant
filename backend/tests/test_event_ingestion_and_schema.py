@@ -105,7 +105,9 @@ class TestEventIngestionAndSchema(unittest.TestCase):
             "themes": ["BIM"],
             "full_regulation_markdown": "Полный текст регламента",
         }
-        with self.assertRaises(Exception):
+        from pydantic import ValidationError
+
+        with self.assertRaises(ValidationError):
             EventIngestionSchema.model_validate(data)
 
     def test_04_enforce_online_constraint(self):
@@ -286,6 +288,42 @@ class TestEventIngestionAndSchema(unittest.TestCase):
 
         self.assertIn('encoding_format="float"', get_emb_src)
         self.assertIn('encoding_format="float"', get_batch_src)
+
+    def test_10_pdf_extraction_via_pymupdf(self):
+        """Проверка реального парсинга PDF через PyMuPDF (fitz) в extract_relevant_pdf_text_sync."""
+        import fitz
+        from app.services.scraper import extract_relevant_pdf_text_sync
+
+        doc = fitz.open()
+        p1 = doc.new_page()
+        p1.insert_text(
+            (50, 72),
+            "Official Forum Regulation 2026. Architecture, construction and urban development conference in Moscow.",
+        )
+        p2 = doc.new_page()
+        p2.insert_text(
+            (50, 72),
+            "Program schedule and speaker accreditation requirements for plenary session.",
+        )
+        p3 = doc.new_page()
+        p3.insert_text(
+            (50, 72),
+            "Unrelated background history text with more than fifty characters to avoid OCR trigger on page three.",
+        )
+        p4 = doc.new_page()
+        p4.insert_text(
+            (50, 72),
+            "Early Bird discount tariff and sponsor package pricing conditions up to November 15.",
+        )
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        extracted_text, ocr_images = extract_relevant_pdf_text_sync(pdf_bytes)
+        self.assertIn("СТРАНИЦА PDF 1", extracted_text)
+        self.assertIn("СТРАНИЦА PDF 2", extracted_text)
+        self.assertNotIn("СТРАНИЦА PDF 3", extracted_text)
+        self.assertIn("СТРАНИЦА PDF 4", extracted_text)
+        self.assertEqual(ocr_images, [])
 
 
 if __name__ == "__main__":

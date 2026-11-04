@@ -1,14 +1,20 @@
 import asyncio
 import datetime
+import io
 import json
 import logging
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
 import httpx
 from openai import APIError
 from rapidfuzz import fuzz
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -136,13 +142,42 @@ class StubCatalogSourceScraper:
 
 def extract_relevant_pdf_text_sync(pdf_bytes: bytes) -> tuple[str, list[bytes]]:
     """
-    Синхронное извлечение текстового слоя из PDF-брошюры (вызывается строго внутри asyncio.to_thread).
-    # [DEV-STUB: Интеграция PyMuPDF (fitz) и рендеринг PNG-страниц для Vision LLM OCR]
+    Синхронное извлечение текстового слоя из PDF-брошюры через PyMuPDF (fitz).
+    Всегда включает первые 2 страницы (обложка + оглавление) и страницы,
+    содержащие ключевые слова из IMPORTANT_PDF_KEYWORDS (get_data.md раздел 4, Шаг 3).
+    Вызывается строго внутри asyncio.to_thread.
     """
     if not pdf_bytes:
         raise ValueError("Передан пустой байтовый поток PDF-документа.")
-    decoded_preview = pdf_bytes.decode("utf-8", errors="ignore").strip()
-    return decoded_preview, []
+
+    if fitz is None or not pdf_bytes.lstrip().startswith(b"%PDF"):
+        if fitz is None:
+            logger.warning("PyMuPDF (fitz) не установлен в окружении. Используется текстовый фоллбэк.")
+        decoded_preview = pdf_bytes.decode("utf-8", errors="ignore").strip()
+        return decoded_preview, []
+
+    relevant_text_blocks: list[str] = []
+    ocr_images_bytes: list[bytes] = []
+
+    with fitz.open(stream=io.BytesIO(pdf_bytes), filetype="pdf") as doc:
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            raw_text = str(page.get_text("text") or "").strip()
+            text_lower = raw_text.lower()
+
+            if len(raw_text) < 50:
+                if len(ocr_images_bytes) < 3:
+                    pix = page.get_pixmap(dpi=150)
+                    ocr_images_bytes.append(pix.tobytes("png"))
+                continue
+
+            is_relevant = page_num in (0, 1) or any(
+                kw in text_lower for kw in IMPORTANT_PDF_KEYWORDS
+            )
+            if is_relevant:
+                relevant_text_blocks.append(f"--- СТРАНИЦА PDF {page_num + 1} ---\n{raw_text}")
+
+    return "\n\n".join(relevant_text_blocks), ocr_images_bytes
 
 
 async def extract_pdf_text_async(pdf_bytes: bytes) -> tuple[str, list[bytes]]:
@@ -175,11 +210,12 @@ def evaluate_event_quality_gate(
 async def find_duplicate_event(
     session: AsyncSession,
     schema: EventIngestionSchema,
-    similarity_threshold: float = 82.0,
+    similarity_threshold: float = 85.0,
 ) -> Event | None:
     """
-    Дедупликация событий через RapidFuzz (get_data.md раздел 4, Шаг 6):
-    Сравнивает нормализованные названия среди событий того же города (или онлайн) в окне start_date +- 1 день.
+    Дедупликация событий через RapidFuzz (artifact.md п. 9.2.4, get_data.md раздел 4, Шаг 6):
+    Сравнивает нормализованные названия через token_set_ratio среди событий того же города
+    (или онлайн) в окне start_date +- 1 день.
     """
     date_min = schema.start_date - datetime.timedelta(days=1)
     date_max = schema.start_date + datetime.timedelta(days=1)
@@ -200,7 +236,7 @@ async def find_duplicate_event(
     norm_new = schema.canonical_title.strip().lower()
     for existing in candidates:
         norm_existing = (existing.normalized_title or existing.canonical_title).strip().lower()
-        score = float(fuzz.token_sort_ratio(norm_new, norm_existing))
+        score = float(fuzz.token_set_ratio(norm_new, norm_existing))
         if score >= similarity_threshold:
             return existing
     return None
@@ -257,8 +293,12 @@ def _populate_event_tariffs_and_faq(
             )
         )
 
+    seen_cache_keys: set[str] = set()
     for faq in schema.faq_cache:
         cache_key = build_rag_cache_key(event_obj.id, 0, faq.question)
+        if cache_key in seen_cache_keys:
+            continue
+        seen_cache_keys.add(cache_key)
         session.add(
             LLMCache(
                 cache_key=cache_key,
@@ -282,6 +322,8 @@ def _apply_schema_to_event(
     warnings: list[str],
     embedding_vec: list[float],
     source_url: str | None,
+    *,
+    is_update: bool = False,
 ) -> None:
     """Копирует атрибуты EventIngestionSchema и статус Quality Gate в ORM-объект Event."""
     target.canonical_title = schema.canonical_title
@@ -293,8 +335,18 @@ def _apply_schema_to_event(
     target.start_date = schema.start_date
     target.end_date = schema.end_date
     target.summary = schema.summary
-    target.full_regulation_markdown = schema.full_regulation_markdown
-    target.themes = list(schema.themes)
+
+    new_md = schema.full_regulation_markdown.strip()
+    existing_md = (target.full_regulation_markdown or "").strip()
+    if is_update and existing_md and new_md not in existing_md:
+        src_label = source_url or "дополнительный источник"
+        target.full_regulation_markdown = (
+            f"{existing_md}\n\n--- Дополнение из источника ({src_label}) ---\n\n{new_md}"
+        )
+    else:
+        target.full_regulation_markdown = schema.full_regulation_markdown
+
+    target.themes = list(dict.fromkeys([*(target.themes or []), *schema.themes]))
     target.data_status = data_status
     target.missing_data_warnings = warnings
     target.is_active = data_status == "ready"
@@ -323,11 +375,16 @@ async def ingest_event_from_text(
     existing = await find_duplicate_event(session, schema)
     if existing is not None:
         await invalidate_rag_cache(session, existing.id)
+        await session.execute(delete(EventTariff).where(EventTariff.event_id == existing.id))
         event_obj = existing
-        _apply_schema_to_event(event_obj, schema, data_status, warnings, embedding_vec, source_url)
+        _apply_schema_to_event(
+            event_obj, schema, data_status, warnings, embedding_vec, source_url, is_update=True
+        )
     else:
         event_obj = Event(source_urls=[source_url] if source_url else [])
-        _apply_schema_to_event(event_obj, schema, data_status, warnings, embedding_vec, source_url)
+        _apply_schema_to_event(
+            event_obj, schema, data_status, warnings, embedding_vec, source_url, is_update=False
+        )
         session.add(event_obj)
         await session.flush()
 

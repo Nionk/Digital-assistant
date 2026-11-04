@@ -71,7 +71,7 @@ export function CalendarTimeline({
             : "grid-cols-1 md:grid-cols-3 lg:grid-cols-4"
         )}
       >
-        // [AUDIT-CRUTCH]: Использование key={ev.event_id} без дедупликации приведет к коллизии ключей React при попадании одного события в основной и бонусный слоты
+        {/* [AUDIT-CRUTCH]: Использование key={ev.event_id} без дедупликации приведет к коллизии ключей React при попадании одного события в основной и бонусный слоты */}
         {sorted.map((ev, index) => {
           const cal = formatCalendarBadge(ev.start_date, ev.end_date);
           const loc = ev.is_online ? "Онлайн" : ev.city || "Россия";

@@ -154,7 +154,7 @@ async def main() -> None:
         )
         assert resp_ask.status_code == 200, f"Ошибка вопроса: {resp_ask.text}"
         ask_data = resp_ask.json()
-        print(f"[OK] Ответ RAG получен!")
+        print("[OK] Ответ RAG получен!")
         print(f"     is_answer_found: {ask_data['is_answer_found']}")
         print(f"     escalated_to_telegram: {ask_data['escalated_to_telegram']}")
         print(f"     Текст ответа: {ask_data['answer_text'][:90]}...")

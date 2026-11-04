@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Literal, Optional
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,25 +8,38 @@ from app.core.constants import normalize_city
 
 class TariffExtracted(BaseModel):
     """Тариф участия в мероприятии, извлеченный из HTML или PDF."""
-    tariff_name: str = Field(..., description="Название пакета участия (например, 'Вездеход Бизнес', 'Пакет Спикер').")
-    participation_role: Literal["delegate", "speaker", "sponsor"] = Field(..., description="Роль участника.")
-    base_price: Optional[float] = Field(
-        None, description="Базовая цена в рублях с учетом НДС. Если цена 'По запросу' — строго null. Если участие бесплатное — 0.0."
+
+    tariff_name: str = Field(
+        ...,
+        description="Название пакета участия (например, 'Вездеход Бизнес', 'Пакет Спикер').",
     )
-    early_bird_price: Optional[float] = Field(
-        None, description="Льготная цена раннего бронирования с НДС. Если скидки нет — null."
+    participation_role: Literal["delegate", "speaker", "sponsor"] = Field(
+        ..., description="Роль участника."
     )
-    early_bird_deadline: Optional[date] = Field(
-        None, description="Дата окончания скидки Early Bird (YYYY-MM-DD). Если скидки нет — null."
+    base_price: float | None = Field(
+        None,
+        description="Базовая цена в рублях с учетом НДС. Если цена 'По запросу' — строго null. Если участие бесплатное — 0.0.",
+    )
+    early_bird_price: float | None = Field(
+        None,
+        description="Льготная цена раннего бронирования с НДС. Если скидки нет — null.",
+    )
+    early_bird_deadline: date | None = Field(
+        None,
+        description="Дата окончания скидки Early Bird (YYYY-MM-DD). Если скидки нет — null.",
     )
     is_vat_included: bool = Field(
-        default=True, description="True, если цена включает НДС (если в источнике указано '+ НДС 20%', прибавь 20% к числу и поставь True)."
+        default=True,
+        description="True, если цена включает НДС (если в источнике указано '+ НДС 20%', прибавь 20% к числу и поставь True).",
     )
-    included_benefits: str = Field(..., description="Подробный перечень опций, входящих в тариф, одной строкой.")
+    included_benefits: str = Field(
+        ..., description="Подробный перечень опций, входящих в тариф, одной строкой."
+    )
 
 
 class FAQCacheItem(BaseModel):
     """Готовый ответ на типовой вопрос для предзаполнения llm_cache согласно разделу 5.3 get_data.md."""
+
     question: Literal[
         "Что входит в рекомендованный тариф?",
         "Какие условия раннего бронирования и дедлайны?",
@@ -35,8 +48,13 @@ class FAQCacheItem(BaseModel):
         "Условия Early Bird",
         "Требования к спикеру",
     ] = Field(..., description="Канонический вопрос по регламенту мероприятия.")
-    answer: str = Field(..., description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.")
-    source_quote: str = Field(..., description="Дословная цитата из регламента, подтверждающая ответ.")
+    answer: str = Field(
+        ...,
+        description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.",
+    )
+    source_quote: str = Field(
+        ..., description="Дословная цитата из регламента, подтверждающая ответ."
+    )
 
 
 class EventIngestionSchema(BaseModel):
@@ -44,41 +62,66 @@ class EventIngestionSchema(BaseModel):
     Целевая Pydantic v2 схема для финального извлечения мероприятия через Instructor LLM.
     Строго типизирована (date вместо str для интеграции с asyncpg/SQLAlchemy Date).
     """
-    canonical_title: str = Field(..., max_length=500, description="Официальное полное название мероприятия.")
-    event_format: Literal["forum", "conference", "roundtable", "business_breakfast", "session"]
-    city: Optional[str] = Field(
-        None, description="Город проведения в именительном падеже ('Москва', 'Казань'). Если мероприятие онлайн — строго null!"
+
+    canonical_title: str = Field(
+        ..., max_length=500, description="Официальное полное название мероприятия."
+    )
+    event_format: Literal[
+        "forum", "conference", "roundtable", "business_breakfast", "session"
+    ]
+    city: str | None = Field(
+        None,
+        description="Город проведения в именительном падеже ('Москва', 'Казань'). Если мероприятие онлайн — строго null!",
     )
     is_online: bool = Field(
-        ..., description="True для вебинаров и онлайн-конференций. Если city == null, is_online ОБЯЗАН быть True."
+        ...,
+        description="True для вебинаров и онлайн-конференций. Если city == null, is_online ОБЯЗАН быть True.",
     )
-    venue: Optional[str] = Field(None, description="Название площадки, отеля или экспоцентра (или 'Онлайн-платформа').")
+    venue: str | None = Field(
+        None,
+        description="Название площадки, отеля или экспоцентра (или 'Онлайн-платформа').",
+    )
     start_date: date = Field(..., description="Дата начала проведения (строго YYYY-MM-DD).")
-    end_date: date = Field(..., description="Дата окончания проведения (строго YYYY-MM-DD, совпадает со start_date для однодневных).")
+    end_date: date = Field(
+        ...,
+        description="Дата окончания проведения (строго YYYY-MM-DD, совпадает со start_date для однодневных).",
+    )
     summary: str = Field(
-        ..., min_length=250, max_length=850,
-        description="Содержательное резюме мероприятия (250–850 символов): главные темы, формат и целевая аудитория."
+        ...,
+        min_length=250,
+        max_length=850,
+        description="Содержательное резюме мероприятия (250–850 символов): главные темы, формат и целевая аудитория.",
     )
-    themes: List[str] = Field(..., description="Массив ключевых тегов (например, ['строительство', 'девелопмент', 'КРТ', 'BIM']).")
+    themes: list[str] = Field(
+        ...,
+        description="Массив ключевых тегов (например, ['строительство', 'девелопмент', 'КРТ', 'BIM']).",
+    )
     full_regulation_markdown: str = Field(
-        ..., description="Структурированный Markdown-регламент со всеми найденными деталями по разделам: 1. Цели, 2. Программа, 3. Аккредитация, 4. Спикерам, 5. Финансовые условия, 6. Логистика."
+        ...,
+        description="Структурированный Markdown-регламент со всеми найденными деталями по разделам: 1. Цели, 2. Программа, 3. Аккредитация, 4. Спикерам, 5. Финансовые условия, 6. Логистика.",
     )
-    tariffs: List[TariffExtracted] = Field(default_factory=list, description="Список найденных тарифов мероприятия.")
-    faq_cache: List[FAQCacheItem] = Field(default_factory=list, description="Готовые ответы на 3 быстрых вопроса витрины.")
-    missing_data_warnings: List[str] = Field(
+    tariffs: list[TariffExtracted] = Field(
+        default_factory=list, description="Список найденных тарифов мероприятия."
+    )
+    faq_cache: list[FAQCacheItem] = Field(
+        default_factory=list, description="Готовые ответы на 3 быстрых вопроса витрины."
+    )
+    missing_data_warnings: list[str] = Field(
         default_factory=list,
-        description="Список важных сведений, которых НЕ оказалось в исходном тексте (для поля missing_data_warnings в БД)."
+        description="Список важных сведений, которых НЕ оказалось в исходном тексте (для поля missing_data_warnings в БД).",
     )
 
     @model_validator(mode="after")
-    def validate_event_ingestion(self):
+    def validate_event_ingestion(self) -> Self:
         """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true), нормализацию города и end_date >= start_date."""
-        if not self.city or (isinstance(self.city, str) and self.city.strip().lower() in ("онлайн", "online", "нет", "null")):
+        if not self.city or (
+            isinstance(self.city, str)
+            and self.city.strip().lower() in ("онлайн", "online", "нет", "null")
+        ):
             self.city = None
             self.is_online = True
         elif self.city:
             self.city = normalize_city(self.city)
 
-        if self.end_date < self.start_date:
-            self.end_date = self.start_date
+        self.end_date = max(self.end_date, self.start_date)
         return self
