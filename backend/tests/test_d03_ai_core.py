@@ -9,7 +9,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
-from app.core.constants import normalize_city
+from app.core.constants import is_online_format, normalize_city
 from app.services.ai_client import (
     get_embedding,
     get_embeddings_batch,
@@ -49,8 +49,9 @@ class TestCityNormalizationUnit(unittest.TestCase):
             ("   новосибирск   ", "Новосибирск"),
             ("н. новгород", "Нижний Новгород"),
             # 5. Онлайн-мероприятия
-            ("онлайн", "Онлайн"),
-            ("вебинар", "Онлайн"),
+            ("онлайн", None),
+            ("вебинар", None),
+            ("вятка", "Киров"),
             # 6. Неизвестные города (корректное удаление префикса и title case)
             ("г. Сколково", "Сколково"),
             ("гор. суздаль", "Суздаль"),
@@ -67,6 +68,17 @@ class TestCityNormalizationUnit(unittest.TestCase):
                     expected,
                     f"Failed for '{raw_input}': expected '{expected}', got '{actual}'",
                 )
+
+    def test_online_format_detection(self):
+        """Проверка детекции онлайн-формата согласно разделу 8.2 artifact.md."""
+        self.assertTrue(is_online_format("онлайн"))
+        self.assertTrue(is_online_format("online"))
+        self.assertTrue(is_online_format("вебинар"))
+        self.assertTrue(is_online_format("дистанционно"))
+        self.assertTrue(is_online_format("зум"))
+        self.assertFalse(is_online_format("Москва"))
+        self.assertFalse(is_online_format("Санкт-Петербург"))
+        self.assertFalse(is_online_format(None))
 
     def test_l2_normalization_math(self):
         """Проверка математической корректности L2-нормализации."""

@@ -598,6 +598,32 @@
             "type": "string",
             "title": "Ai Rationale",
             "description": "Обоснование ИИ, какую конкретно бизнес-задачу клиента решает данное мероприятие"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url",
+            "description": "Официальный сайт мероприятия или страница регистрации"
+          },
+          "data_status": {
+            "type": "string",
+            "title": "Data Status",
+            "description": "Статус карточки: ready или needs_enrichment",
+            "default": "ready"
+          },
+          "missing_data_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Data Warnings",
+            "description": "Список предупреждений о недостающих данных"
           }
         },
         "type": "object",
@@ -800,6 +826,32 @@
             "type": "array",
             "title": "Tariffs",
             "description": "Доступные тарифы организатора и условия раннего бронирования"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url",
+            "description": "Официальный сайт мероприятия или страница регистрации"
+          },
+          "data_status": {
+            "type": "string",
+            "title": "Data Status",
+            "description": "Статус карточки: ready или needs_enrichment",
+            "default": "ready"
+          },
+          "missing_data_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Data Warnings",
+            "description": "Список предупреждений о недостающих данных"
           }
         },
         "type": "object",
@@ -858,6 +910,7 @@
           },
           "total_budget_max": {
             "type": "number",
+            "exclusiveMinimum": 0.0,
             "title": "Total Budget Max",
             "description": "Общий потолок бюджета на всю серию в рублях"
           },
@@ -1267,6 +1320,10 @@
         "properties": {
           "selected_bundle_group": {
             "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
             "title": "Selected Bundle Group",
             "description": "Номер выбранного пакета, который утверждается (1 или 2)",
             "default": 1
@@ -1276,6 +1333,7 @@
               "$ref": "#/components/schemas/SelectedEventTariffPairIn"
             },
             "type": "array",
+            "minItems": 1,
             "title": "Final Items",
             "description": "Итоговый список пар (event_id, tariff_id), входящих в витрину клиента"
           },
@@ -1394,6 +1452,13 @@
           },
           "event_format": {
             "type": "string",
+            "enum": [
+              "roundtable",
+              "business_breakfast",
+              "forum",
+              "conference",
+              "session"
+            ],
             "title": "Event Format",
             "description": "Формат: roundtable, business_breakfast, forum, conference, session"
           },

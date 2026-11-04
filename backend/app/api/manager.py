@@ -357,6 +357,11 @@ async def match_events_for_client(
         )
     except HTTPException:
         raise
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
     except OSError as exc:
         if isinstance(exc, TimeoutError):
@@ -557,6 +562,8 @@ async def get_manager_events_catalog(
                     themes=list(ev.themes or []),
                     tariffs=tariffs_by_event.get(ev.id, []),
                     website_url=primary_url,
+                    data_status=ev.data_status or "ready",
+                    missing_data_warnings=list(ev.missing_data_warnings or []),
                 )
             )
     # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).

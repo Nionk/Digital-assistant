@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,15 +43,14 @@ class ClientQueryExtracted(BaseModel):
     include_online: bool = Field(default=True, description="Включать ли онлайн-мероприятия (вебинары, трансляции)")
     date_from: date | None = Field(None, description="Начало периода поиска (YYYY-MM-DD)")
     date_to: date | None = Field(None, description="Конец периода поиска (YYYY-MM-DD)")
-    # [AUDIT-CRUTCH]: Отсутствует ограничение gt=0 / ge=0 для бюджета, что позволяет передать нулевой или отрицательный лимит бюджета.
-    total_budget_max: float = Field(..., description="Общий потолок бюджета на всю серию в рублях")
+    total_budget_max: float = Field(..., gt=0, description="Общий потолок бюджета на всю серию в рублях")
     target_events_count: int = Field(default=3, ge=1, le=10, description="Желаемое число событий в пакете")
     preferred_formats: list[Literal["roundtable", "business_breakfast", "forum", "conference", "session"]] = Field(
         default_factory=list,
         description="Предпочтительные форматы деловых событий"
     )
     required_roles: list[Literal["delegate", "speaker", "sponsor"]] = Field(
-        default_factory=lambda: ["delegate"],
+        default_factory=lambda: [cast(Literal["delegate", "speaker", "sponsor"], "delegate")],
         description="Требуемые форматы участия"
     )
     min_speaker_events: int = Field(
@@ -123,6 +122,11 @@ class BundleEventItemOut(BaseModel):
         default=None,
         description="Официальный сайт мероприятия или страница регистрации"
     )
+    data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
+    missing_data_warnings: list[str] = Field(
+        default_factory=list, description="Список предупреждений о недостающих данных"
+    
+    )
 
 class BundleVariantOut(BaseModel):
     """Один из сгенерированных вариантов пакета мероприятий."""
@@ -167,13 +171,13 @@ class SelectedEventTariffPairIn(BaseModel):
 # [AUDIT-CRUTCH]: В схеме публикации отсутствуют ограничения Literal[1, 2] для selected_bundle_group и min_length=1 для final_items (можно опубликовать пустую витрину).
 class PublishSelectionIn(BaseModel):
     """Запрос на фиксацию и публикацию персональной витрины клиенту."""
-    selected_bundle_group: int = Field(
+    selected_bundle_group: Literal[1, 2] = Field(
         default=1,
         description="Номер выбранного пакета, который утверждается (1 или 2)"
     )
     final_items: list[SelectedEventTariffPairIn] = Field(
         ...,
-        description="Итоговый список пар (event_id, tariff_id), входящих в витрину клиента"
+        min_length=1, description="Итоговый список пар (event_id, tariff_id), входящих в витрину клиента"
     )
     final_pitch_text: str = Field(
         ...,
@@ -213,6 +217,11 @@ class CatalogEventItemOut(BaseModel):
     website_url: str | None = Field(
         default=None,
         description="Официальный сайт мероприятия или страница регистрации"
+    )
+    data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
+    missing_data_warnings: list[str] = Field(
+        default_factory=list, description="Список предупреждений о недостающих данных"
+    
     )
 
 class ManagerEventsCatalogOut(BaseModel):

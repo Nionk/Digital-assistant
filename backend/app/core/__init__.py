@@ -1,2 +1,1 @@
-# [AUDIT-CRUTCH]: Мусорный числовой литерал в __init__.py, оставленный при неаккуратном редактировании.
-1
+"""Core application module: configuration settings, database sessions, security, and constants."""

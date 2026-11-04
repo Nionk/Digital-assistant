@@ -1,33 +1,39 @@
 import asyncio
+import logging
 import math
+from typing import Literal
 
+import httpx
 import instructor
-from openai import AsyncOpenAI
+from openai import APIError, AsyncOpenAI
 
 from app.core.config import settings
 
-# Базовый клиент (использует Ru-OpenRouter)
-# [AUDIT-TIMEBOMB]: Отсутствует таймаут на уровне клиента и семафор ограничения параллельных запросов к LLM API, что при всплеске трафика приведет к исчерпанию соединений или HTTP 429.
+logger = logging.getLogger(__name__)
+
+# Базовый клиент генерации текста и Pydantic-структур с ограничением времени ответа
 raw_openai_client = AsyncOpenAI(
     api_key=settings.LLM_API_KEY,
     base_url=settings.LLM_BASE_URL,
+    timeout=30.0,
 )
 
-# Обертка Instructor для получения структурированного вывода (Pydantic)
-# Mode.MD_JSON отлично работает с большинством открытых моделей (DeepSeek, Qwen и т.д.)
+# Обертка Instructor для получения структурированного вывода (Pydantic v2)
+# Режим Mode.MD_JSON обеспечивает совместимость с большинством открытых и проприетарных моделей
 structured_llm_client = instructor.from_openai(
     raw_openai_client,
-    mode=instructor.Mode.MD_JSON
+    mode=instructor.Mode.MD_JSON,
 )
 
-# Отдельный клиент, так как OpenRouter не поддерживает эмбеддинги, 
-# мы идем напрямую в Jina AI
+# Клиент эмбеддингов с базовым таймаутом соединения
 embedding_client = AsyncOpenAI(
     api_key=settings.EMBEDDING_API_KEY,
     base_url=settings.EMBEDDING_BASE_URL,
+    timeout=30.0,
 )
 
-# Ограничитель параллельных запросов к API эмбеддингов для предотвращения HTTP 429
+# Ограничители параллелизма (Rate Limit Controls)
+LLM_SEMAPHORE = asyncio.Semaphore(5)
 EMBEDDING_SEMAPHORE = asyncio.Semaphore(3)
 
 
@@ -42,45 +48,91 @@ def l2_normalize(vec: list[float]) -> list[float]:
     return [x / norm for x in vec]
 
 
-# [AUDIT-TIMEBOMB]: Отсутствует обработка ошибок HTTP/сети и пустого EMBEDDING_API_KEY; передача параметра dimensions вызывает HTTP 400 на провайдерах без поддержки матрешка-эмбеддингов (например, Yandex Cloud).
+async def _request_embeddings(
+    texts: list[str],
+    encoding_format: Literal["float"] = "float",
+) -> list[list[float]]:
+    """
+    Выполняет строго типизированный запрос к шлюзу эмбеддингов.
+    Параметр dimensions передается только для моделей с поддержкой усечения размерности (Матрёшка),
+    предотвращая HTTP 400 Bad Request на нативных шлюзах (Yandex Cloud text-search-doc/query).
+    """
+    if settings.EMBEDDING_MODEL in ("text-search-doc", "text-search-query"):
+        response = await embedding_client.embeddings.create(
+            model=settings.EMBEDDING_MODEL,
+            input=texts,
+            encoding_format=encoding_format,
+        )
+    else:
+        response = await embedding_client.embeddings.create(
+            model=settings.EMBEDDING_MODEL,
+            input=texts,
+            encoding_format=encoding_format,
+            dimensions=settings.EMBEDDING_DIM,
+        )
+    ordered_data = sorted(response.data, key=lambda item: item.index)
+    return [l2_normalize(item.embedding) for item in ordered_data]
+
+
 async def get_embedding(text: str) -> list[float]:
     """
     Получает L2-нормализованный вектор заданной размерности для одного текста.
-    Вызов защищен семафором параллелизма (asyncio.Semaphore(3)).
-    Явно передается encoding_format="float", предотвращая возврат base64-строк.
+    Вызов защищен семафором параллелизма (EMBEDDING_SEMAPHORE).
     """
+    if not settings.EMBEDDING_API_KEY:
+        raise RuntimeError("EMBEDDING_API_KEY не задан в конфигурации приложения.")
+
     async with EMBEDDING_SEMAPHORE:
-        response = await embedding_client.embeddings.create(
-            model=settings.EMBEDDING_MODEL,
-            input=[text],
-            dimensions=settings.EMBEDDING_DIM,
-            encoding_format="float",
-        )
-        return l2_normalize(response.data[0].embedding)
+        try:
+            vectors = await _request_embeddings([text], encoding_format="float")
+            return vectors[0]
+        except (APIError, httpx.HTTPError):
+            logger.exception(
+                "Ошибка при получении эмбеддинга (model=%s)",
+                settings.EMBEDDING_MODEL,
+            )
+            raise
 
 
-# [AUDIT-TIMEBOMB]: Последовательный цикл батчей внутри одного корутина без retry/обработки частичных сбоев обрушит весь пайплайн при ошибке на любом чанке.
 async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[list[float]]:
     """
     Батчевая генерация эмбеддингов (10-20 текстов в пакете) с контролем частоты запросов
-    через asyncio.Semaphore(3) в строгом соответствии с rules.md (п. 3.3).
-    Явно передается encoding_format="float", предотвращая возврат base64-строк.
+    через EMBEDDING_SEMAPHORE в строгом соответствии с rules.md (п. 3.3).
     """
     if not texts:
         return []
 
-    results: list[list[float]] = []
-    for i in range(0, len(texts), batch_size):
-        chunk = texts[i:i + batch_size]
-        async with EMBEDDING_SEMAPHORE:
-            response = await embedding_client.embeddings.create(
-                model=settings.EMBEDDING_MODEL,
-                input=chunk,
-                dimensions=settings.EMBEDDING_DIM,
-                encoding_format="float",
-            )
-            # Сортируем по исходному индексу для гарантии сохранения порядка
-            ordered_data = sorted(response.data, key=lambda item: item.index)
-            results.extend([l2_normalize(item.embedding) for item in ordered_data])
+    if not settings.EMBEDDING_API_KEY:
+        raise RuntimeError("EMBEDDING_API_KEY не задан в конфигурации приложения.")
 
-    return results
+    results: list[list[float]] = []
+    max_retries = 2
+
+    for i in range(0, len(texts), batch_size):
+        chunk = texts[i : i + batch_size]
+        async with EMBEDDING_SEMAPHORE:
+            for attempt in range(max_retries + 1):
+                try:
+                    batch_vectors = await _request_embeddings(chunk, encoding_format="float")
+                    results.extend(batch_vectors)
+                    break
+                except (APIError, httpx.HTTPError) as exc:
+                    if attempt < max_retries:
+                        delay = 1.0 * (attempt + 1)
+                        logger.warning(
+                            "Сетевой сбой при получении батча эмбеддингов (попытка %d/%d). Повтор через %.1f сек: %s",
+                            attempt + 1,
+                            max_retries,
+                            delay,
+                            exc,
+                            exc_info=True,
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.exception(
+                            "Не удалось получить батч эмбеддингов после %d попыток",
+                            max_retries + 1,
+                        )
+                        raise
+
+    return results

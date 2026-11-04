@@ -72,7 +72,7 @@ class TestEventIngestionAndSchema(unittest.TestCase):
             ],
             "faq_cache": [
                 {
-                    "question": "Что входит в тариф?",
+                    "question": "Что входит в рекомендованный тариф?",
                     "answer": "В тариф входит доступ во все залы и кофе-брейки.",
                     "source_quote": "Доступ во все залы и кофе-брейки",
                 }
@@ -156,59 +156,82 @@ class TestEventIngestionAndSchema(unittest.TestCase):
         )
         self.assertIsNone(s3.jina_token)
 
-
     def test_06_faq_question_normalization(self):
-        """Проверка автоматической нормализации вопросов к каноническим чипсам."""
-        # 1. Алиасы
+        """Проверка валидации канонических вопросов FAQ согласно Literal спецификации get_data.md."""
         faq1 = FAQCacheItem.model_validate({
-            "question": "Что входит в тариф?",
+            "question": "Что входит в рекомендованный тариф?",
             "answer": "В тариф входит посещение всех сессий.",
             "source_quote": "Посещение всех сессий",
         })
         self.assertEqual(faq1.question, "Что входит в рекомендованный тариф?")
 
         faq2 = FAQCacheItem.model_validate({
-            "question": "Условия Early Bird",
+            "question": "Какие условия раннего бронирования и дедлайны?",
             "answer": "Скидка действует до 31 октября.",
             "source_quote": "До 31 октября",
         })
         self.assertEqual(faq2.question, "Какие условия раннего бронирования и дедлайны?")
 
         faq3 = FAQCacheItem.model_validate({
-            "question": "Требования к спикеру",
+            "question": "Формат участия и требования к спикеру",
             "answer": "Доклад 20 минут, презентация 16:9.",
             "source_quote": "Презентация 16:9",
         })
         self.assertEqual(faq3.question, "Формат участия и требования к спикеру")
 
-        # 2. Неточные совпадения / эвристика
-        faq_custom = FAQCacheItem.model_validate({
-            "question": "Что входит в пакет «Премиум»?",
-            "answer": "Стенд 6 кв.м и 2 бейджа.",
-            "source_quote": "Стенд 6 кв.м",
-        })
-        self.assertEqual(faq_custom.question, "Что входит в рекомендованный тариф?")
+        # Неканонический произвольный вопрос отклоняется строгим Literal-валидатором
+        from pydantic import ValidationError
+        with self.assertRaises(ValidationError):
+            FAQCacheItem.model_validate({
+                "question": "Что входит в пакет «Премиум»?",
+                "answer": "Стенд 6 кв.м и 2 бейджа.",
+                "source_quote": "Стенд 6 кв.м",
+            })
 
-    # [AUDIT-CRUTCH]: Тест закрепляет ослабление валидации min_length для summary с эталонных 250 символов (по правилам датасета) до 100 символов ради прохождения сырых данных.
-    def test_07_summary_min_length_relaxed_and_date_protection(self):
-        """Проверка relaxed min_length=100 и автоматической коррекции end_date < start_date."""
+    def test_07_quality_gate_summary_and_city_canonicalization(self):
+        """Проверка соблюдения Quality Gate (min_length=250), нормализации города и автокоррекции end_date."""
+        from pydantic import ValidationError
+
+        # 1. Описание короче 250 символов отклоняется Quality Gate
+        with self.assertRaises(ValidationError):
+            EventIngestionSchema.model_validate({
+                "canonical_title": "Конференция Девелопмент 2026",
+                "event_format": "conference",
+                "city": "Москва",
+                "is_online": False,
+                "start_date": "2026-11-20",
+                "end_date": "2026-11-20",
+                "summary": "Короткое описание на 100 символов, которое не соответствует стандарту качества.",
+                "themes": ["девелопмент"],
+                "full_regulation_markdown": "Регламент мероприятия",
+            })
+
+        # 2. Полноценное описание (>= 250 символов), нормализация города и коррекция end_date < start_date
+        valid_summary = (
+            "Крупнейшая отраслевая конференция по современному жилищному девелопменту, "
+            "инновационным технологиям монолитного и модульного строительства, комплексному "
+            "развитию территорий (КРТ) и цифровизации строительного сектора в мегаполисах "
+            "с участием ведущих девелоперов, архитекторов и представителей регулирующих ведомств."
+        )
+        self.assertGreaterEqual(len(valid_summary), 250)
+
         data = {
             "canonical_title": "Конференция Девелопмент 2026",
             "event_format": "conference",
-            "city": "Москва",
+            "city": "г. Санкт-Петербург",
             "is_online": False,
             "start_date": "2026-11-20",
             "end_date": "2026-11-18",  # Перепутаны даты: end_date < start_date!
-            # Длина 120 символов (проходит валидацию min_length=100, ранее падало при min_length=250)
-            "summary": "Конференция по современному жилищному девелопменту, новым технологиям монолитного строительства и урбанистике городов.",
-            "themes": ["девелопмент"],
-            "full_regulation_markdown": "Регламент мероприятия",
+            "summary": valid_summary,
+            "themes": ["девелопмент", "КРТ"],
+            "full_regulation_markdown": "Полный текст регламента",
         }
         parsed = EventIngestionSchema.model_validate(data)
-        # Проверяем, что end_date скорректирована до start_date
+        # Город нормализован через normalize_city
+        self.assertEqual(parsed.city, "Санкт-Петербург")
+        # end_date скорректирована до start_date
         self.assertEqual(parsed.end_date, parsed.start_date)
         self.assertEqual(parsed.end_date, date(2026, 11, 20))
-        self.assertEqual(len(parsed.summary), 118)
 
     def test_08_orm_relationships_and_bigint(self):
         """Проверка BigInteger для telegram_chat_id и наличия relationship-связей в моделях."""
