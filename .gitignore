@@ -91,3 +91,8 @@ backend/alembic/README
 *.tsbuildinfo
 /fire.png
 /logo.png
+
+# Audit & diagnostic dumps
+complexity_report.txt
+dead_code.txt
+repo_structure.txt
