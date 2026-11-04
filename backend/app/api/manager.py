@@ -1,9 +1,11 @@
 import datetime
 import logging
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
@@ -29,6 +31,32 @@ from app.services.profiler import extract_profile_heuristic
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/manager", tags=["Manager Cabinet"])
+
+AsyncSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
+ManagerEventFormat = Literal[
+    "roundtable", "business_breakfast", "forum", "conference", "session"
+]
+SelectionStatusLiteral = Literal["draft", "published"]
+
+
+def _normalize_event_format(fmt: str | None) -> ManagerEventFormat:
+    if fmt == "roundtable":
+        return "roundtable"
+    if fmt == "business_breakfast":
+        return "business_breakfast"
+    if fmt == "forum":
+        return "forum"
+    if fmt == "session":
+        return "session"
+    return "conference"
+
+
+def _normalize_selection_status(st: str | None) -> SelectionStatusLiteral | None:
+    if st == "draft":
+        return "draft"
+    if st == "published":
+        return "published"
+    return None
 
 # [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к демо-данным в обход БД.
 DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
@@ -211,7 +239,7 @@ def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) 
 # [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt) и неиспользуемый аргумент current_manager (dead_code.txt:209).
 async def get_manager_clients(
     current_manager: CurrentManagerDep,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> ManagerDashboardOut:
     """
     Загружает из БД клиентов менеджера, статус их последней подборки (selections)
@@ -238,11 +266,10 @@ async def get_manager_clients(
             sel_res = await db.execute(sel_stmt)
             latest_sel = sel_res.scalar_one_or_none()
 
-            sel_status = None
+            sel_status: SelectionStatusLiteral | None = None
             sel_token = None
             if latest_sel is not None:
-                if latest_sel.status in ("draft", "published"):
-                    sel_status = latest_sel.status
+                sel_status = _normalize_selection_status(latest_sel.status)
                 if latest_sel.status == "published":
                     sel_token = latest_sel.magic_token
 
@@ -253,7 +280,7 @@ async def get_manager_clients(
                     contact_person=c.contact_person,
                     raw_manager_notes=c.raw_manager_notes,
                     latest_selection_id=latest_sel.id if latest_sel else None,
-                    latest_selection_status=sel_status,  # type: ignore[arg-type]
+                    latest_selection_status=sel_status,
                     magic_token=sel_token,
                 )
             )
@@ -344,7 +371,7 @@ async def match_events_for_client(
     client_id: int,
     payload: MatchRequestIn,
     current_manager: CurrentManagerDep,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> MatchResponseOut:
     """
     Запускает полный пайплайн D-06 и D-07: от сырой заметки до готовых пакетов и письма.
@@ -374,9 +401,8 @@ async def match_events_for_client(
     except Exception as exc:
         try:
             await db.rollback()
-        # [AUDIT-FAKE]: Безусловное проглатывание ошибки отката транзакции через except Exception: pass.
-        except Exception:
-            pass
+        except (SQLAlchemyError, OSError) as rb_exc:
+            logger.warning("Ошибка отката транзакции в /match: %s", rb_exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при подборе мероприятий: {exc}",
@@ -399,7 +425,7 @@ async def publish_selection(
     selection_id: int,
     payload: PublishSelectionIn,
     current_manager: CurrentManagerDep,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> PublishSelectionOut:
     """
     Атомарно фиксирует утвержденный менеджером пакет, удаляет альтернативные варианты,
@@ -522,14 +548,13 @@ async def publish_selection(
 # [AUDIT-CRUTCH]: Неиспользуемый аргумент current_manager (dead_code.txt:502).
 async def get_manager_events_catalog(
     current_manager: CurrentManagerDep,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSessionDep,
 ) -> ManagerEventsCatalogOut:
     """
     Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинета менеджера.
     """
     today = datetime.date.today()
     events_out: list[CatalogEventItemOut] = []
-    valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
 
     try:
         ev_stmt = select(Event).where(Event.is_active.is_(True)).order_by(Event.start_date.asc(), Event.id.asc())
@@ -546,13 +571,13 @@ async def get_manager_events_catalog(
             tariffs_by_event.setdefault(t.event_id, []).append(build_tariff_option(t, today))
 
         for ev in db_events:
-            fmt = ev.event_format if ev.event_format in valid_formats else "conference"
+            fmt = _normalize_event_format(ev.event_format)
             primary_url = ev.source_urls[0] if (ev.source_urls and len(ev.source_urls) > 0) else None
             events_out.append(
                 CatalogEventItemOut(
                     event_id=ev.id,
                     canonical_title=ev.canonical_title,
-                    event_format=fmt,  # type: ignore[arg-type]
+                    event_format=fmt,
                     city=ev.city,
                     is_online=ev.is_online,
                     venue=ev.venue,

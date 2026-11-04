@@ -3,9 +3,11 @@ import time
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core.config import settings
 from app.core.database import async_session_maker, engine
 from app.models.models import Client, EventTariff, Selection, SelectionItem
 from app.schemas.manager import ClientQueryExtracted, MatchRequestIn
@@ -21,7 +23,15 @@ from tests.test_d08_d09_d10 import is_postgres_online
 
 
 class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._emb_patcher = patch(
+            "app.services.matcher.get_embedding",
+            return_value=[1.0] + [0.0] * (settings.EMBEDDING_DIM - 1),
+        )
+        self._emb_patcher.start()
+
     async def asyncTearDown(self) -> None:
+        self._emb_patcher.stop()
         await engine.dispose()
 
     def test_01_fts_query_builder_and_fallback(self) -> None:

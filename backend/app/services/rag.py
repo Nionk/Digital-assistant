@@ -6,7 +6,7 @@ import logging
 import httpx
 from openai import APIError
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -138,8 +138,9 @@ async def _retrieve_regulation_chunks(
     fallback_text: str,
 ) -> str:
     """
-    Фолбэк-режим (Chunk Hybrid RAG): извлечение Топ-5 чанков из event_chunks со строгим WHERE event_id = :event_id.
-    Используется, если регламент превышает 35 000 символов (Раздел 10.4 artifact.md).
+    Фолбэк-режим (Chunk Hybrid RAG): гибридное извлечение Топ-5 чанков из event_chunks
+    (Vector Cosine Distance + PostgreSQL FTS tsvector RRF) со строгим WHERE event_id = :event_id.
+    Используется, если регламент превышает 35 000 символов (Раздел 10.4 artifact.md, п. 4.4 rules.md).
     """
     q_vec: list[float] | None = None
     if settings.EMBEDDING_API_KEY:
@@ -152,18 +153,41 @@ async def _retrieve_regulation_chunks(
                 exc_info=True,
             )
 
+    ts_query = func.websearch_to_tsquery("russian", question)
+    fts_score = case(
+        (
+            EventChunk.search_vector.op("@@")(ts_query),
+            func.ts_rank_cd(EventChunk.search_vector, ts_query),
+        ),
+        else_=0.0,
+    )
+
     if q_vec is not None:
+        vec_rank = func.row_number().over(
+            order_by=EventChunk.embedding.cosine_distance(q_vec).asc()
+        ).label("vec_rank")
+        fts_rank = func.row_number().over(
+            order_by=[fts_score.desc(), EventChunk.chunk_index.asc()]
+        ).label("fts_rank")
+        ranked_cte = (
+            select(EventChunk.id.label("chunk_id"), vec_rank, fts_rank)
+            .where(EventChunk.event_id == event_id)
+            .cte("ranked_chunks")
+        )
+        rrf_score = (
+            1.0 / (60.0 + ranked_cte.c.vec_rank) + 1.0 / (60.0 + ranked_cte.c.fts_rank)
+        ).label("rrf_score")
         stmt = (
             select(EventChunk)
-            .where(EventChunk.event_id == event_id)
-            .order_by(EventChunk.embedding.cosine_distance(q_vec))
+            .join(ranked_cte, EventChunk.id == ranked_cte.c.chunk_id)
+            .order_by(rrf_score.desc(), EventChunk.chunk_index.asc())
             .limit(5)
         )
     else:
         stmt = (
             select(EventChunk)
             .where(EventChunk.event_id == event_id)
-            .order_by(EventChunk.chunk_index.asc())
+            .order_by(fts_score.desc(), EventChunk.chunk_index.asc())
             .limit(5)
         )
 
@@ -423,6 +447,9 @@ async def ask_regulation_question(
     primary_cache_key = build_rag_cache_key(event_id, tariff_id, question_clean)
 
     cached_rag = await _try_load_cached_rag_response(session, primary_cache_key)
+    if cached_rag is None and tariff_id != 0:
+        fallback_cache_key = build_rag_cache_key(event_id, 0, question_clean)
+        cached_rag = await _try_load_cached_rag_response(session, fallback_cache_key)
     if cached_rag is not None:
         return await _build_cached_rag_out(session, selection_id, event_id, question_clean, cached_rag)
 

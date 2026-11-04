@@ -68,8 +68,8 @@ def calc_p95(vals: list[float]) -> float:
     if len(s) == 1:
         return s[0]
     rank = 0.95 * (len(s) - 1)
-    lower = int(math.floor(rank))
-    upper = int(math.ceil(rank))
+    lower = math.floor(rank)
+    upper = math.ceil(rank)
     weight = rank - lower
     return s[lower] * (1.0 - weight) + s[upper] * weight
 
@@ -168,7 +168,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
         fts_str = build_fts_or_query(prof)
 
         t0 = time.perf_counter()
-        candidates = await fetch_hybrid_rrf_candidates(
+        _candidates = await fetch_hybrid_rrf_candidates(
             session=session,
             profile=prof,
             query_vec=dummy_vec,
@@ -211,7 +211,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
     knapsack_latencies_ms = []
     for _ in range(50):
         t0 = time.perf_counter()
-        variants, bonus = build_bundles(scored_candidates[:15], sample_prof)
+        _variants, _bonus = build_bundles(scored_candidates[:15], sample_prof)
         dt_ms = (time.perf_counter() - t0) * 1000.0
         knapsack_latencies_ms.append(dt_ms)
 
@@ -252,7 +252,7 @@ async def benchmark_block_1(session) -> dict[str, Any]:
     hot_latencies_ms = []
     for _ in range(30):
         t0 = time.perf_counter()
-        hot_resp = await ask_regulation_question(
+        _hot_resp = await ask_regulation_question(
             session=session,
             selection_id=test_sel_id,
             event_id=test_ev_id,
@@ -806,15 +806,12 @@ async def main():
 
     # Save to disk
     report_path = Path(__file__).resolve().parent / "BENCHMARK_RESULTS.md"
-    # [AUDIT-TIMEBOMB]: Синхронная запись отчета на диск внутри async def main() без asyncio.to_thread.
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report_md)
+    await asyncio.to_thread(report_path.write_text, report_md, "utf-8")
 
     root_report_path = Path(__file__).resolve().parent.parent.parent / "BENCHMARK_REPORT.md"
     try:
-        with open(root_report_path, "w", encoding="utf-8") as f:
-            f.write(report_md)
-    except Exception as e:
+        await asyncio.to_thread(root_report_path.write_text, report_md, "utf-8")
+    except OSError as e:
         logger.warning("Could not write to root report: %s", e)
 
     print("\n==================================================================")

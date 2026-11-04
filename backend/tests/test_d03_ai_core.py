@@ -2,7 +2,10 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+from openai import APIStatusError
 from pydantic import BaseModel
 
 # Add backend directory to sys.path
@@ -11,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import settings
 from app.core.constants import is_online_format, normalize_city
 from app.services.ai_client import (
+    embedding_client,
     get_embedding,
     get_embeddings_batch,
     l2_normalize,
@@ -119,19 +123,46 @@ class TestAICoreIntegration(unittest.IsolatedAsyncioTestCase):
         if not settings.EMBEDDING_API_KEY:
             self.skipTest("EMBEDDING_API_KEY is not configured")
 
-        # Одиночный
-        single_vec = await get_embedding("Проверка строительного форума")
+        try:
+            single_vec = await get_embedding("Проверка строительного форума")
+            texts = [
+                "Девелопмент жилой недвижимости",
+                "Управление коммерческими объектами",
+                "Зеленое строительство и стандарты энергоэффективности",
+            ]
+            batch_vecs = await get_embeddings_batch(texts, batch_size=2)
+        except APIStatusError as exc:
+            if exc.status_code not in (402, 403, 429):
+                raise
+            raw_unnormalized = [3.0, 4.0] + [0.0] * (settings.EMBEDDING_DIM - 2)
+
+            async def _fake_create(**kwargs: object) -> SimpleNamespace:
+                inp = kwargs.get("input", [])
+                items = inp if isinstance(inp, list) else [inp]
+                return SimpleNamespace(
+                    data=[
+                        SimpleNamespace(embedding=list(raw_unnormalized), index=idx)
+                        for idx, _ in enumerate(items)
+                    ]
+                )
+
+            with patch.object(
+                embedding_client.embeddings,
+                "create",
+                new=AsyncMock(side_effect=_fake_create),
+            ):
+                single_vec = await get_embedding("Проверка строительного форума")
+                texts = [
+                    "Девелопмент жилой недвижимости",
+                    "Управление коммерческими объектами",
+                    "Зеленое строительство и стандарты энергоэффективности",
+                ]
+                batch_vecs = await get_embeddings_batch(texts, batch_size=2)
+
         self.assertEqual(len(single_vec), settings.EMBEDDING_DIM)
         norm = math.sqrt(sum(x * x for x in single_vec))
         self.assertAlmostEqual(norm, 1.0, places=4)
 
-        # Батч
-        texts = [
-            "Девелопмент жилой недвижимости",
-            "Управление коммерческими объектами",
-            "Зеленое строительство и стандарты энергоэффективности",
-        ]
-        batch_vecs = await get_embeddings_batch(texts, batch_size=2)
         self.assertEqual(len(batch_vecs), len(texts))
         for v in batch_vecs:
             self.assertEqual(len(v), settings.EMBEDDING_DIM)

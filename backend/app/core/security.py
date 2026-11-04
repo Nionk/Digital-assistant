@@ -38,7 +38,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(data: dict[str, object], expires_delta: timedelta | None = None) -> str:
     """
     Создает подписанный JWT-токен (HS256) с метками времени exp и iat.
     """
@@ -52,30 +52,30 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict[str, object]:
     """
     Декодирует и валидирует JWT-токен.
     Выбрасывает HTTP 401 при истечении срока действия или неверной подписи.
     """
     try:
-        payload = jwt.decode(
+        payload: dict[str, object] = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
         return payload
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Срок действия токена авторизации истек.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
+        ) from exc
+    except jwt.InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Невалидный токен авторизации.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from exc
 
 
 class ManagerUser(BaseModel):
@@ -121,8 +121,9 @@ async def get_current_manager(
             )
 
         # Поиск пользователя в БД по email или целочисленному id
-        user_id_val = int(sub) if str(sub).isdigit() else -1
-        stmt = select(User).where((User.email == str(sub)) | (User.id == user_id_val))
+        sub_str = str(sub)
+        user_id_val = int(sub_str) if sub_str.isdigit() else -1
+        stmt = select(User).where((User.email == sub_str) | (User.id == user_id_val))
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
 
@@ -161,12 +162,12 @@ async def get_current_manager(
             exc,
         )
 
-    # Резервный профиль на случай остановленной БД во время изолированных контрактных тестов
+    # [DEV-STUB: Резервный профиль на случай остановленной БД во время изолированных контрактных тестов]
     return ManagerUser(
         id=1,
         email="manager@skart.ru",
         full_name="Анна Соколова (Ведущий менеджер сопровождения)",
-        telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID or 1857783105,
+        telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID or 123456789,
     )
 
 

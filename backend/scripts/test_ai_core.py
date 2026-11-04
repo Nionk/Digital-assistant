@@ -22,6 +22,9 @@ class TestSchema(BaseModel):
     city: str
 
 
+__test__ = False
+
+
 # [AUDIT-CRUTCH]: Полный дубликат юнит- и интеграционных проверок из backend/tests/test_d03_ai_core.py, оформленный как ручной скрипт вместо единого тест-сьюта.
 def test_cities():
     print("--- [1/3] Тестирование канонизации городов (DoD: >= 10 вариаций) ---")

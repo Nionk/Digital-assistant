@@ -128,7 +128,6 @@ class AskRegulationQuestionOut(BaseModel):
         description="True, если неотвеченный вопрос отправлен в виде пуша в Telegram менеджеру"
     )
 
-# [AUDIT-CRUTCH]: Схемы EscalateQuestionIn и EscalateQuestionOut не описаны в базовом контракте artifact.md (раздел 11.4) и забыты в экспорте schemas/__init__.py.
 class EscalateQuestionIn(BaseModel):
     """Запрос клиента на осознанную передачу неотвеченного вопроса куратору в Telegram."""
     question_text: str = Field(

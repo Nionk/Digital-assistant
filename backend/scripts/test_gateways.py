@@ -16,11 +16,14 @@ def load_env_simple(filepath=".env"):
 
 load_env_simple()
 
+__test__ = False
+
+
 async def test_embedding():
     api_key = os.getenv("EMBEDDING_API_KEY")
     base_url = os.getenv("EMBEDDING_BASE_URL", "https://api.jina.ai/v1")
     model = os.getenv("EMBEDDING_MODEL", "jina-embeddings-v3")
-    dim = int(os.getenv("EMBEDDING_DIM", 1024))
+    dim = int(os.getenv("EMBEDDING_DIM", "1024"))
     
     print("\n--- 1. Тестирование Embedding Gateway (Jina AI) ---")
     if not api_key:
@@ -37,11 +40,11 @@ async def test_embedding():
             encoding_format="float",
         )
         vec = resp.data[0].embedding
-        print(f"[OK] Эмбеддинг получен успешно!")
+        print("[OK] Эмбеддинг получен успешно!")
         print(f"Размерность: {len(vec)} (ожидалось {dim})")
         print(f"Использовано токенов: {resp.usage.total_tokens}")
         return len(vec) == dim
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         print(f"[FAIL] Ошибка при запросе эмбеддинга: {e}")
         return False
 
@@ -69,7 +72,7 @@ async def test_llm():
         print(f"[OK] LLM ответила успешно: {ans.strip()}")
         print(f"Использовано токенов: {resp.usage.total_tokens}")
         return True
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         print(f"[FAIL] Ошибка при запросе LLM: {e}")
         return False
 

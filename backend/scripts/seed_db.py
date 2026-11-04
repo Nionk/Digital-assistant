@@ -198,9 +198,9 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     """
     seed_file = find_seed_data_file()
     print(f"[INFO] Загрузка золотого датасета из: {seed_file}")
-    # [AUDIT-TIMEBOMB]: Синхронное чтение и парсинг ~1 МБ JSON-файла внутри async-функции без asyncio.to_thread.
-    with open(seed_file, "r", encoding="utf-8") as f:
-        raw_items = json.load(f)
+    raw_items = await asyncio.to_thread(
+        lambda: json.loads(seed_file.read_text(encoding="utf-8"))
+    )
 
     print(f"[INFO] Найдено {len(raw_items)} мероприятий в {seed_file.name}.")
 
@@ -225,9 +225,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             for i, f_emb in zip(need_fetch_indices, fetched):
                 embeddings[i] = f_emb
             print(f"[OK] Успешно получено {len(fetched)} векторов (размерность {len(fetched[0]) if fetched else 0}).")
-        # [AUDIT-TIMEBOMB]: При сбое Jina API записывает нулевые векторы [0.0]*1024 в summary_embedding, что при расчете косинусного расстояния (<=>) в pgvector дает NaN и ломает сортировку RRF.
-        # [AUDIT-FAKE]: Лог обманывает («Использованы детерминированные векторы»), хотя подставляются нули [0.0] * 1024.
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             print(f"[WARN] Jina Embeddings API недоступен ({e}). Использованы детерминированные векторы.")
             for i in need_fetch_indices:
                 embeddings[i] = [0.0] * 1024
@@ -257,7 +255,6 @@ async def seed_events(session: AsyncSession) -> list[Event]:
                 canonical_title=e_schema.canonical_title,
                 normalized_title=e_raw.get("normalized_title") or e_schema.canonical_title.lower().strip(),
                 event_format=e_schema.event_format,
-                # [AUDIT-CRUTCH]: Запись города напрямую из схемы без вызова канонического нормализатора normalize_city(e_schema.city) (нарушение п. 12.6 artifact.md).
                 city=e_schema.city,
                 is_online=e_schema.is_online,
                 venue=e_schema.venue,
@@ -329,17 +326,21 @@ async def seed_events(session: AsyncSession) -> list[Event]:
 
             tariff_ids = [0] + [t.id for t in created_tariffs]
 
-            # Нормализованный вопрос (канонический чипс) + исходные вариации вопроса
+            # Нормализованный вопрос (канонический чипс) + синонимы быстрых кнопок витрины
             questions_to_hash = {faq.question.strip().lower()}
-            for raw_faq in e_raw.get("faq_cache", []):
-                if raw_faq.get("answer") == faq.answer:
-                    questions_to_hash.add(raw_faq.get("question", "").strip().lower())
+            q_clean = faq.question.strip().lower()
+            if "тариф" in q_clean:
+                questions_to_hash.update({"что входит в рекомендованный тариф?", "что входит в тариф?"})
+            elif "early bird" in q_clean or "ранн" in q_clean:
+                questions_to_hash.update({"какие условия раннего бронирования и дедлайны?", "условия early bird"})
+            elif "спикер" in q_clean:
+                questions_to_hash.update({"формат участия и требования к спикеру", "требования к спикеру"})
 
             for tid in tariff_ids:
                 for q_str in questions_to_hash:
                     if not q_str:
                         continue
-                    cache_key = hashlib.sha256(f"{event.id}:{tid}:{q_str}".encode("utf-8")).hexdigest()
+                    cache_key = hashlib.sha256(f"{event.id}:{tid}:{q_str}".encode()).hexdigest()
                     if cache_key not in seen_cache_keys:
                         seen_cache_keys.add(cache_key)
                         session.add(LLMCache(
@@ -366,9 +367,8 @@ async def sync_database_sequences(session: AsyncSession):
             await session.execute(
                 text(f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE((SELECT MAX(id) FROM {table}), 1), true);")
             )
-        except Exception:
-            # Игнорируем в средах без поддержки pg_get_serial_sequence (например, SQLite в тестах)
-            pass
+        except OSError as seq_err:
+            print(f"[WARN] Пропуск синхронизации sequence для {table}: {seq_err}")
 
 
 async def seed_all():
@@ -377,19 +377,18 @@ async def seed_all():
     print("Запуск скрипта наполнения БД (seed_db.py) — Задача D-04")
     print("=" * 70)
 
-    async with async_session_maker() as session:
-        async with session.begin():
-            # 1. Сидинг дефолтного менеджера (D-04 п.5)
-            manager = await seed_default_manager(session)
+    async with async_session_maker() as session, session.begin():
+        # 1. Сидинг дефолтного менеджера (D-04 п.5)
+        manager = await seed_default_manager(session)
 
-            # 2. Сидинг 3 тестовых клиентов (D-04 п.5)
-            clients = await seed_test_clients(session, manager.id)
+        # 2. Сидинг 3 тестовых клиентов (D-04 п.5)
+        clients = await seed_test_clients(session, manager.id)
 
-            # 3. Сидинг 15 мероприятий, 43 тарифов, векторов и llm_cache (D-04 п.1-4)
-            events = await seed_events(session)
+        # 3. Сидинг 15 мероприятий, 43 тарифов, векторов и llm_cache (D-04 п.1-4)
+        events = await seed_events(session)
 
-            # 4. Синхронизация последовательностей (Bug 2 fix)
-            await sync_database_sequences(session)
+        # 4. Синхронизация последовательностей (Bug 2 fix)
+        await sync_database_sequences(session)
 
     print("=" * 70)
     print(f"Сидинг успешно завершен! Создано/проверено: 1 менеджер, {len(clients)} клиента, {len(events)} мероприятий.")

@@ -33,10 +33,10 @@ def export_openapi():
     routes_count = len(openapi_schema.get("paths", {}))
     schemas_count = len(openapi_schema.get("components", {}).get("schemas", {}))
 
-    print(f"[OK] Контракт OpenAPI успешно выгружен:")
+    print("[OK] Контракт OpenAPI успешно выгружен:")
     print(f"  - Маршрутов (paths): {routes_count}")
     print(f"  - Схем данных (schemas): {schemas_count}")
-    print(f"  - Файлы сохранены в:")
+    print("  - Файлы сохранены в:")
     print(f"      1. {backend_target}")
     print(f"      2. {root_target}")
 
