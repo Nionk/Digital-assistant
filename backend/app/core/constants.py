@@ -1,7 +1,9 @@
+import logging
 import re
 
+logger = logging.getLogger("app.core.constants")
+
 CITY_ALIASES = {
-   
     "Москва": ["москва", "мск", "msk", "moscow", "г. москва", "московская область", "мо", "г москва", "москва г", "подмосковье", "московская обл"],
     "Санкт-Петербург": ["санкт-петербург", "спб", "питер", "saint petersburg", "st petersburg", "г. спб", "санкт петербург", "петербург", "ленинградская область", "ло", "ленобласть", "ленинградская обл"],
     "Новосибирск": ["новосибирск", "нск", "новосибирская область", "новосиб"],
@@ -38,8 +40,7 @@ CITY_ALIASES = {
     "Пенза": ["пенза", "пензенская область"],
     "Набережные Челны": ["набережные челны", "челны"],
     "Липецк": ["липецк", "липецкая область"],
-    # [AUDIT-CRUTCH]: Опечатка в синониме города Киров ("вязка" вместо исторического "вятка"), из-за чего алиас не сработает.
-    "Киров": ["киров", "кировская область", "вязка"],
+    "Киров": ["киров", "кировская область", "вятка"],
     "Чебоксары": ["чебоксары", "чувашия"],
     "Тула": ["тула", "тульская область"],
     "Калининград": ["калининград", "кениг", "кёнигсберг"],
@@ -102,16 +103,18 @@ CITY_ALIASES = {
     "Северодвинск": ["северодвинск"],
     "Абакан": ["абакан", "хакасия"],
     "Минск": ["минск", "беларусь", "белоруссия"],
-    # [AUDIT-CRUTCH]: Дублирование алиаса "казахстан" в "Алматы" и "Астана" — при сборке _REVERSE_CITY_MAP "Астана" молча перезаписывает "Алматы".
-    "Алматы": ["алматы", "алма-ата", "казахстан"],
-    "Астана": ["астана", "нур-султан", "казахстан"],
+    "Алматы": ["алматы", "алма-ата"],
+    "Астана": ["астана", "нур-султан"],
     "Ереван": ["ереван", "армения"],
     "Ташкент": ["ташкент", "узбекистан"],
     "Бишкек": ["бишкек", "кыргызстан", "киргизия"],
     "Баку": ["баку", "азербайджан"],
-    # [AUDIT-CRUTCH]: Формат проведения "Онлайн" смешан со словарем городов, хотя по схеме БД (chk_events_city_or_online) для онлайн-событий city обязан быть NULL, а is_online = TRUE.
-    "Онлайн": ["онлайн", "online", "вебинар", "web", "интернет", "дистанционно", "zoom", "зум"]
 }
+
+# Маркеры онлайн-формата (не являются физическими городами)
+ONLINE_FORMAT_MARKERS: frozenset[str] = frozenset({
+    "онлайн", "online", "вебинар", "web", "интернет", "дистанционно", "zoom", "зум"
+})
 
 
 def _clean_key(text: str) -> str:
@@ -121,28 +124,56 @@ def _clean_key(text: str) -> str:
     s = s.replace('.', ' ').replace(',', ' ')
     return " ".join(s.split())
 
+
+def is_online_format(text: str | None) -> bool:
+    """
+    Проверяет, указывает ли текстовое значение на онлайн-формат проведения.
+    Согласно разделу 8.2 artifact.md и разделу 3 get_data.md, онлайн-события
+    должны иметь city = NULL и is_online = True.
+    """
+    if not text:
+        return False
+    cleaned = _clean_key(text)
+    if cleaned in ONLINE_FORMAT_MARKERS:
+        return True
+    return any(marker in cleaned for marker in ONLINE_FORMAT_MARKERS)
+
+
 # Предварительно скомпилированный обратный индекс: нормализованный синоним -> Каноническое название
 _REVERSE_CITY_MAP: dict[str, str] = {}
 for canonical_name, aliases in CITY_ALIASES.items():
-    _REVERSE_CITY_MAP[_clean_key(canonical_name)] = canonical_name
-    _REVERSE_CITY_MAP[canonical_name.lower().strip()] = canonical_name
+    for key in (_clean_key(canonical_name), canonical_name.lower().strip()):
+        _REVERSE_CITY_MAP[key] = canonical_name
     for alias in aliases:
-        _REVERSE_CITY_MAP[_clean_key(alias)] = canonical_name
-        _REVERSE_CITY_MAP[alias.lower().strip()] = canonical_name
+        clean_alias = _clean_key(alias)
+        lower_alias = alias.lower().strip()
+        for key in (clean_alias, lower_alias):
+            if key in _REVERSE_CITY_MAP and _REVERSE_CITY_MAP[key] != canonical_name:
+                logger.warning(
+                    f"Коллизия синонимов городов: ключ '{key}' уже связан с '{_REVERSE_CITY_MAP[key]}', "
+                    f"попытка связать с '{canonical_name}' проигнорирована."
+                )
+            else:
+                _REVERSE_CITY_MAP[key] = canonical_name
 
 
 def normalize_city(raw_city: str | None) -> str | None:
     """
     Канонизирует название города:
+    - если передан маркер онлайн-формата ('онлайн', 'вебинар' и т.д.), возвращает None (онлайн не является физическим городом).
     - очищает префиксы ('г.', 'гор.', 'г ', 'город')
     - сопоставляет синонимы и агломерации ('спб' -> 'Санкт-Петербург', 'московская область' -> 'Москва')
     - возвращает каноническое название или форматированное название неизвестного города
     """
     if not raw_city:
         return None
-        
+
     cleaned = raw_city.strip()
     if not cleaned:
+        return None
+
+    # Онлайн-формат не является физическим городом — возвращаем None для соблюдения CHECK (city IS NOT NULL OR is_online = TRUE)
+    if is_online_format(cleaned):
         return None
 
     lookup_key = _clean_key(cleaned)
@@ -160,7 +191,12 @@ def normalize_city(raw_city: str | None) -> str | None:
 
     # Фолбэк для городов вне базы: удаляем префиксы и форматируем регистр с сохранением дефисов
     # Например: "г. Сколково" -> "Сколково", "гор. суздаль" -> "Суздаль"
-    clean_fallback = re.sub(r'^(г\.|г\b|гор\.|гор\b|город\b|п\.|пос\.|поселок\b)\s*', '', cleaned, flags=re.IGNORECASE).strip()
+    clean_fallback = re.sub(
+        r'^(г\.|г\b|гор\.|гор\b|город\b|п\.|пос\.|поселок\b)\s*',
+        '',
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
     clean_fallback = clean_fallback.strip('., ')
 
     def _capitalize_part(word: str) -> str:
@@ -175,4 +211,3 @@ FAQ_QUICK_CHIPS: list[str] = [
     "Какие условия раннего бронирования и дедлайны?",
     "Формат участия и требования к спикеру",
 ]
-

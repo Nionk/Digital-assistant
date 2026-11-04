@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 from typing import List, Optional
 
@@ -8,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     Computed,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -30,9 +32,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255))
-    # [AUDIT-TIMEBOMB]: Использование DateTime без timezone=True (TIMESTAMP WITHOUT TIME ZONE вместо TIMESTAMPTZ из раздела 8.2 artifact.md) вызывает ошибку asyncpg при передаче timezone-aware дат на всех таблицах модели.
     telegram_chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     clients: Mapped[List["Client"]] = relationship(back_populates="manager")
 
@@ -43,10 +44,9 @@ class Client(Base):
     company_name: Mapped[str] = mapped_column(String(255))
     contact_person: Mapped[Optional[str]] = mapped_column(String(255))
     raw_manager_notes: Mapped[str] = mapped_column(Text)
-    # [AUDIT-TIMEBOMB]: Отсутствует DateTime(timezone=True) — колонки created_at и updated_at создаются без часового пояса вопреки схеме TIMESTAMPTZ в artifact.md.
     extracted_profile: Mapped[dict] = mapped_column(JSONB, server_default='{}')
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     manager: Mapped[Optional["User"]] = relationship(back_populates="clients")
     selections: Mapped[List["Selection"]] = relationship(back_populates="client", cascade="all, delete-orphan")
@@ -86,8 +86,7 @@ class Event(Base):
     )
     
     is_active: Mapped[bool] = mapped_column(Boolean, server_default='true')
-    # [AUDIT-TIMEBOMB]: Отсутствует DateTime(timezone=True) (в artifact.md требуется TIMESTAMPTZ).
-    last_scraped_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tariffs: Mapped[List["EventTariff"]] = relationship(back_populates="event", cascade="all, delete-orphan", lazy="selectin")
     chunks: Mapped[List["EventChunk"]] = relationship(back_populates="event", cascade="all, delete-orphan")
@@ -99,9 +98,8 @@ class EventTariff(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey('events.id', ondelete='CASCADE'))
     tariff_name: Mapped[str] = mapped_column(String(255))
     participation_role: Mapped[str] = mapped_column(String(50))
-    # [AUDIT-CRUTCH]: Аннотация Mapped[Optional[float]] не соответствует типу Numeric(12, 2), который возвращает Decimal из БД (риск TypeError при сложении с float).
-    base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2))
-    early_bird_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2))
+    base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2, asdecimal=False))
+    early_bird_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2, asdecimal=False))
     early_bird_deadline: Mapped[Optional[date]] = mapped_column(Date)
     is_vat_included: Mapped[bool] = mapped_column(Boolean, server_default='true')
 
@@ -141,16 +139,15 @@ class Selection(Base):
     __tablename__ = 'selections'
     id: Mapped[int] = mapped_column(primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey('clients.id', ondelete='CASCADE'))
-    # [AUDIT-CRUTCH]: Аннотация Mapped[str] конфликтует с UUID(as_uuid=True), возвращающим объект uuid.UUID, а также тип Numeric(12, 2) у total_budget_limit аннотирован как float вместо Decimal.
-    magic_token: Mapped[str] = mapped_column(UUID(as_uuid=True), unique=True, server_default=func.gen_random_uuid())
+    magic_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, server_default=func.gen_random_uuid())
     status: Mapped[str] = mapped_column(String(50), server_default='draft')
     generated_pitch_text: Mapped[Optional[str]] = mapped_column(Text)
-    total_budget_limit: Mapped[float] = mapped_column(Numeric(12, 2))
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    total_budget_limit: Mapped[float] = mapped_column(Numeric(12, 2, asdecimal=False))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    client: Mapped["Client"] = relationship(back_populates="selections")
+    client: Mapped["Client"] = relationship(back_populates="selections", lazy="joined")
     items: Mapped[List["SelectionItem"]] = relationship(back_populates="selection", cascade="all, delete-orphan", lazy="selectin")
-    chat_messages: Mapped[List["ChatMessage"]] = relationship(back_populates="selection", cascade="all, delete-orphan")
+    chat_messages: Mapped[List["ChatMessage"]] = relationship(back_populates="selection", cascade="all, delete-orphan", lazy="selectin")
 
 class SelectionItem(Base):
     __tablename__ = 'selection_items'
@@ -162,12 +159,11 @@ class SelectionItem(Base):
     ai_rationale: Mapped[Optional[str]] = mapped_column(Text)
     client_reaction: Mapped[str] = mapped_column(String(50), server_default='pending')
     client_comment: Mapped[Optional[str]] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     selection: Mapped["Selection"] = relationship(back_populates="items")
-    event: Mapped["Event"] = relationship(back_populates="selection_items")
-    # [AUDIT-TIMEBOMB]: Связи event и recommended_tariff не имеют lazy="selectin", что в AsyncSession приводит к падению с MissingGreenlet при обращении без явного selectinload.
-    recommended_tariff: Mapped[Optional["EventTariff"]] = relationship()
+    event: Mapped["Event"] = relationship(back_populates="selection_items", lazy="joined")
+    recommended_tariff: Mapped[Optional["EventTariff"]] = relationship(lazy="joined")
 
 class ChatMessage(Base):
     __tablename__ = 'chat_messages'
@@ -177,16 +173,16 @@ class ChatMessage(Base):
     sender_role: Mapped[str] = mapped_column(String(50))
     message_text: Mapped[str] = mapped_column(Text)
     needs_manager_attention: Mapped[bool] = mapped_column(Boolean, server_default='false')
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     selection: Mapped["Selection"] = relationship(back_populates="chat_messages")
-    event: Mapped["Event"] = relationship()
+    event: Mapped["Event"] = relationship(lazy="joined")
 
 class LLMCache(Base):
     __tablename__ = 'llm_cache'
     cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_id: Mapped[Optional[int]] = mapped_column(ForeignKey('events.id', ondelete='CASCADE'))
     response_text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    event: Mapped[Optional["Event"]] = relationship()
+    event: Mapped[Optional["Event"]] = relationship(lazy="joined")

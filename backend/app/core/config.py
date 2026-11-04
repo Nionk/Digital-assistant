@@ -1,38 +1,48 @@
-import socket
+import logging
 from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger("app.core.config")
+
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+
 class Settings(BaseSettings):
-    # Database
+    """
+    Конфигурация проекта (12-Factor App).
+    Настройки загружаются из переменных окружения и .env файлов.
+    """
+
+    # Database (PostgreSQL 16 + pgvector)
+    # Хост по умолчанию задается через .env (localhost:5432 для локальной разработки, db:5432 внутри Docker)
     DATABASE_URL: str
 
-    @field_validator("DATABASE_URL", mode="after")
-    @classmethod
-    # [AUDIT-TIMEBOMB]: Синхронный блокирующий DNS-запрос socket.getaddrinfo("db", 5432) при импорте модуля может повесить старт приложения при проблемах с DNS.
-    # [AUDIT-CRUTCH]: Мутация DATABASE_URL на лету внутри валидатора вместо явного разделения конфигураций окружения (.env vs docker-compose).
-    def resolve_db_host(cls, v: str) -> str:
-        """
-        Автоматический фолбэк для хоста БД:
-        Если скрипт запущен вне сети Docker и DNS-имя 'db' недоступно на хост-машине,
-        подменяем '@db:' на '@localhost:'. Внутри Docker 'db' доступно и URL не меняется.
-        """
-        if "@db:" in v:
-            try:
-                socket.getaddrinfo("db", 5432)
-            except (socket.gaierror, OSError):
-                return v.replace("@db:", "@localhost:")
-        return v
-
-    # Security
-    # [AUDIT-BACKDOOR]: Захардкоженный предсказуемый SECRET_KEY по умолчанию позволяет подделывать JWT-токены, если переменная не переопределена в окружении.
-    SECRET_KEY: str = "super_secret_key_for_jwt_change_me_in_production"
+    # Security & JWT
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+
+    # Флаг переходного режима авторизации для этапа Демо:
+    # При True: если заголовок Authorization отсутствует, запрос обслуживается от имени ведущего менеджера id=1 из БД.
+    # При False (Production): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
+    # [TODO-PHASE-P01]: Переключить в False по умолчанию после добавления экрана входа во фронтенде (Шаг 6).
+    ALLOW_DEMO_AUTH_BYPASS: bool = True
+
+    @field_validator("SECRET_KEY", mode="after")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Валидация длины и безопасности секретного ключа JWT."""
+        if not v or len(v.strip()) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long for security.")
+        if v == "super_secret_key_for_jwt_change_me_in_production":
+            logger.warning(
+                "SECURITY WARNING: SECRET_KEY is set to insecure default template! "
+                "Generate a cryptographically secure key with `openssl rand -hex 32`."
+            )
+        return v
 
     # LLM Gateway
     LLM_API_KEY: str = ""
@@ -45,6 +55,18 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: str = "https://api.jina.ai/v1"
     EMBEDDING_MODEL: str = "jina-embeddings-v3"
     EMBEDDING_DIM: int = 1024
+
+    @field_validator("EMBEDDING_MODEL", mode="after")
+    @classmethod
+    def validate_embedding_model(cls, v: str) -> str:
+        """Предотвращает рассинхрон векторного пространства с БД."""
+        certified_models = {"jina-embeddings-v3", "text-search-doc", "text-search-query"}
+        if v not in certified_models:
+            logger.warning(
+                f"EMBEDDING_MODEL '{v}' differs from certified models {certified_models}. "
+                "Ensure vector dimension matches database schema."
+            )
+        return v
 
     # Telegram Bot API Alerts
     TELEGRAM_BOT_TOKEN: str = ""
@@ -79,4 +101,5 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-settings = Settings()
+
+settings = Settings()  # type: ignore[call-arg]

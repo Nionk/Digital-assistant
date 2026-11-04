@@ -48,14 +48,14 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
         self.assertIn("недвижимости", q_empty)
         self.assertIn(" OR ", q_empty)
 
-        # 3. Special-char-only keywords and minimal query -> safe fallback
+        # 3. Special-char-only keywords and minimal query -> safe domain-agnostic fallback
         p_symbols = ClientQueryExtracted(
             total_budget_max=300000.0,
             themes_keywords=["!@#$%", "   ", "a"],
             semantic_search_query="!",
         )
         q_symbols = build_fts_or_query(p_symbols)
-        self.assertEqual(q_symbols, "строительство OR девелопмент")
+        self.assertEqual(q_symbols, "мероприятие OR конференция OR форум")
 
     def test_02_tariff_option_math(self) -> None:
         today = date(2026, 10, 1)

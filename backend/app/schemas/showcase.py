@@ -17,8 +17,9 @@ class ShowcaseEventItemOut(BaseModel):
     )
     event_id: int = Field(..., description="ID события")
     canonical_title: str = Field(..., description="Официальное название мероприятия")
-    # [AUDIT-CRUTCH]: Тип event_format объявлен как произвольный str вместо строгого Literal["roundtable", "business_breakfast", "forum", "conference", "session"].
-    event_format: str = Field(..., description="Формат: roundtable, business_breakfast, forum, conference, session")
+    event_format: Literal["roundtable", "business_breakfast", "forum", "conference", "session"] = Field(
+        ..., description="Формат: roundtable, business_breakfast, forum, conference, session"
+    )
     city: str | None = Field(None, description="Город проведения в именительном падеже (None для онлайн)")
     is_online: bool = Field(False, description="Признак онлайн-формата (вебинар, трансляция)")
     venue: str | None = Field(None, description="Площадка, отель или онлайн-платформа")

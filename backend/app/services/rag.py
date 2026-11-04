@@ -1,12 +1,12 @@
 import asyncio
 import datetime
 import hashlib
-import json
 import logging
-from typing import Optional
 
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+import httpx
+from openai import APIError
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,6 +14,7 @@ from app.models.models import (
     ChatMessage,
     Client,
     Event,
+    EventChunk,
     EventTariff,
     LLMCache,
     Selection,
@@ -21,17 +22,20 @@ from app.models.models import (
     User,
 )
 from app.schemas.showcase import AskRegulationQuestionOut
-from app.services.ai_client import structured_llm_client
+from app.services.ai_client import LLM_SEMAPHORE, get_embedding, structured_llm_client
+from app.services.telegram import format_escalation_alert, send_manager_alert
 
 logger = logging.getLogger(__name__)
 
 POLITE_FALLBACK_TEXT = (
     "Точных данных по этому вопросу нет в открытом регламенте мероприятия (как правило, такие детали "
-    "согласовываются с оргкомитетом в индивидуальном порядке)."
+    "согласовываются с оргкомитетом в индивидуальном порядке). "
+    "Вы можете передать вопрос персональному менеджеру для уточнения у организаторов."
 )
 
+
 class RAGResponse(BaseModel):
-    """Строгая схема ответа ИИ по регламенту (Zero-Hallucination)."""
+    """Строгая схема ответа ИИ по регламенту мероприятия (Zero-Hallucination контракт)."""
 
     is_answer_found: bool = Field(
         ...,
@@ -45,28 +49,43 @@ class RAGResponse(BaseModel):
         description=(
             "Вежливый и точный ответ клиенту строго по фактам регламента. "
             "Если is_answer_found=False, напиши вежливое сообщение о том, что точных данных нет в открытом регламенте "
-            "мероприятия и такие детали обычно согласовываются с оргкомитетом индивидуально."
+            "мероприятия и клиент может передать вопрос персональному менеджеру для уточнения у организаторов."
         ),
     )
-    source_quote: Optional[str] = Field(
+    source_quote: str | None = Field(
         None,
         description="Дословная цитата из текста регламента, подтверждающая ответ (обязательна при is_answer_found=True, иначе None).",
     )
 
+
 def build_rag_cache_key(event_id: int, tariff_id: int, question_text: str) -> str:
-    """Вычисляет детерминированный SHA-256 ключ для таблицы llm_cache."""
+    """Вычисляет детерминированный SHA-256 ключ для таблицы llm_cache с изоляцией по тарифу."""
     normalized_q = question_text.strip().lower()
     raw_key = f"{event_id}:{tariff_id}:{normalized_q}"
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
-# [AUDIT-CRUTCH]: Функция делает до 3 последовательных запросов в БД для получения company_name и manager_chat_id, которые затем вообще нигде не используются в ask_regulation_question.
+
+async def invalidate_rag_cache(session: AsyncSession, event_id: int) -> int:
+    """
+    Инвалидация кэша ответов RAG при обновлении мероприятия или его тарифов (Раздел 12.8 artifact.md).
+    DELETE FROM llm_cache WHERE event_id = :event_id RETURNING cache_key
+    """
+    stmt = (
+        delete(LLMCache)
+        .where(LLMCache.event_id == event_id)
+        .returning(LLMCache.cache_key)
+    )
+    result = await session.execute(stmt)
+    deleted_keys = result.scalars().all()
+    await session.commit()
+    return len(deleted_keys)
+
+
 async def _resolve_selection_context(
     session: AsyncSession,
     selection_id: int,
 ) -> tuple[Selection | None, str, int | None]:
-    """
-    Возвращает (selection_obj, company_name, manager_telegram_chat_id) для логирования и алертов.
-    """
+    """Возвращает (selection, company_name, manager_chat_id) для логирования и алертов."""
     selection = await session.get(Selection, selection_id)
     if not selection:
         return None, "Клиент", None
@@ -82,6 +101,7 @@ async def _resolve_selection_context(
 
     return selection, company_name, manager_chat_id
 
+
 async def _save_chat_message(
     session: AsyncSession,
     selection_id: int,
@@ -90,7 +110,7 @@ async def _save_chat_message(
     answer: str,
     needs_attention: bool,
 ) -> None:
-    """Записывает вопрос клиента и ответ ИИ-ассистента в таблицу chat_messages."""
+    """Записывает вопрос клиента и ответ ИИ в таблицу chat_messages."""
     session.add(
         ChatMessage(
             selection_id=selection_id,
@@ -110,27 +130,84 @@ async def _save_chat_message(
         )
     )
 
-# [AUDIT-CRUTCH]: Очень высокая цикломатическая сложность функции (ранг E в complexity_report.txt) и отсутствие в модуле механизма инвалидации кэша (DELETE FROM llm_cache WHERE event_id = :event_id).
-async def ask_regulation_question(
+
+async def _retrieve_regulation_chunks(
+    session: AsyncSession,
+    event_id: int,
+    question: str,
+    fallback_text: str,
+) -> str:
+    """
+    Фолбэк-режим (Chunk Hybrid RAG): извлечение Топ-5 чанков из event_chunks со строгим WHERE event_id = :event_id.
+    Используется, если регламент превышает 35 000 символов (Раздел 10.4 artifact.md).
+    """
+    q_vec: list[float] | None = None
+    if settings.EMBEDDING_API_KEY:
+        try:
+            q_vec = await get_embedding(question)
+        except (RuntimeError, APIError, httpx.HTTPError) as exc:
+            logger.warning(
+                "Не удалось получить вектор вопроса для поиска по чанкам: %s",
+                exc,
+                exc_info=True,
+            )
+
+    if q_vec is not None:
+        stmt = (
+            select(EventChunk)
+            .where(EventChunk.event_id == event_id)
+            .order_by(EventChunk.embedding.cosine_distance(q_vec))
+            .limit(5)
+        )
+    else:
+        stmt = (
+            select(EventChunk)
+            .where(EventChunk.event_id == event_id)
+            .order_by(EventChunk.chunk_index.asc())
+            .limit(5)
+        )
+
+    res = await session.execute(stmt)
+    chunks = res.scalars().all()
+    if chunks:
+        return "\n\n---\n\n".join(ch.content for ch in chunks)
+
+    logger.warning("Чанки для event_id=%s не найдены в БД. Используется начало регламента.", event_id)
+    return fallback_text[:35000]
+
+
+def _build_tariff_context(tariff: EventTariff | None, today: datetime.date) -> str:
+    """Формирует текстовый контекст параметров рекомендованного тарифа для системного промпта."""
+    if tariff is None:
+        return "Рекомендованный тариф: не зафиксирован (общие условия участия)."
+
+    base_val = float(tariff.base_price) if tariff.base_price is not None else None
+    eb_val = float(tariff.early_bird_price) if tariff.early_bird_price is not None else None
+    eb_dl = tariff.early_bird_deadline
+
+    price_parts: list[str] = []
+    if base_val is None:
+        price_parts.append("Базовая стоимость: По запросу")
+    else:
+        price_parts.append(f"Базовая стоимость: {int(base_val)} руб. (с НДС)")
+
+    if eb_val is not None and eb_dl is not None:
+        status_eb = "активна" if eb_dl >= today else "завершена"
+        price_parts.append(f"Цена Early Bird: {int(eb_val)} руб. до {eb_dl.isoformat()} ({status_eb})")
+
+    return (
+        f"Рекомендованный тариф: «{tariff.tariff_name}» (роль: {tariff.participation_role}). "
+        f"{'; '.join(price_parts)}. "
+        f"Включенные опции: {tariff.included_benefits or 'согласно общей программе'}."
+    )
+
+
+async def _find_recommended_tariff(
     session: AsyncSession,
     selection_id: int,
     event_id: int,
-    question_text: str,
-) -> AskRegulationQuestionOut:
-    """
-    Изолированный RAG-ответ клиенту по регламенту конкретного события (Задача D-09).
-    1. Находит рекомендованный тариф в подборке (защищено от дублей между bundle_group=1 и 2).
-    2. Проверяет точный кэш в таблице llm_cache по SHA-256.
-    3. При промахе кэша передает регламент (Context Stuffing <= 35 000 символов) и параметры тарифа в LLM.
-    4. Сохраняет диалог в chat_messages (с коммитом транзакции) и при is_answer_found=False отправляет пуш в Telegram.
-    """
-    question_clean = question_text.strip()
-
-    event = await session.get(Event, event_id)
-    if not event:
-        raise LookupError(f"Мероприятие с ID={event_id} не найдено")
-
-    # Безопасная выборка элемента подборки (упорядочено по bundle_group=1, чтобы не падать с MultipleResultsFound)
+) -> tuple[int, EventTariff | None]:
+    """Извлекает ID и ORM-объект рекомендованного тарифа для мероприятия в рамках подборки."""
     item_stmt = (
         select(SelectionItem)
         .where(
@@ -142,86 +219,50 @@ async def ask_regulation_question(
     )
     item_res = await session.execute(item_stmt)
     selection_item = item_res.scalars().first()
-
-    tariff_id = selection_item.recommended_tariff_id if (selection_item and selection_item.recommended_tariff_id) else 0
+    tariff_id = (
+        selection_item.recommended_tariff_id
+        if (selection_item and selection_item.recommended_tariff_id)
+        else 0
+    )
     tariff = await session.get(EventTariff, tariff_id) if tariff_id else None
+    return tariff_id, tariff
 
-    selection_obj, company_name, manager_chat_id = await _resolve_selection_context(session, selection_id)
 
-    primary_cache_key = build_rag_cache_key(event_id, tariff_id, question_clean)
-    cache_keys_to_check = [primary_cache_key]
-    if tariff_id != 0:
-        # [AUDIT-FAKE]: Фолбэк на ключ кэша с tariff_id=0 возвращает предзаписанный ответ для чужого/общего тарифа, нарушая изоляцию ответа по рекомендованному тарифу клиента.
-        cache_keys_to_check.append(build_rag_cache_key(event_id, 0, question_clean))
-
-    cached_entry: LLMCache | None = None
-    # [AUDIT-TIMEBOMB]: Выполнение SQL-запросов SELECT в цикле по ключам кэша вместо одного запроса WHERE cache_key IN (...), а также json.loads без защиты от JSONDecodeError.
-    for ck in cache_keys_to_check:
-        res = await session.execute(select(LLMCache).where(LLMCache.cache_key == ck))
-        cached_entry = res.scalar_one_or_none()
-        if cached_entry is not None:
-            break
-
-    if cached_entry is not None:
-        cached_data = json.loads(cached_entry.response_text)
-        is_found = bool(cached_data.get("is_answer_found", True))
-        ans_text = str(cached_data.get("answer_text") or POLITE_FALLBACK_TEXT)
-        src_quote = cached_data.get("source_quote") if is_found else None
-
-        if selection_obj is not None:
-            await _save_chat_message(
-                session=session,
-                selection_id=selection_id,
-                event_id=event_id,
-                question=question_clean,
-                answer=ans_text,
-                needs_attention=not is_found,
-            )
-            await session.commit()
-
-        # Автоматическая эскалация отключена: клиент подтверждает передачу куратору вручную
-        # [AUDIT-FAKE]: Даже при промахе кэша и возврате от LLM is_answer_found=False (когда промпт обещает клиенту "вопрос уже передан персональному менеджеру") отправка в Telegram не вызывается, а возвращается константа False.
-    escalated = False
-
-        return AskRegulationQuestionOut(
-            event_id=event_id,
-            question_text=question_clean,
-            is_answer_found=is_found,
-            answer_text=ans_text,
-            source_quote=src_quote,
-            from_cache=True,
-            escalated_to_telegram=escalated,
+async def _try_load_cached_rag_response(
+    session: AsyncSession,
+    cache_key: str,
+) -> RAGResponse | None:
+    """Проверяет таблицу llm_cache и валидирует JSON через строгую схему RAGResponse."""
+    cache_res = await session.execute(select(LLMCache).where(LLMCache.cache_key == cache_key))
+    cached_entry = cache_res.scalar_one_or_none()
+    if cached_entry is None:
+        return None
+    try:
+        parsed = RAGResponse.model_validate_json(cached_entry.response_text)
+        if not parsed.is_answer_found:
+            parsed.source_quote = None
+        if not parsed.answer_text.strip():
+            parsed.answer_text = POLITE_FALLBACK_TEXT
+        return parsed
+    except (ValidationError, ValueError) as val_err:
+        logger.warning(
+            "Поврежденная запись в llm_cache (key=%s): %s. Переход к генерации.",
+            cache_key,
+            val_err,
+            exc_info=True,
         )
+        return None
 
-    regulation_text = (event.full_regulation_markdown or event.summary or "").strip()
-    if len(regulation_text) > 35000:
-        # [AUDIT-STUB]: Вместо обязательного гибридного поиска Топ-5 чанков в таблице event_chunks (WHERE event_id = :event_id) при длине > 35 000 символов (раздел 10.4 artifact.md) текст тупо обрезается срезом [:35000].
-        # [AUDIT-FAKE]: Имитация работы с длинными регламентами — отсечение хвоста документа приводит к потере разделов с финансовыми условиями и требованиями к спикерам.
-        regulation_text = regulation_text[:35000] + "\n...[Текст регламента сокращен до 35 000 символов]..."
 
-    today = datetime.date.today()
-    if tariff is not None:
-        base_val = float(tariff.base_price) if tariff.base_price is not None else None
-        eb_val = float(tariff.early_bird_price) if tariff.early_bird_price is not None else None
-        eb_dl = tariff.early_bird_deadline
-
-        price_parts = []
-        if base_val is None:
-            price_parts.append("Базовая стоимость: По запросу")
-        else:
-            price_parts.append(f"Базовая стоимость: {int(base_val)} руб. (с НДС)")
-        if eb_val is not None and eb_dl is not None:
-            status_eb = "активна" if eb_dl >= today else "завершена"
-            price_parts.append(f"Цена Early Bird: {int(eb_val)} руб. до {eb_dl.isoformat()} ({status_eb})")
-
-        tariff_context = (
-            f"Рекомендованный тариф: «{tariff.tariff_name}» (роль: {tariff.participation_role}). "
-            f"{'; '.join(price_parts)}. "
-            f"Включенные опции: {tariff.included_benefits or 'согласно общей программе'}."
-        )
-    else:
-        tariff_context = "Рекомендованный тариф: не зафиксирован (общие условия участия)."
-
+def _build_rag_prompts(
+    event: Event,
+    tariff: EventTariff | None,
+    regulation_text: str,
+    question_clean: str,
+    today: datetime.date,
+) -> tuple[str, str]:
+    """Формирует системный и пользовательский промпты для изолированного RAG."""
+    tariff_context = _build_tariff_context(tariff, today)
     location_str = "Онлайн" if event.is_online else (event.city or "Не указан")
     system_prompt = (
         "Ты — точный консультант по регламентам и условиям участия деловых мероприятий.\n"
@@ -230,8 +271,9 @@ async def ask_regulation_question(
         "ЖЕСТКИЕ ПРАВИЛА (ZERO-HALLUCINATION):\n"
         "1. Отвечай только по фактам из текста. Никогда не додумывай цены, скидки, трансферы, отели или технические условия.\n"
         "2. Если точного ответа в тексте регламента и описании тарифа НЕТ, обязательно верни `is_answer_found=False`, "
-        "`source_quote=None` и вежливо напиши, что точных данных по этому вопросу нет в открытом регламенте, "
-        "поэтому вопрос уже передан персональному менеджеру для уточнения у организаторов.\n"
+        "`source_quote=None` и вежливо напиши: 'Точных данных по этому вопросу нет в открытом регламенте мероприятия "
+        "(как правило, такие детали согласовываются с оргкомитетом в индивидуальном порядке). "
+        "Вы можете передать вопрос персональному менеджеру для уточнения у организаторов.'\n"
         "3. Если ответ найден (`is_answer_found=True`), приведи в `source_quote` точную подтверждающую цитату из текста.\n\n"
         f"Контекст карточки мероприятия:\n"
         f"- Название: {event.canonical_title}\n"
@@ -239,81 +281,174 @@ async def ask_regulation_question(
         f"- Даты проведения: {event.start_date.isoformat()} — {event.end_date.isoformat()}\n"
         f"- {tariff_context}"
     )
-
     user_prompt = (
         f"Официальный регламент и программа мероприятия:\n"
         f"---\n{regulation_text}\n---\n\n"
         f"Вопрос клиента: {question_clean}"
     )
+    return system_prompt, user_prompt
 
-    llm_call_succeeded = False
+
+async def _query_rag_llm(
+    event_id: int,
+    system_prompt: str,
+    user_prompt: str,
+) -> RAGResponse:
+    """Выполняет защищенный LLM_SEMAPHORE запрос к LLM со схемой RAGResponse."""
     try:
-        llm_res: RAGResponse = await asyncio.wait_for(
-            structured_llm_client.chat.completions.create(
-                model=settings.LLM_MODEL,
-                response_model=RAGResponse,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_retries=2,
-            ),
-            timeout=25.0,
+        async with LLM_SEMAPHORE:
+            llm_res: RAGResponse = await asyncio.wait_for(
+                structured_llm_client.chat.completions.create(
+                    model=settings.LLM_MODEL,
+                    response_model=RAGResponse,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_retries=2,
+                ),
+                timeout=25.0,
+            )
+    except (TimeoutError, APIError, httpx.HTTPError) as exc:
+        logger.exception(
+            "Сетевой сбой при обращении к LLM в RAG (event_id=%s)",
+            event_id,
         )
-        llm_call_succeeded = True
-    # [AUDIT-FAKE]: Проглатывание сбоев LLM/сети с подменой на ответ "Точных данных нет в открытом регламенте", что вводит клиента в заблуждение при падении API.
-    except Exception as exc:
-        logger.error("Ошибка вызова LLM в RAG (event_id=%s): %s", event_id, exc)
-        llm_res = RAGResponse(
-            is_answer_found=False,
-            answer_text=POLITE_FALLBACK_TEXT,
-            source_quote=None,
-        )
+        raise RuntimeError(f"Сервис RAG временно недоступен: {exc}") from exc
 
-    # Нормализация полей ответа
     if not llm_res.is_answer_found:
         llm_res.source_quote = None
         if not llm_res.answer_text or not llm_res.answer_text.strip():
             llm_res.answer_text = POLITE_FALLBACK_TEXT
+    return llm_res
 
-    if llm_call_succeeded and llm_res.is_answer_found:
-        existing_cache = await session.get(LLMCache, primary_cache_key)
-        if existing_cache is None:
-            session.add(
-                LLMCache(
-                    cache_key=primary_cache_key,
-                    event_id=event_id,
-                    response_text=json.dumps(
-                        {
-                            "is_answer_found": True,
-                            "answer_text": llm_res.answer_text,
-                            "source_quote": llm_res.source_quote,
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
+
+async def _persist_and_escalate_rag_result(
+    session: AsyncSession,
+    selection_id: int,
+    event: Event,
+    question_clean: str,
+    primary_cache_key: str,
+    llm_res: RAGResponse,
+    auto_escalate: bool,
+) -> AskRegulationQuestionOut:
+    """Сохраняет ответ LLM в кэш/историю чата и при необходимости эскалирует вопрос менеджеру в Telegram."""
+    if llm_res.is_answer_found:
+        session.add(
+            LLMCache(
+                cache_key=primary_cache_key,
+                event_id=event.id,
+                response_text=llm_res.model_dump_json(),
             )
+        )
+
+    selection_obj, company_name, manager_chat_id = await _resolve_selection_context(session, selection_id)
+    escalated = False
+    if not llm_res.is_answer_found and auto_escalate:
+        alert_text = format_escalation_alert(
+            company_name=company_name,
+            event_title=event.canonical_title,
+            question_text=question_clean,
+        )
+        escalated = await send_manager_alert(alert_text, chat_id=manager_chat_id)
 
     if selection_obj is not None:
         await _save_chat_message(
             session=session,
             selection_id=selection_id,
-            event_id=event_id,
+            event_id=event.id,
             question=question_clean,
             answer=llm_res.answer_text,
             needs_attention=not llm_res.is_answer_found,
         )
     await session.commit()
 
-    # [AUDIT-FAKE]: Даже при промахе кэша и возврате от LLM is_answer_found=False (когда промпт обещает клиенту "вопрос уже передан персональному менеджеру") отправка в Telegram не вызывается, а возвращается константа False.
-    escalated = False
-
     return AskRegulationQuestionOut(
-        event_id=event_id,
+        event_id=event.id,
         question_text=question_clean,
         is_answer_found=llm_res.is_answer_found,
         answer_text=llm_res.answer_text,
         source_quote=llm_res.source_quote,
         from_cache=False,
         escalated_to_telegram=escalated,
+    )
+
+
+async def _build_cached_rag_out(
+    session: AsyncSession,
+    selection_id: int,
+    event_id: int,
+    question_clean: str,
+    cached_rag: RAGResponse,
+) -> AskRegulationQuestionOut:
+    """Формирует ответ из кэша RAG и фиксирует вопрос/ответ в истории чата подборки."""
+    selection_obj, _, _ = await _resolve_selection_context(session, selection_id)
+    if selection_obj is not None:
+        await _save_chat_message(
+            session=session,
+            selection_id=selection_id,
+            event_id=event_id,
+            question=question_clean,
+            answer=cached_rag.answer_text,
+            needs_attention=False,
+        )
+        await session.commit()
+    return AskRegulationQuestionOut(
+        event_id=event_id,
+        question_text=question_clean,
+        is_answer_found=cached_rag.is_answer_found,
+        answer_text=cached_rag.answer_text,
+        source_quote=cached_rag.source_quote,
+        from_cache=True,
+        escalated_to_telegram=False,
+    )
+
+
+async def ask_regulation_question(
+    session: AsyncSession,
+    selection_id: int,
+    event_id: int,
+    question_text: str,
+    auto_escalate: bool = False,
+) -> AskRegulationQuestionOut:
+    """
+    Изолированный RAG-ответ клиенту по регламенту конкретного события (Раздел 10.4 artifact.md).
+    """
+    question_clean = question_text.strip()
+    event = await session.get(Event, event_id)
+    if not event:
+        raise LookupError(f"Мероприятие с ID={event_id} не найдено")
+
+    tariff_id, tariff = await _find_recommended_tariff(session, selection_id, event_id)
+    primary_cache_key = build_rag_cache_key(event_id, tariff_id, question_clean)
+
+    cached_rag = await _try_load_cached_rag_response(session, primary_cache_key)
+    if cached_rag is not None:
+        return await _build_cached_rag_out(session, selection_id, event_id, question_clean, cached_rag)
+
+    regulation_text = (event.full_regulation_markdown or event.summary or "").strip()
+    if len(regulation_text) > 35000:
+        regulation_text = await _retrieve_regulation_chunks(
+            session=session,
+            event_id=event_id,
+            question=question_clean,
+            fallback_text=regulation_text,
+        )
+
+    system_prompt, user_prompt = _build_rag_prompts(
+        event=event,
+        tariff=tariff,
+        regulation_text=regulation_text,
+        question_clean=question_clean,
+        today=datetime.date.today(),
+    )
+    llm_res = await _query_rag_llm(event_id, system_prompt, user_prompt)
+    return await _persist_and_escalate_rag_result(
+        session=session,
+        selection_id=selection_id,
+        event=event,
+        question_clean=question_clean,
+        primary_cache_key=primary_cache_key,
+        llm_res=llm_res,
+        auto_escalate=auto_escalate,
     )

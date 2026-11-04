@@ -262,6 +262,27 @@ class InMemoryAsyncSession:
             self.selection_items = [it for it in self.selection_items if it.selection_id != sel_id]
             return InMemoryResult([])
 
+        if "delete from selections" in sql_str:
+            cl_id = next((v for k, v in params.items() if "client_id" in k), None)
+            st_val = next((v for k, v in params.items() if "status" in k), "draft")
+            to_delete = [
+                sid for sid, s in self.selections.items()
+                if s.client_id == cl_id and s.status == st_val
+            ]
+            for sid in to_delete:
+                self.selections.pop(sid, None)
+            return InMemoryResult([])
+
+        if "delete from llm_cache" in sql_str:
+            ev_id = next((v for k, v in params.items() if "event_id" in k), None)
+            deleted_keys = [
+                ck for ck, entry in list(self.llm_cache.items())
+                if entry.event_id == ev_id
+            ]
+            for ck in deleted_keys:
+                self.llm_cache.pop(ck, None)
+            return InMemoryResult(deleted_keys)
+
         if "from llm_cache" in sql_str:
             ck = next((v for k, v in params.items() if "cache_key" in k), None)
             entry = self.llm_cache.get(ck)

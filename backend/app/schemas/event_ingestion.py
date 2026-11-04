@@ -3,6 +3,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants import normalize_city
+
 
 class TariffExtracted(BaseModel):
     """Тариф участия в мероприятии, извлеченный из HTML или PDF."""
@@ -22,39 +24,20 @@ class TariffExtracted(BaseModel):
     )
     included_benefits: str = Field(..., description="Подробный перечень опций, входящих в тариф, одной строкой.")
 
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (C в complexity_report.txt) из-за костыльной подмены вопросов по подстроке вместо строгого Literal из спецификации get_data.md.
+
 class FAQCacheItem(BaseModel):
-    """Готовый ответ на типовой вопрос для предзаполнения llm_cache."""
-    question: str = Field(..., description="Вопрос по регламенту мероприятия (нормализуется к каноническому чипсу при совпадении).")
+    """Готовый ответ на типовой вопрос для предзаполнения llm_cache согласно разделу 5.3 get_data.md."""
+    question: Literal[
+        "Что входит в рекомендованный тариф?",
+        "Какие условия раннего бронирования и дедлайны?",
+        "Формат участия и требования к спикеру",
+        "Что входит в тариф?",
+        "Условия Early Bird",
+        "Требования к спикеру",
+    ] = Field(..., description="Канонический вопрос по регламенту мероприятия.")
     answer: str = Field(..., description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.")
     source_quote: str = Field(..., description="Дословная цитата из регламента, подтверждающая ответ.")
 
-    @model_validator(mode="before")
-    @classmethod
-    # [AUDIT-CRUTCH]: Грубая эвристика по вхождению слова "тариф" или "спикер" принудительно перезаписывает любой кастомный вопрос в один из 3 шаблонных чипсов.
-    def normalize_question(cls, data):
-        """Нормализует вариации вопросов к единому каноническому стандарту."""
-        if isinstance(data, dict) and "question" in data:
-            q = str(data["question"]).strip()
-            aliases = {
-                "Что входит в тариф?": "Что входит в рекомендованный тариф?",
-                "Что входит в рекомендованный тариф?": "Что входит в рекомендованный тариф?",
-                "Условия Early Bird": "Какие условия раннего бронирования и дедлайны?",
-                "Какие условия раннего бронирования и дедлайны?": "Какие условия раннего бронирования и дедлайны?",
-                "Требования к спикеру": "Формат участия и требования к спикеру",
-                "Формат участия и требования к спикеру": "Формат участия и требования к спикеру",
-            }
-            if q in aliases:
-                data["question"] = aliases[q]
-            else:
-                q_lower = q.lower()
-                if "входит в" in q_lower or "тариф" in q_lower:
-                    data["question"] = "Что входит в рекомендованный тариф?"
-                elif "early bird" in q_lower or "ранн" in q_lower or "бронирован" in q_lower:
-                    data["question"] = "Какие условия раннего бронирования и дедлайны?"
-                elif "спикер" in q_lower or "доклад" in q_lower:
-                    data["question"] = "Формат участия и требования к спикеру"
-        return data
 
 class EventIngestionSchema(BaseModel):
     """
@@ -72,10 +55,9 @@ class EventIngestionSchema(BaseModel):
     venue: Optional[str] = Field(None, description="Название площадки, отеля или экспоцентра (или 'Онлайн-платформа').")
     start_date: date = Field(..., description="Дата начала проведения (строго YYYY-MM-DD).")
     end_date: date = Field(..., description="Дата окончания проведения (строго YYYY-MM-DD, совпадает со start_date для однодневных).")
-    # [AUDIT-CRUTCH]: Порог min_length=100, max_length=1500 занижен по сравнению с Quality Gate в get_data.md (требуется min_length=250, max_length=850 для статуса READY).
     summary: str = Field(
-        ..., min_length=100, max_length=1500,
-        description="Содержательное резюме мероприятия (300–800 символов): главные темы, формат и целевая аудитория."
+        ..., min_length=250, max_length=850,
+        description="Содержательное резюме мероприятия (250–850 символов): главные темы, формат и целевая аудитория."
     )
     themes: List[str] = Field(..., description="Массив ключевых тегов (например, ['строительство', 'девелопмент', 'КРТ', 'BIM']).")
     full_regulation_markdown: str = Field(
@@ -89,13 +71,14 @@ class EventIngestionSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    # [AUDIT-CRUTCH]: Валидатор обнуляет онлайн-маркеры в city, но не вызывает normalize_city(self.city) для канонизации названия города перед записью в БД.
     def validate_event_ingestion(self):
-        """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true) и end_date >= start_date."""
+        """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true), нормализацию города и end_date >= start_date."""
         if not self.city or (isinstance(self.city, str) and self.city.strip().lower() in ("онлайн", "online", "нет", "null")):
             self.city = None
             self.is_online = True
+        elif self.city:
+            self.city = normalize_city(self.city)
+
         if self.end_date < self.start_date:
             self.end_date = self.start_date
         return self
-

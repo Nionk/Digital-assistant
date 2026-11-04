@@ -188,8 +188,10 @@ async def get_public_showcase(
     # [AUDIT-TIMEBOMB]: Проблема N+1 SQL-запросов — внутри цикла по элементам подборки выполняются отдельные db.get(Event) и db.get(EventTariff).
     # [AUDIT-CRUTCH]: Условие if not event or not tariff: continue молча выбрасывает из витрины мероприятия, у которых recommended_tariff_id равен NULL.
     for item in items:
-        event = await db.get(Event, item.event_id)
-        tariff = await db.get(EventTariff, item.recommended_tariff_id) if item.recommended_tariff_id else None
+        event = item.event or await db.get(Event, item.event_id)
+        tariff = item.recommended_tariff or (
+            await db.get(EventTariff, item.recommended_tariff_id) if item.recommended_tariff_id else None
+        )
 
         if not event or not tariff:
             continue
@@ -212,6 +214,8 @@ async def get_public_showcase(
             if earliest_deadline is None or tariff.early_bird_deadline < earliest_deadline:
                 earliest_deadline = tariff.early_bird_deadline
 
+        valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
+        ev_fmt = event.event_format if event.event_format in valid_formats else "conference"
         role = tariff.participation_role if tariff.participation_role in ("delegate", "speaker", "sponsor") else "delegate"
         reaction = item.client_reaction if item.client_reaction in ("pending", "interested", "rejected") else "pending"
 
@@ -220,7 +224,7 @@ async def get_public_showcase(
                 selection_item_id=item.id,
                 event_id=event.id,
                 canonical_title=event.canonical_title,
-                event_format=event.event_format,
+                event_format=ev_fmt,
                 city=event.city,
                 is_online=event.is_online,
                 venue=event.venue,

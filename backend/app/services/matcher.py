@@ -4,12 +4,16 @@ import itertools
 import logging
 import re
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Literal, TypeAlias
 
+import httpx
+from openai import APIError
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
 from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
@@ -21,23 +25,30 @@ from app.schemas.manager import (
     MatchResponseOut,
     TariffOptionOut,
 )
-from app.services.ai_client import get_embedding, structured_llm_client
+from app.services.ai_client import LLM_SEMAPHORE, get_embedding, structured_llm_client
 from app.services.profiler import extract_client_profile
 
 logger = logging.getLogger(__name__)
 
+EventFormat: TypeAlias = Literal["roundtable", "business_breakfast", "forum", "conference", "session"]
+ParticipationRole: TypeAlias = Literal["delegate", "speaker", "sponsor"]
+
+
 @dataclass
 class ScoredEventCandidate:
     """Кандидат мероприятия с рассчитанным RRF-рейтингом и разделенными тарифами."""
+
     event: Event
     rrf_score: float
     all_tariffs: list[TariffOptionOut]
     priced_tariffs: list[TariffOptionOut]
     on_request_tariffs: list[TariffOptionOut]
 
+
 @dataclass
 class EvaluatedCombo:
     """Оцененная комбинация мероприятий с назначенными тарифами и флагами соблюдения ограничений."""
+
     candidates: tuple[ScoredEventCandidate, ...]
     chosen_tariffs: tuple[TariffOptionOut, ...]
     total_actual_price: float
@@ -50,56 +61,76 @@ class EvaluatedCombo:
     has_date_conflict: bool = False
     matched_speaker_count: int = 0
 
+
 class EventRationaleLLMItem(BaseModel):
     event_id: int = Field(..., description="ID мероприятия из переданного списка")
     ai_rationale: str = Field(
         ...,
-        description="Краткое (1-2 предложения) убедительное обоснование для клиента, почему выбрано это событие и эта роль участия."
+        description="Краткое (1-2 предложения) убедительное обоснование для клиента, почему выбрано это событие и эта роль участия.",
     )
+
 
 class PitchAndRationalesLLMResponse(BaseModel):
     rationales: list[EventRationaleLLMItem] = Field(
         default_factory=list,
-        description="Список обоснований для каждого переданного мероприятия по его event_id."
+        description="Список обоснований для каждого переданного мероприятия по его event_id.",
     )
     generated_pitch_text: str = Field(
         ...,
         description=(
             "Живое, персонализированное сопроводительное письмо клиенту от лица менеджера без спам-штампов. "
             "Используй ТОЛЬКО переданные точные цифры общей стоимости, базовой стоимости, экономии Early Bird и дат."
-        )
+        ),
     )
 
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
+
+def _normalize_participation_role(raw_role: str | None) -> ParticipationRole:
+    """Приводит строковую роль из БД к строгому типу ParticipationRole."""
+    if raw_role == "speaker":
+        return "speaker"
+    if raw_role == "sponsor":
+        return "sponsor"
+    return "delegate"
+
+
+def _normalize_event_format(raw_format: str | None) -> EventFormat:
+    """Приводит строковый формат события из БД к строгому типу EventFormat."""
+    if raw_format == "roundtable":
+        return "roundtable"
+    if raw_format == "business_breakfast":
+        return "business_breakfast"
+    if raw_format == "forum":
+        return "forum"
+    if raw_format == "session":
+        return "session"
+    return "conference"
+
+
+def _clean_fts_term(kw: str) -> str | None:
+    """Очищает поисковый термин от спецсимволов и оборачивает фразы в кавычки."""
+    clean = re.sub(r"\s+", " ", re.sub(r"[^\w\s\-]", " ", kw)).strip()
+    if len(clean) < 2:
+        return None
+    return f'"{clean}"' if " " in clean else clean
+
+
 def build_fts_or_query(profile: ClientQueryExtracted) -> str:
     """
     Формирует безопасную строку запроса для PostgreSQL websearch_to_tsquery('russian', ...).
     Исключает спецсимволы и гарантирует непустой запрос за счет фолбэка на semantic_search_query (rules.md п. 4.3).
     """
-    raw_terms = profile.themes_keywords if profile.themes_keywords else []
-    cleaned_terms: list[str] = []
-
-    for kw in raw_terms:
-        clean = re.sub(r"[^\w\s\-]", " ", kw).strip()
-        clean = re.sub(r"\s+", " ", clean)
-        if len(clean) >= 2:
-            cleaned_terms.append(f'"{clean}"' if " " in clean else clean)
-
+    cleaned_terms = [t for kw in (profile.themes_keywords or []) if (t := _clean_fts_term(kw)) is not None]
     if not cleaned_terms and profile.semantic_search_query:
-        words = [
-            re.sub(r"[^\w\-]", "", w).strip()
-            for w in profile.semantic_search_query.split()
-        ]
-        cleaned_terms = [w for w in words if len(w) >= 3][:8]
+        words = [re.sub(r"[^\w\-]", "", w).strip() for w in profile.semantic_search_query.split()]
+        cleaned_terms = [w for w in words if len(w) >= 3]
 
-    # [AUDIT-FAKE]: При пустых ключевых словах и запросе подставляется захардкоженная строка "строительство OR девелопмент", нарушающая мультиотраслевую архитектуру.
-    return " OR ".join(cleaned_terms) if cleaned_terms else "строительство OR девелопмент"
+    return " OR ".join(cleaned_terms) if cleaned_terms else "мероприятие OR конференция OR форум"
+
 
 def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut:
     """
     Переводит ORM-модель EventTariff в схему TariffOptionOut с детерминированным расчетом
     актуальной цены (actual_price) и экономии раннего бронирования (savings) на сегодня.
-    Корректно обрабатывает бесплатные тарифы (0.0) и тарифы 'По запросу' (None).
     """
     base = float(t.base_price) if t.base_price is not None else None
     eb = float(t.early_bird_price) if t.early_bird_price is not None else None
@@ -114,12 +145,10 @@ def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut
         actual = base
         savings = 0.0
 
-    role = t.participation_role if t.participation_role in ("delegate", "speaker", "sponsor") else "delegate"
-
     return TariffOptionOut(
         tariff_id=t.id,
         tariff_name=t.tariff_name,
-        participation_role=role,  # type: ignore[arg-type]
+        participation_role=_normalize_participation_role(t.participation_role),
         base_price=base,
         early_bird_price=eb,
         early_bird_deadline=t.early_bird_deadline,
@@ -127,6 +156,7 @@ def build_tariff_option(t: EventTariff, today: datetime.date) -> TariffOptionOut
         savings=savings,
         included_benefits=t.included_benefits,
     )
+
 
 def build_default_rationale(
     event: Event,
@@ -151,6 +181,7 @@ def build_default_rationale(
     loc = "онлайн-формате" if event.is_online else f"г. {event.city}"
     return f"Приоритетная площадка по направлениям ({themes_str}) в {loc}: обеспечивает {role_label}."
 
+
 def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
     """Проверяет строгое соответствие мероприятия географическому фильтру клиента."""
     if profile.cities:
@@ -161,13 +192,64 @@ def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
         return not bool(ev.is_online)
     return True
 
+
 def _matches_date_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
     """Проверяет попадание мероприятия в календарный диапазон клиента."""
     if profile.date_from is not None and ev.start_date < profile.date_from:
         return False
-    if profile.date_to is not None and ev.end_date > profile.date_to:
-        return False
-    return True
+    return not (profile.date_to is not None and ev.end_date > profile.date_to)
+
+
+def _build_sql_filter_conditions(
+    profile: ClientQueryExtracted,
+    today: datetime.date,
+    strict_filters: bool,
+    enforce_dates: bool,
+) -> list[ColumnElement[bool]]:
+    """Формирует список предикатов SQL WHERE для гибридного RRF-поиска."""
+    conditions: list[ColumnElement[bool]] = [
+        Event.is_active.is_(True),
+        Event.summary_embedding.is_not(None),
+        or_(Event.data_status == "ready", Event.data_status.is_(None)),
+    ]
+    if not strict_filters:
+        return conditions
+
+    if enforce_dates:
+        if profile.date_from is not None:
+            conditions.append(Event.start_date >= profile.date_from)
+        if profile.date_to is not None:
+            conditions.append(Event.end_date <= profile.date_to)
+
+    if profile.cities:
+        if profile.include_online:
+            conditions.append(or_(Event.city.in_(profile.cities), Event.is_online.is_(True)))
+        else:
+            conditions.append(and_(Event.city.in_(profile.cities), Event.is_online.is_(False)))
+    elif not profile.include_online:
+        conditions.append(Event.is_online.is_(False))
+
+    max_allowed_price = profile.total_budget_max * 1.10
+    tariff_exists_stmt = exists(
+        select(1).where(
+            and_(
+                EventTariff.event_id == Event.id,
+                or_(
+                    EventTariff.base_price.is_(None),
+                    EventTariff.base_price <= max_allowed_price,
+                    and_(
+                        EventTariff.early_bird_deadline.is_not(None),
+                        EventTariff.early_bird_deadline >= today,
+                        EventTariff.early_bird_price.is_not(None),
+                        EventTariff.early_bird_price <= max_allowed_price,
+                    ),
+                ),
+            )
+        )
+    )
+    conditions.append(tariff_exists_stmt)
+    return conditions
+
 
 async def fetch_hybrid_rrf_candidates(
     session: AsyncSession,
@@ -177,56 +259,14 @@ async def fetch_hybrid_rrf_candidates(
     today: datetime.date,
     strict_filters: bool = True,
     limit: int = 15,
+    enforce_dates: bool = True,
 ) -> list[tuple[Event, float]]:
     """
     Выполняет гибридный поиск (векторная близость pgvector + полнотекстовый поиск FTS)
     с объединением рангов по формуле Reciprocal Rank Fusion (k=60).
-    Использует нативные выражения SQLAlchemy 2.0 Core для защиты от ошибок типизации asyncpg.
     """
-    # [AUDIT-CRUTCH]: В условиях выборки отсутствует проверка Quality Gate (Event.data_status == 'ready' из get_data.md), из-за чего в подбор попадают сырые карточки со статусом NEEDS_ENRICHMENT.
-    conditions = [
-        Event.is_active.is_(True),
-        Event.summary_embedding.is_not(None),
-    ]
+    conditions = _build_sql_filter_conditions(profile, today, strict_filters, enforce_dates)
 
-    if strict_filters:
-        if profile.date_from is not None:
-            conditions.append(Event.start_date >= profile.date_from)
-        if profile.date_to is not None:
-            conditions.append(Event.end_date <= profile.date_to)
-
-        if profile.cities:
-            if profile.include_online:
-                conditions.append(or_(Event.city.in_(profile.cities), Event.is_online.is_(True)))
-            else:
-                conditions.append(and_(Event.city.in_(profile.cities), Event.is_online.is_(False)))
-        elif not profile.include_online:
-            conditions.append(Event.is_online.is_(False))
-
-        # В строгом пуле для основных пакетов должен быть хотя бы один ЧИСЛОВОЙ тариф в рамках бюджета (+10%).
-        # Это защищает Топ-15 от засорения дорогими форумами только из-за наличия у них спонсорского пакета base_price IS NULL.
-        # [AUDIT-CRUTCH]: Вопреки разделу 10.3 artifact.md подзапрос EXISTS отбрасывает события с base_price IS NULL (EventTariff.base_price.is_not(None)) и сразу закладывает +10% к бюджету в первичном SQL-фильтре.
-        max_allowed_price = profile.total_budget_max * 1.10
-        tariff_exists_stmt = exists(
-            select(1).where(
-                and_(
-                    EventTariff.event_id == Event.id,
-                    EventTariff.base_price.is_not(None),
-                    or_(
-                        EventTariff.base_price <= max_allowed_price,
-                        and_(
-                            EventTariff.early_bird_deadline.is_not(None),
-                            EventTariff.early_bird_deadline >= today,
-                            EventTariff.early_bird_price.is_not(None),
-                            EventTariff.early_bird_price <= max_allowed_price,
-                        ),
-                    ),
-                )
-            )
-        )
-        conditions.append(tariff_exists_stmt)
-
-    # Косинусное расстояние (pgvector <=>) и полнотекстовый ранг (ts_rank_cd)
     vec_dist_expr = Event.summary_embedding.cosine_distance(query_vec)
     ts_query_expr = func.websearch_to_tsquery("russian", fts_query_str)
     fts_rank_expr = func.ts_rank_cd(Event.search_vector, ts_query_expr)
@@ -246,18 +286,8 @@ async def fetch_hybrid_rrf_candidates(
         order_by=[candidates_cte.c.fts_rank.desc(), candidates_cte.c.vec_distance.asc()]
     ).label("r_fts")
 
-    ranked_cte = (
-        select(
-            candidates_cte.c.event_id,
-            r_vec_col,
-            r_fts_col,
-        )
-        .cte("ranked")
-    )
-
-    rrf_score_expr = (
-        (1.0 / (60.0 + ranked_cte.c.r_vec)) + (1.0 / (60.0 + ranked_cte.c.r_fts))
-    ).label("rrf_score")
+    ranked_cte = select(candidates_cte.c.event_id, r_vec_col, r_fts_col).cte("ranked")
+    rrf_score_expr = ((1.0 / (60.0 + ranked_cte.c.r_vec)) + (1.0 / (60.0 + ranked_cte.c.r_fts))).label("rrf_score")
 
     final_stmt = (
         select(Event, rrf_score_expr)
@@ -265,92 +295,35 @@ async def fetch_hybrid_rrf_candidates(
         .order_by(rrf_score_expr.desc())
         .limit(limit)
     )
-
     result = await session.execute(final_stmt)
-    rows = result.all()
-    return [(row[0], float(row[1])) for row in rows]
+    return [(row[0], float(row[1])) for row in result.all()]
 
-# [AUDIT-CRUTCH]: Очень высокая цикломатическая сложность (ранг E в complexity_report.txt).
-async def get_scored_candidates(
+
+def _theme_matches_keywords(theme: str, keywords: Sequence[str]) -> bool:
+    """Проверяет двустороннее вхождение тега мероприятия и ключевых слов профиля."""
+    t_low = theme.lower()
+    return any(kw.lower() in t_low or t_low in kw.lower() for kw in keywords)
+
+
+def _calculate_domain_bonus(ev: Event, profile: ClientQueryExtracted) -> float:
+    """Вычисляет дополнительный RRF-бонус за точное совпадение формата, города и тегов."""
+    bonus = 0.0
+    if profile.preferred_formats and ev.event_format in profile.preferred_formats:
+        bonus += 0.004
+    if profile.cities and ev.city in profile.cities:
+        bonus += 0.003
+    if profile.themes_keywords and ev.themes:
+        matched_kw = sum(1 for t in ev.themes if _theme_matches_keywords(t, profile.themes_keywords))
+        bonus += min(0.006, matched_kw * 0.002)
+    return bonus
+
+
+async def _load_tariffs_by_event(
     session: AsyncSession,
-    profile: ClientQueryExtracted,
+    event_ids: list[int],
     today: datetime.date,
-) -> list[ScoredEventCandidate]:
-    """
-    Собирает кандидатов с тарифами.
-    1. Сначала выполняет строгий поиск с проверкой дат, городов и доступных числовых тарифов.
-    2. Добирает события из расширенного RRF-пула со строгим соблюдением географии (`profile.cities`),
-       чтобы события из других городов никогда не подмешивались в пакет, когда в выбранном городе есть площадки.
-    """
-    try:
-        query_vec = await get_embedding(profile.semantic_search_query)
-    except Exception as exc:
-        logger.warning("Embedding API fallback triggered (%s): %s", type(exc).__name__, exc)
-        # [AUDIT-FAKE]: При сбое API эмбеддингов ошибка глушится и подставляется фейковый константный вектор [1/sqrt(dim)] * dim, превращающий косинусный поиск pgvector в фикцию.
-        dim = settings.EMBEDDING_DIM
-        val = 1.0 / (dim ** 0.5)
-        query_vec = [val] * dim
-
-    fts_query_str = build_fts_or_query(profile)
-
-    strict_rows = await fetch_hybrid_rrf_candidates(
-        session=session,
-        profile=profile,
-        query_vec=query_vec,
-        fts_query_str=fts_query_str,
-        today=today,
-        strict_filters=True,
-        limit=15,
-    )
-
-    events_map: dict[int, tuple[Event, float]] = {
-        ev.id: (ev, score)
-        for ev, score in strict_rows
-        if _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile)
-    }
-
-    # Добираем из расширенного поиска (чтобы захватить чисто 'По запросу' события в ТОМ ЖЕ городе и периоде)
-    # [AUDIT-TIMEBOMB]: Повторный тяжелый RRF-запрос по всей таблице events без SQL-фильтров города и дат (strict_filters=False, limit=20) с последующей фильтрацией в Python: при росте БД события нужного города не попадут в глобальный Топ-20 и будут потеряны.
-    relaxed_rows = await fetch_hybrid_rrf_candidates(
-        session=session,
-        profile=profile,
-        query_vec=query_vec,
-        fts_query_str=fts_query_str,
-        today=today,
-        strict_filters=False,
-        limit=20,
-    )
-
-    # Шаг 2А: события в запрошенном городе и периоде (например, форумы с тарифом 'По запросу')
-    for ev, score in relaxed_rows:
-        if ev.id not in events_map and _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile):
-            events_map[ev.id] = (ev, score * 0.90)
-        if len(events_map) >= 20:
-            break
-
-    # Шаг 2Б: если в запрошенный период дат событий меньше target_events_count, ослабляем даты, но СТРОГО сохраняем город
-    if len(events_map) < profile.target_events_count:
-        for ev, score in relaxed_rows:
-            if ev.id not in events_map and _matches_location_filter(ev, profile):
-                events_map[ev.id] = (ev, score * 0.80)
-            if len(events_map) >= 20:
-                break
-
-    # Шаг 2В: аварийный фолбэк ТОЛЬКО если клиент НЕ ограничивал поиск конкретными городами (profile.cities пуст).
-    # Если клиент явно указал конкретный город (например, Санкт-Петербург), а в базе подходящих площадок нет,
-    # мы СТРОГО не подмешиваем события других городов, чтобы не дезинформировать менеджера и клиента.
-    if not events_map and not profile.cities:
-        for ev, score in relaxed_rows:
-            if ev.id not in events_map:
-                events_map[ev.id] = (ev, score * 0.70)
-            if len(events_map) >= 20:
-                break
-
-    if not events_map:
-        return []
-
-    # Загружаем тарифы одним плоским запросом (предотвращает N+1 и MissingGreenlet)
-    event_ids = list(events_map.keys())
+) -> dict[int, list[TariffOptionOut]]:
+    """Загружает все тарифы выбранных мероприятий одним плоским SQL-запросом."""
     tariffs_stmt = (
         select(EventTariff)
         .where(EventTariff.event_id.in_(event_ids))
@@ -358,45 +331,79 @@ async def get_scored_candidates(
     )
     tariffs_res = await session.execute(tariffs_stmt)
     tariffs_by_event: dict[int, list[TariffOptionOut]] = defaultdict(list)
-
     for t_orm in tariffs_res.scalars().all():
         tariffs_by_event[t_orm.event_id].append(build_tariff_option(t_orm, today))
+    return tariffs_by_event
 
+
+async def _fetch_filtered_events_map(
+    session: AsyncSession,
+    profile: ClientQueryExtracted,
+    query_vec: list[float],
+    fts_query_str: str,
+    today: datetime.date,
+) -> dict[int, tuple[Event, float]]:
+    """Выполняет гибридный RRF-поиск с каскадным ослаблением дат при сохранении географии."""
+    strict_rows = await fetch_hybrid_rrf_candidates(
+        session, profile, query_vec, fts_query_str, today, strict_filters=True, limit=20, enforce_dates=True
+    )
+    events_map: dict[int, tuple[Event, float]] = {
+        ev.id: (ev, score)
+        for ev, score in strict_rows
+        if _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile)
+    }
+    if len(events_map) >= profile.target_events_count:
+        return events_map
+
+    relaxed_rows = await fetch_hybrid_rrf_candidates(
+        session, profile, query_vec, fts_query_str, today, strict_filters=True, limit=20, enforce_dates=False
+    )
+    for ev, score in relaxed_rows:
+        if ev.id not in events_map and _matches_location_filter(ev, profile) and len(events_map) < 20:
+            events_map[ev.id] = (ev, score * 0.85)
+    return events_map
+
+
+async def get_scored_candidates(
+    session: AsyncSession,
+    profile: ClientQueryExtracted,
+    today: datetime.date,
+) -> list[ScoredEventCandidate]:
+    """
+    Собирает ранжированных кандидатов с тарифами через гибридный поиск RRF.
+    Строго соблюдает географический фильтр и Quality Gate на уровне SQL.
+    """
+    try:
+        query_vec = await get_embedding(profile.semantic_search_query)
+    except (RuntimeError, APIError, httpx.HTTPError):
+        logger.exception("Ошибка получения эмбеддинга поискового запроса в matcher")
+        raise
+
+    events_map = await _fetch_filtered_events_map(
+        session, profile, query_vec, build_fts_or_query(profile), today
+    )
+    if not events_map:
+        return []
+
+    tariffs_by_event = await _load_tariffs_by_event(session, list(events_map.keys()), today)
     candidates: list[ScoredEventCandidate] = []
     for ev_id, (ev, base_rrf) in events_map.items():
         all_t = tariffs_by_event.get(ev_id, [])
         if not all_t:
             continue
-
-        # Доменный бустинг за попадание в формат, город и ключевые теги
-        bonus = 0.0
-        if profile.preferred_formats and ev.event_format in profile.preferred_formats:
-            bonus += 0.004
-        if profile.cities and ev.city in profile.cities:
-            bonus += 0.003
-        if profile.themes_keywords and ev.themes:
-            matched_kw = sum(
-                1 for t in ev.themes
-                if any(kw.lower() in t.lower() or t.lower() in kw.lower() for kw in profile.themes_keywords)
-            )
-            if matched_kw > 0:
-                bonus += min(0.006, matched_kw * 0.002)
-
-        priced_t = [t for t in all_t if t.actual_price is not None]
-        on_req_t = [t for t in all_t if t.actual_price is None]
-
         candidates.append(
             ScoredEventCandidate(
                 event=ev,
-                rrf_score=base_rrf + bonus,
+                rrf_score=base_rrf + _calculate_domain_bonus(ev, profile),
                 all_tariffs=all_t,
-                priced_tariffs=priced_t,
-                on_request_tariffs=on_req_t,
+                priced_tariffs=[t for t in all_t if t.actual_price is not None],
+                on_request_tariffs=[t for t in all_t if t.actual_price is None],
             )
         )
 
     candidates.sort(key=lambda c: c.rrf_score, reverse=True)
     return candidates
+
 
 def has_offline_date_conflict(candidates: Sequence[ScoredEventCandidate]) -> bool:
     """
@@ -412,7 +419,12 @@ def has_offline_date_conflict(candidates: Sequence[ScoredEventCandidate]) -> boo
                 return True
     return False
 
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
+
+def _tariff_sort_key(t: TariffOptionOut) -> tuple[float, float]:
+    """Ключ сортировки тарифов: минимальная цена, при равенстве — максимальная скидка Early Bird."""
+    return (t.actual_price if t.actual_price is not None else 0.0, -(t.savings or 0.0))
+
+
 def pick_best_tariff_for_role(
     priced_tariffs: list[TariffOptionOut],
     target_role: str,
@@ -424,26 +436,78 @@ def pick_best_tariff_for_role(
     """
     role_matches = [t for t in priced_tariffs if t.participation_role == target_role]
     if role_matches:
-        best = min(role_matches, key=lambda t: (t.actual_price if t.actual_price is not None else 0.0, -(t.savings or 0.0)))
-        return best, True
+        return min(role_matches, key=_tariff_sort_key), True
 
     if allow_role_fallback and priced_tariffs:
-        # Если запрошен спикер, сначала пробуем спонсорский пакет (часто включает доклад), затем делегатский
         if target_role == "speaker":
             sponsor_matches = [t for t in priced_tariffs if t.participation_role == "sponsor"]
             if sponsor_matches:
-                best_sp = min(sponsor_matches, key=lambda t: (t.actual_price if t.actual_price is not None else 0.0, -(t.savings or 0.0)))
-                return best_sp, False
-        best_any = min(priced_tariffs, key=lambda t: (t.actual_price if t.actual_price is not None else 0.0, -(t.savings or 0.0)))
-        return best_any, False
+                return min(sponsor_matches, key=_tariff_sort_key), False
+        return min(priced_tariffs, key=_tariff_sort_key), False
 
     return None, False
 
-# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
+
+def _sum_tariff_totals(chosen_tariffs: list[TariffOptionOut]) -> tuple[float, float, float]:
+    """Суммирует актуальную стоимость, базовую стоимость и экономию по выбранным тарифам."""
+    total_actual = round(sum(t.actual_price or 0.0 for t in chosen_tariffs), 2)
+    total_base = round(sum(t.base_price or 0.0 for t in chosen_tariffs), 2)
+    total_savings = round(sum(t.savings or 0.0 for t in chosen_tariffs), 2)
+    return total_actual, total_base, total_savings
+
+
+def _build_evaluated_combo(
+    combo: tuple[ScoredEventCandidate, ...],
+    chosen_tariffs: list[TariffOptionOut],
+    budget_max: float,
+    strict_roles_ok: bool,
+    date_conflict: bool,
+) -> EvaluatedCombo:
+    """Конструирует объект EvaluatedCombo с точным расчетом стоимости, экономии и дедлайнов."""
+    total_actual, total_base, total_savings = _sum_tariff_totals(chosen_tariffs)
+    deadlines = [
+        t.early_bird_deadline
+        for t in chosen_tariffs
+        if (t.savings or 0.0) > 0 and t.early_bird_deadline is not None
+    ]
+    return EvaluatedCombo(
+        candidates=combo,
+        chosen_tariffs=tuple(chosen_tariffs),
+        total_actual_price=total_actual,
+        total_base_price=total_base,
+        total_savings=total_savings,
+        earliest_deadline=min(deadlines) if deadlines else None,
+        combo_score=sum(c.rrf_score for c in combo),
+        is_over_budget_tolerance=total_actual > budget_max,
+        roles_strictly_matched=strict_roles_ok,
+        has_date_conflict=date_conflict,
+        matched_speaker_count=sum(1 for t in chosen_tariffs if t.participation_role == "speaker"),
+    )
+
+
+def _match_tariffs_for_speaker_set(
+    combo: tuple[ScoredEventCandidate, ...],
+    speaker_set: set[int],
+    default_role: str,
+    allow_role_fallback: bool,
+) -> tuple[list[TariffOptionOut], bool] | None:
+    """Подбирает тарифы для заданного распределения спикерских слотов внутри комбинации."""
+    chosen_tariffs: list[TariffOptionOut] = []
+    strict_roles_ok = True
+    for idx, cand in enumerate(combo):
+        desired_role = "speaker" if idx in speaker_set else default_role
+        t, is_strict = pick_best_tariff_for_role(cand.priced_tariffs, desired_role, allow_role_fallback)
+        if t is None:
+            return None
+        strict_roles_ok = strict_roles_ok and is_strict
+        chosen_tariffs.append(t)
+    return chosen_tariffs, strict_roles_ok
+
+
 def evaluate_candidate_tuple(
     combo: tuple[ScoredEventCandidate, ...],
     min_speaker_events: int,
-    required_roles: list[str],
+    required_roles: Sequence[str],
     budget_max: float,
     check_dates: bool = True,
     allow_role_fallback: bool = False,
@@ -458,104 +522,41 @@ def evaluate_candidate_tuple(
 
     k = len(combo)
     s_needed = min(max(0, min_speaker_events), k)
-    default_role = "sponsor" if ("sponsor" in required_roles and "delegate" not in required_roles and s_needed == 0) else "delegate"
+    is_pure_sponsor = "sponsor" in required_roles and "delegate" not in required_roles and s_needed == 0
+    default_role = "sponsor" if is_pure_sponsor else "delegate"
 
     valid_evaluations: list[EvaluatedCombo] = []
-
     for speaker_indices in itertools.combinations(range(k), s_needed):
-        speaker_set = set(speaker_indices)
-        chosen_tariffs: list[TariffOptionOut] = []
-        possible = True
-        strict_roles_ok = True
-
-        for idx, cand in enumerate(combo):
-            desired_role = "speaker" if idx in speaker_set else default_role
-            t, is_strict = pick_best_tariff_for_role(
-                cand.priced_tariffs,
-                target_role=desired_role,
-                allow_role_fallback=allow_role_fallback,
+        matched = _match_tariffs_for_speaker_set(combo, set(speaker_indices), default_role, allow_role_fallback)
+        if matched is not None:
+            chosen_tariffs, strict_roles_ok = matched
+            valid_evaluations.append(
+                _build_evaluated_combo(combo, chosen_tariffs, budget_max, strict_roles_ok, date_conflict)
             )
-            if t is None:
-                possible = False
-                break
-            if not is_strict:
-                strict_roles_ok = False
-            chosen_tariffs.append(t)
-
-        if not possible:
-            continue
-
-        total_actual = round(sum(t.actual_price if t.actual_price is not None else 0.0 for t in chosen_tariffs), 2)
-        total_base = round(sum(t.base_price if t.base_price is not None else 0.0 for t in chosen_tariffs), 2)
-        total_savings = round(sum(t.savings or 0.0 for t in chosen_tariffs), 2)
-
-        deadlines = [
-            t.early_bird_deadline
-            for t in chosen_tariffs
-            if (t.savings or 0.0) > 0 and t.early_bird_deadline is not None
-        ]
-        earliest_dl = min(deadlines) if deadlines else None
-
-        base_rrf_sum = sum(c.rrf_score for c in combo)
-        is_over_tolerance = total_actual > budget_max
-        speaker_count = sum(1 for t in chosen_tariffs if t.participation_role == "speaker")
-
-        valid_evaluations.append(
-            EvaluatedCombo(
-                candidates=combo,
-                chosen_tariffs=tuple(chosen_tariffs),
-                total_actual_price=total_actual,
-                total_base_price=total_base,
-                total_savings=total_savings,
-                earliest_deadline=earliest_dl,
-                combo_score=base_rrf_sum,
-                is_over_budget_tolerance=is_over_tolerance,
-                roles_strictly_matched=strict_roles_ok,
-                has_date_conflict=date_conflict,
-                matched_speaker_count=speaker_count,
-            )
-        )
-
     return valid_evaluations
 
-# [AUDIT-CRUTCH]: Экстремальная цикломатическая сложность (ранг F в complexity_report.txt).
-def build_bundles(
-    candidates: list[ScoredEventCandidate],
+
+def _collect_valid_combos(
+    priced_pool: list[ScoredEventCandidate],
     profile: ClientQueryExtracted,
-) -> tuple[list[EvaluatedCombo], list[tuple[ScoredEventCandidate, TariffOptionOut]]]:
+    target_k: int,
+) -> tuple[dict[int, list[EvaluatedCombo]], dict[int, list[EvaluatedCombo]]]:
     """
-    Комбинаторный сборщик пакетов (Задача D-07, время работы < 15 мс).
-    Формирует до 2 диверсифицированных вариантов пакета:
-      - Вариант №1 (Максимальное совпадение по темам и ролям)
-      - Вариант №2 (Оптимальный по экономии бюджета / Альтернативный состав)
-    и список бонусных мероприятий с тарифом 'По запросу' (base_price IS NULL).
+    Перебирает комбинации без календарных коллизий (check_dates=True) и раскладывает их
+    в строгие (<= budget) и допустимые с отклонением до +10% (<= budget * 1.10).
     """
-    # Пул кандидатов с числовыми ценами для комбинаторики (Топ-15 по RRF)
-    priced_pool = [c for c in candidates if c.priced_tariffs][:15]
-
-    if not priced_pool:
-        bonus_only: list[tuple[ScoredEventCandidate, TariffOptionOut]] = []
-        for cand in candidates:
-            if cand.on_request_tariffs:
-                bonus_only.append((cand, cand.on_request_tariffs[0]))
-                if len(bonus_only) >= 3:
-                    break
-        return [], bonus_only
-
-    target_k = min(profile.target_events_count, len(priced_pool))
     budget = profile.total_budget_max
     max_tolerance_budget = budget * 1.10
-
-    strict_combos_by_k: dict[int, list[EvaluatedCombo]] = defaultdict(list)
-    tolerance_combos_by_k: dict[int, list[EvaluatedCombo]] = defaultdict(list)
-    all_fallback_combos: list[EvaluatedCombo] = []
+    strict_by_k: dict[int, list[EvaluatedCombo]] = defaultdict(list)
+    tolerance_by_k: dict[int, list[EvaluatedCombo]] = defaultdict(list)
+    req_roles = list(profile.required_roles)
 
     for k in range(target_k, 0, -1):
         for combo_tuple in itertools.combinations(priced_pool, k):
             evals = evaluate_candidate_tuple(
                 combo=combo_tuple,
                 min_speaker_events=profile.min_speaker_events,
-                required_roles=list(profile.required_roles),
+                required_roles=req_roles,
                 budget_max=budget,
                 check_dates=True,
                 allow_role_fallback=False,
@@ -564,87 +565,48 @@ def build_bundles(
                 evals = evaluate_candidate_tuple(
                     combo=combo_tuple,
                     min_speaker_events=profile.min_speaker_events,
-                    required_roles=list(profile.required_roles),
+                    required_roles=req_roles,
                     budget_max=budget,
                     check_dates=True,
                     allow_role_fallback=True,
                 )
-            if not evals:
-                evals = evaluate_candidate_tuple(
-                    combo=combo_tuple,
-                    min_speaker_events=profile.min_speaker_events,
-                    required_roles=list(profile.required_roles),
-                    budget_max=budget,
-                    # [AUDIT-FAKE]: Тихое отключение проверки пересечения дат (check_dates=False), при том что в КП и UI клиенту гарантируется "календарь сверен без пересечений по датам".
-                    check_dates=False,
-                    allow_role_fallback=True,
-                )
-
             for ev_combo in evals:
-                all_fallback_combos.append(ev_combo)
                 if ev_combo.total_actual_price <= budget:
-                    strict_combos_by_k[k].append(ev_combo)
+                    strict_by_k[k].append(ev_combo)
                 elif ev_combo.total_actual_price <= max_tolerance_budget:
-                    tolerance_combos_by_k[k].append(ev_combo)
+                    tolerance_by_k[k].append(ev_combo)
 
-    selected_variants: list[EvaluatedCombo] = []
+    return strict_by_k, tolerance_by_k
 
-    # Сортировочный ключ приоритета:
-    def _v1_sort_key(x: EvaluatedCombo):
-        return (
-            x.roles_strictly_matched,
-            x.matched_speaker_count,
-            not x.has_date_conflict,
-            round(x.combo_score, 6),
-            x.total_savings,
-            -x.total_actual_price,
-        )
 
-    # Выбор Варианта №1
-    for k in range(target_k, 0, -1):
-        pool_k = strict_combos_by_k[k] or tolerance_combos_by_k[k]
-        if pool_k:
-            pool_k.sort(key=_v1_sort_key, reverse=True)
-            selected_variants.append(pool_k[0])
-            break
+def _v1_priority_key(x: EvaluatedCombo) -> tuple[bool, int, bool, float, float, float]:
+    """Ключ сортировки для выбора Варианта №1 (максимальный релевантный охват тем и ролей)."""
+    return (
+        x.roles_strictly_matched,
+        x.matched_speaker_count,
+        not x.has_date_conflict,
+        round(x.combo_score, 6),
+        x.total_savings,
+        -x.total_actual_price,
+    )
 
-    # Аварийная страховка (Уровень 4): если бюджет клиента экстремально мал, берем самый дешевый пакет
-    # [AUDIT-FAKE]: При нехватке бюджета возвращается самый дешевый пакет с любым превышением лимита (хоть в 5 раз дороже бюджета) под видом допустимого отклонения +10% (is_over_budget_tolerance = True).
-    if not selected_variants and all_fallback_combos:
-        all_fallback_combos.sort(
-            key=lambda x: (x.total_actual_price, -int(x.roles_strictly_matched), -x.matched_speaker_count, -x.combo_score)
-        )
-        cheapest = all_fallback_combos[0]
-        cheapest.is_over_budget_tolerance = True
-        selected_variants.append(cheapest)
 
-    if not selected_variants:
-        bonus_fallback: list[tuple[ScoredEventCandidate, TariffOptionOut]] = []
-        for cand in candidates:
-            if cand.on_request_tariffs:
-                bonus_fallback.append((cand, cand.on_request_tariffs[0]))
-                if len(bonus_fallback) >= 2:
-                    break
-        return [], bonus_fallback
+def _select_second_variant(
+    variant_1: EvaluatedCombo,
+    candidate_pool: list[EvaluatedCombo],
+) -> EvaluatedCombo | None:
+    """Подбирает диверсифицированный Вариант №2 (оптимальный по экономии бюджета или альтернативный состав)."""
+    v1_ids = {c.event.id for c in variant_1.candidates}
+    distinct_pool = [c for c in candidate_pool if {x.event.id for x in c.candidates} != v1_ids]
+    if not distinct_pool:
+        return None
 
-    variant_1 = selected_variants[0]
-    v1_event_ids = {c.event.id for c in variant_1.candidates}
-
-    # Выбор Варианта №2 (Оптимальный по экономии бюджета / Альтернативный состав)
-    all_budget_valid: list[EvaluatedCombo] = []
-    for k in range(target_k, 0, -1):
-        all_budget_valid.extend(strict_combos_by_k[k])
-        # [AUDIT-CRUTCH]: Смешивание строгих пакетов и пакетов с превышением +10% для Варианта №2 нарушает правило rules.md (п. 4.3): допуск +10% разрешен только если строгих вариантов меньше двух.
-        all_budget_valid.extend(tolerance_combos_by_k[k])
-
-    cheaper_alternatives = [
-        c for c in all_budget_valid
-        if {x.event.id for x in c.candidates} != v1_event_ids
-        and (c.total_actual_price < variant_1.total_actual_price or c.total_savings > variant_1.total_savings)
+    cheaper = [
+        c for c in distinct_pool
+        if c.total_actual_price < variant_1.total_actual_price or c.total_savings > variant_1.total_savings
     ]
-
-    if cheaper_alternatives:
-        cheaper_alternatives.sort(
+    if cheaper:
+        cheaper.sort(
             key=lambda x: (
                 not x.has_date_conflict,
                 x.matched_speaker_count,
@@ -654,56 +616,94 @@ def build_bundles(
             ),
             reverse=True,
         )
-        selected_variants.append(cheaper_alternatives[0])
-    else:
-        other_alternatives = [
-            c for c in all_budget_valid
-            if {x.event.id for x in c.candidates} != v1_event_ids
-        ]
-        if not other_alternatives and all_fallback_combos:
-            other_alternatives = [
-                c for c in all_fallback_combos
-                if {x.event.id for x in c.candidates} != v1_event_ids
-            ]
-        if other_alternatives:
-            other_alternatives.sort(
-                key=lambda x: (
-                    not x.has_date_conflict,
-                    x.roles_strictly_matched,
-                    x.matched_speaker_count,
-                    round(x.combo_score, 6),
-                    -x.total_actual_price,
-                ),
-                reverse=True,
-            )
-            selected_variants.append(other_alternatives[0])
+        return cheaper[0]
 
-    # Бонусный слот: до 2 лучших по RRF событий с тарифом 'По запросу' (base_price IS NULL).
-    # Приоритет отдаем событиям, еще не вошедшим в Вариант №1, чтобы расширить кругозор менеджера.
-    bonus_pairs: list[tuple[ScoredEventCandidate, TariffOptionOut]] = []
-    for cand in candidates:
-        if cand.on_request_tariffs and cand.event.id not in v1_event_ids:
-            # Если клиент просил спикерство, предпочитаем on_request-тариф с ролью speaker
-            on_req_speaker = [t for t in cand.on_request_tariffs if t.participation_role == "speaker"]
-            chosen_on_req = on_req_speaker[0] if (profile.min_speaker_events > 0 and on_req_speaker) else cand.on_request_tariffs[0]
-            bonus_pairs.append((cand, chosen_on_req))
-            if len(bonus_pairs) >= 2:
-                break
+    distinct_pool.sort(key=_v1_priority_key, reverse=True)
+    return distinct_pool[0]
 
-    if len(bonus_pairs) < 2:
-        used_bonus_ids = {c.event.id for c, _ in bonus_pairs}
-        for cand in candidates:
-            if cand.on_request_tariffs and cand.event.id not in used_bonus_ids:
-                on_req_speaker = [t for t in cand.on_request_tariffs if t.participation_role == "speaker"]
-                chosen_on_req = on_req_speaker[0] if (profile.min_speaker_events > 0 and on_req_speaker) else cand.on_request_tariffs[0]
-                bonus_pairs.append((cand, chosen_on_req))
-                if len(bonus_pairs) >= 2:
-                    break
 
-    return selected_variants, bonus_pairs
+def _pick_on_request_tariff(cand: ScoredEventCandidate, min_speaker_events: int) -> TariffOptionOut:
+    """Выбирает приоритетный тариф со статусом 'По запросу' для бонусного мероприятия."""
+    if min_speaker_events > 0:
+        for t in cand.on_request_tariffs:
+            if t.participation_role == "speaker":
+                return t
+    return cand.on_request_tariffs[0]
 
-# Алиас для обратной совместимости со спецификацией d_07_matcher_py.md
+
+def _select_bonus_on_request_pairs(
+    candidates: list[ScoredEventCandidate],
+    profile: ClientQueryExtracted,
+    excluded_event_ids: set[int],
+    limit: int = 2,
+) -> list[tuple[ScoredEventCandidate, TariffOptionOut]]:
+    """Формирует список бонусных мероприятий со статусом тарифа 'Цена по запросу' (base_price IS NULL)."""
+    on_req_cands = [c for c in candidates if c.on_request_tariffs]
+    ordered = [c for c in on_req_cands if c.event.id not in excluded_event_ids] + [
+        c for c in on_req_cands if c.event.id in excluded_event_ids
+    ]
+    return [(c, _pick_on_request_tariff(c, profile.min_speaker_events)) for c in ordered[:limit]]
+
+
+def _pick_best_combo_from_buckets(
+    buckets_by_k: dict[int, list[EvaluatedCombo]],
+    target_k: int,
+) -> EvaluatedCombo | None:
+    """Находит лучшую комбинацию максимального размера K в заданном словаре корзин."""
+    for k in range(target_k, 0, -1):
+        if buckets_by_k[k]:
+            buckets_by_k[k].sort(key=_v1_priority_key, reverse=True)
+            return buckets_by_k[k][0]
+    return None
+
+
+def _build_v2_candidate_pool(
+    strict_by_k: dict[int, list[EvaluatedCombo]],
+    tolerance_by_k: dict[int, list[EvaluatedCombo]],
+    target_k: int,
+) -> list[EvaluatedCombo]:
+    """Собирает пул кандидатов для Варианта №2 (с допуском +10% только при < 2 строгих пакетов)."""
+    all_strict = [combo for k in range(target_k, 0, -1) for combo in strict_by_k[k]]
+    distinct_strict_sets = {frozenset(x.event.id for x in c.candidates) for c in all_strict}
+    if len(distinct_strict_sets) >= 2:
+        return all_strict
+    return [*all_strict, *(combo for k in range(target_k, 0, -1) for combo in tolerance_by_k[k])]
+
+
+def build_bundles(
+    candidates: list[ScoredEventCandidate],
+    profile: ClientQueryExtracted,
+) -> tuple[list[EvaluatedCombo], list[tuple[ScoredEventCandidate, TariffOptionOut]]]:
+    """
+    Комбинаторный сборщик пакетов (Задача D-07, время работы < 15 мс).
+    Строго соблюдает отсутствие очных календарных коллизий и правило бюджета (допуск +10% только при < 2 строгих вариантов).
+    """
+    priced_pool = [c for c in candidates if c.priced_tariffs][:15]
+    if not priced_pool:
+        return [], _select_bonus_on_request_pairs(candidates, profile, set(), limit=3)
+
+    target_k = min(profile.target_events_count, len(priced_pool))
+    strict_by_k, tolerance_by_k = _collect_valid_combos(priced_pool, profile, target_k)
+
+    variant_1 = _pick_best_combo_from_buckets(strict_by_k, target_k) or _pick_best_combo_from_buckets(
+        tolerance_by_k, target_k
+    )
+    if variant_1 is None:
+        return [], _select_bonus_on_request_pairs(candidates, profile, set(), limit=2)
+
+    selected_variants: list[EvaluatedCombo] = [variant_1]
+    v1_event_ids = {c.event.id for c in variant_1.candidates}
+    v2_pool = _build_v2_candidate_pool(strict_by_k, tolerance_by_k, target_k)
+
+    variant_2 = _select_second_variant(variant_1, v2_pool)
+    if variant_2 is not None:
+        selected_variants.append(variant_2)
+
+    return selected_variants, _select_bonus_on_request_pairs(candidates, profile, v1_event_ids, limit=2)
+
+
 assemble_bundles_and_bonus = build_bundles
+
 
 def build_fallback_pitch(
     client_name: str,
@@ -743,7 +743,123 @@ def build_fallback_pitch(
     )
     return pitch
 
-# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt), нестандартный extra_body={"reasoning": {"effort": "low"}} и тихое проглатывание ошибок LLM в except Exception.
+
+def _collect_unique_events_for_pitch(
+    selected_variants: list[EvaluatedCombo],
+    bonus_pairs: list[tuple[ScoredEventCandidate, TariffOptionOut]],
+) -> dict[int, tuple[Event, TariffOptionOut]]:
+    """Собирает словарь уникальных событий и назначенных им тарифов для генерации обоснований."""
+    unique_info: dict[int, tuple[Event, TariffOptionOut]] = {}
+    for var in selected_variants:
+        for cand, tariff in zip(var.candidates, var.chosen_tariffs):
+            if cand.event.id not in unique_info:
+                unique_info[cand.event.id] = (cand.event, tariff)
+    for cand, tariff in bonus_pairs:
+        if cand.event.id not in unique_info:
+            unique_info[cand.event.id] = (cand.event, tariff)
+    return unique_info
+
+
+def _format_event_line_for_pitch(ev_id: int, ev: Event, tar: TariffOptionOut) -> str:
+    """Форматирует описание одного мероприятия и тарифа для промпта генерации КП."""
+    loc = "Онлайн" if ev.is_online else ev.city
+    if tar.actual_price is None:
+        price_info = "По запросу"
+    elif tar.actual_price == 0.0:
+        price_info = "0 руб. (бесплатно)"
+    else:
+        price_info = f"{int(tar.actual_price)} руб."
+    return (
+        f"- event_id={ev_id}: «{ev.canonical_title}» ({ev.event_format}, {loc}, {ev.start_date}). "
+        f"Темы: {', '.join(ev.themes or [])}. Выбранный тариф: «{tar.tariff_name}» "
+        f"(роль: {tar.participation_role}, цена: {price_info})."
+    )
+
+
+def _build_pitch_prompts(
+    client_name: str,
+    raw_notes: str,
+    profile: ClientQueryExtracted,
+    v1: EvaluatedCombo,
+    unique_events_info: dict[int, tuple[Event, TariffOptionOut]],
+) -> tuple[str, str]:
+    """Формирует системный и пользовательский промпты для генерации КП и обоснований."""
+    events_lines = [_format_event_line_for_pitch(ev_id, ev, tar) for ev_id, (ev, tar) in unique_events_info.items()]
+    eb_clause = (
+        f"Экономия Early Bird: {int(v1.total_savings)} руб. при бронировании до {v1.earliest_deadline.isoformat()}."
+        if (v1.total_savings > 0 and v1.earliest_deadline is not None)
+        else "Специальных скидок Early Bird в данном пакете нет (экономия 0 руб., не упоминай скидки в письме)."
+    )
+    v1_summary = (
+        f"Состав Варианта №1 ({len(v1.candidates)} событий): "
+        + ", ".join(f"«{c.event.canonical_title}» (тариф {t.tariff_name})" for c, t in zip(v1.candidates, v1.chosen_tariffs))
+        + f". Итоговая стоимость пакета: {int(v1.total_actual_price)} руб. "
+        + f"Базовая стоимость: {int(v1.total_base_price)} руб. "
+        + eb_clause
+    )
+    system_prompt = (
+        "Ты — ведущий менеджер сопровождения делового B2B-агентства. "
+        "Сформируй персональные аргументы выбора площадки (ai_rationale) для каждого мероприятия из списка "
+        "(укажи ценность целевой аудитории и какую задачу решает формат: целевые деловые знакомства, экспертное выступление в сессии или вовлечение аудитории на стенде) "
+        "и напиши живое, убедительное сопроводительное письмо клиенту (generated_pitch_text) без канцеляризмов и спам-штампов. "
+        "В письме подчеркни, что календарь сверен без пересечений по срокам, укажи бюджет внешних взносов организаторам "
+        "и готовность агентства взять на себя подготовку спикера и организацию целевых встреч. "
+        "КРИТИЧЕСКОЕ ПРАВИЛО: В письме используй ТОЛЬКО переданные ниже цифры стоимости Варианта №1 и дат. "
+        "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
+    )
+    user_prompt = (
+        f"Клиент: {client_name}\nИсходная заметка созвона: {raw_notes}\n"
+        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
+        f"Точные параметры Варианта №1 для письма:\n{v1_summary}\n\n"
+        f"Список всех мероприятий для генерации ai_rationale:\n" + "\n".join(events_lines)
+    )
+    return system_prompt, user_prompt
+
+
+async def _request_pitch_from_llm(
+    system_prompt: str,
+    user_prompt: str,
+) -> PitchAndRationalesLLMResponse | None:
+    """Выполняет защищенный LLM_SEMAPHORE вызов к LLM для генерации КП и обоснований."""
+    try:
+        async with LLM_SEMAPHORE:
+            res: PitchAndRationalesLLMResponse = await asyncio.wait_for(
+                structured_llm_client.chat.completions.create(
+                    model=settings.LLM_MODEL,
+                    response_model=PitchAndRationalesLLMResponse,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_retries=1,
+                ),
+                timeout=25.0,
+            )
+            return res
+    except (TimeoutError, APIError, httpx.HTTPError) as exc:
+        logger.warning(
+            "Сбой генерации текста КП через LLM (%s: %s). Применяется детерминированный шаблон.",
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        return None
+
+
+def _merge_llm_rationales(
+    rationales_map: dict[int, str],
+    llm_res: PitchAndRationalesLLMResponse | None,
+    fallback_pitch: str,
+) -> tuple[dict[int, str], str]:
+    """Объединяет детерминированные обоснования с ответом LLM при его наличии."""
+    if llm_res is None:
+        return rationales_map, fallback_pitch
+    for item in llm_res.rationales:
+        if item.event_id in rationales_map and item.ai_rationale.strip():
+            rationales_map[item.event_id] = item.ai_rationale.strip()
+    return rationales_map, (llm_res.generated_pitch_text.strip() or fallback_pitch)
+
+
 async def generate_pitch_and_rationales(
     client_name: str,
     raw_notes: str,
@@ -752,19 +868,10 @@ async def generate_pitch_and_rationales(
     bonus_pairs: list[tuple[ScoredEventCandidate, TariffOptionOut]],
 ) -> tuple[dict[int, str], str]:
     """
-    За 1 сетевой вызов к structured_llm_client генерирует обоснования (ai_rationale)
-    для всех уникальных событий и сопроводительное письмо по цифрам Варианта №1.
+    За 1 сетевой вызов к structured_llm_client (под защитой LLM_SEMAPHORE) генерирует обоснования
+    (ai_rationale) для всех уникальных событий и сопроводительное письмо по цифрам Варианта №1.
     """
-    unique_events_info: dict[int, tuple[Event, TariffOptionOut]] = {}
-    for var in selected_variants:
-        for cand, tariff in zip(var.candidates, var.chosen_tariffs):
-            if cand.event.id not in unique_events_info:
-                unique_events_info[cand.event.id] = (cand.event, tariff)
-
-    for cand, tariff in bonus_pairs:
-        if cand.event.id not in unique_events_info:
-            unique_events_info[cand.event.id] = (cand.event, tariff)
-
+    unique_events_info = _collect_unique_events_for_pitch(selected_variants, bonus_pairs)
     rationales_map: dict[int, str] = {
         ev_id: build_default_rationale(ev, tar, profile)
         for ev_id, (ev, tar) in unique_events_info.items()
@@ -779,96 +886,28 @@ async def generate_pitch_and_rationales(
 
     v1 = selected_variants[0]
     fallback_pitch = build_fallback_pitch(client_name, profile, v1)
-
-    events_prompt_lines = []
-    for ev_id, (ev, tar) in unique_events_info.items():
-        loc = "Онлайн" if ev.is_online else ev.city
-        if tar.actual_price is None:
-            price_info = "По запросу"
-        elif tar.actual_price == 0.0:
-            price_info = "0 руб. (бесплатно)"
-        else:
-            price_info = f"{int(tar.actual_price)} руб."
-
-        events_prompt_lines.append(
-            f"- event_id={ev_id}: «{ev.canonical_title}» ({ev.event_format}, {loc}, {ev.start_date}). "
-            f"Темы: {', '.join(ev.themes or [])}. Выбранный тариф: «{tar.tariff_name}» "
-            f"(роль: {tar.participation_role}, цена: {price_info})."
-        )
-
-    eb_clause = (
-        f"Экономия Early Bird: {int(v1.total_savings)} руб. при бронировании до {v1.earliest_deadline.isoformat()}."
-        if (v1.total_savings > 0 and v1.earliest_deadline is not None)
-        else "Специальных скидок Early Bird в данном пакете нет (экономия 0 руб., не упоминай скидки в письме)."
-    )
-
-    v1_summary = (
-        f"Состав Варианта №1 ({len(v1.candidates)} событий): "
-        + ", ".join(f"«{c.event.canonical_title}» (тариф {t.tariff_name})" for c, t in zip(v1.candidates, v1.chosen_tariffs))
-        + f". Итоговая стоимость пакета: {int(v1.total_actual_price)} руб. "
-        + f"Базовая стоимость: {int(v1.total_base_price)} руб. "
-        + eb_clause
-    )
-
-    system_prompt = (
-        "Ты — ведущий менеджер сопровождения делового B2B-агентства. "
-        "Сформируй персональные аргументы выбора площадки (ai_rationale) для каждого мероприятия из списка "
-        "(укажи ценность целевой аудитории и какую задачу решает формат: целевые деловые знакомства, экспертное выступление в сессии или вовлечение аудитории на стенде) "
-        "и напиши живое, убедительное сопроводительное письмо клиенту (generated_pitch_text) без канцеляризмов и спам-штампов. "
-        "В письме подчеркни, что календарь сверен без пересечений по срокам, укажи бюджет внешних взносов организаторам "
-        "и готовность агентства взять на себя подготовку спикера и организацию целевых встреч. "
-        "КРИТИЧЕСКОЕ ПРАВИЛО: В письме используй ТОЛЬКО переданные ниже цифры стоимости Варианта №1 и дат. "
-        "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
-    )
-
-    user_prompt = (
-        f"Клиент: {client_name}\n"
-        f"Исходная заметка созвона: {raw_notes}\n"
-        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
-        f"Точные параметры Варианта №1 для письма:\n{v1_summary}\n\n"
-        f"Список всех мероприятий для генерации ai_rationale:\n" + "\n".join(events_prompt_lines)
-    )
-
-    try:
-        llm_res: PitchAndRationalesLLMResponse = await asyncio.wait_for(
-            structured_llm_client.chat.completions.create(
-                model=settings.LLM_MODEL,
-                response_model=PitchAndRationalesLLMResponse,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_retries=1,
-                extra_body={"reasoning": {"effort": "low"}},
-            ),
-            timeout=25.0,
-        )
-        for item in llm_res.rationales:
-            if item.event_id in rationales_map and item.ai_rationale.strip():
-                rationales_map[item.event_id] = item.ai_rationale.strip()
-
-        final_pitch = llm_res.generated_pitch_text.strip() or fallback_pitch
-        return rationales_map, final_pitch
-
-    except Exception as exc:
-        logger.warning("LLM Pitch generation fallback triggered (%s): %s", type(exc).__name__, exc)
+    if not settings.LLM_API_KEY:
         return rationales_map, fallback_pitch
+
+    system_prompt, user_prompt = _build_pitch_prompts(
+        client_name, raw_notes, profile, v1, unique_events_info
+    )
+    llm_res = await _request_pitch_from_llm(system_prompt, user_prompt)
+    return _merge_llm_rationales(rationales_map, llm_res, fallback_pitch)
+
 
 def _to_bundle_event_item(
     cand: ScoredEventCandidate,
     recommended_tariff: TariffOptionOut,
     rationale: str,
 ) -> BundleEventItemOut:
-    """Собирает выходную карточку BundleEventItemOut."""
+    """Собирает выходную карточку BundleEventItemOut со строгой нормализацией типов."""
     ev = cand.event
-    valid_formats = ("roundtable", "business_breakfast", "forum", "conference", "session")
-    fmt = ev.event_format if ev.event_format in valid_formats else "conference"
-
-    primary_url = ev.source_urls[0] if (ev.source_urls and len(ev.source_urls) > 0) else None
+    primary_url = str(ev.source_urls[0]) if (ev.source_urls and len(ev.source_urls) > 0) else None
     return BundleEventItemOut(
         event_id=ev.id,
         canonical_title=ev.canonical_title,
-        event_format=fmt,  # type: ignore[arg-type]
+        event_format=_normalize_event_format(ev.event_format),
         city=ev.city,
         is_online=ev.is_online,
         venue=ev.venue,
@@ -879,50 +918,16 @@ def _to_bundle_event_item(
         available_tariffs=cand.all_tariffs,
         ai_rationale=rationale,
         website_url=primary_url,
+        data_status=ev.data_status or "ready",
+        missing_data_warnings=list(ev.missing_data_warnings or []),
     )
 
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt); при каждом запуске создается новый черновик Selection без очистки старых draft-подборок клиента.
-async def run_client_matching_pipeline(
-    session: AsyncSession,
-    client_id: int,
-    payload: MatchRequestIn,
-) -> MatchResponseOut:
-    """
-    Полный цикл Задачи D-07 + сохранение черновика подборки в БД:
-    1. Извлекает профиль потребностей через profiler.py (или берет override_profile из UI за 0 мс).
-    2. Проводит гибридный поиск (pgvector + FTS RRF) и отбирает кандидатов.
-    3. Собирает Вариант №1, Вариант №2 и Бонусный слот ('Цена по запросу') через build_bundles().
-    4. Генерирует обоснования и текст КП.
-    5. Сохраняет черновик Selection и SelectionItem в БД и возвращает MatchResponseOut.
-    """
-    today = datetime.date.today()
 
-    client_stmt = select(Client).where(Client.id == client_id)
-    client_res = await session.execute(client_stmt)
-    client_obj = client_res.scalar_one_or_none()
-    client_name = client_obj.company_name if client_obj else f"Клиент #{client_id}"
-
-    if payload.override_profile is not None:
-        extracted_profile = payload.override_profile
-    else:
-        extracted_profile = await extract_client_profile(payload.raw_manager_notes)
-
-    if client_obj is not None:
-        client_obj.raw_manager_notes = payload.raw_manager_notes
-        client_obj.extracted_profile = extracted_profile.model_dump(mode="json")
-
-    candidates = await get_scored_candidates(session, extracted_profile, today)
-
-    evaluated_variants, bonus_pairs = build_bundles(candidates, extracted_profile)
-
-    rationales_map, pitch_text = await generate_pitch_and_rationales(
-        client_name=client_name,
-        raw_notes=payload.raw_manager_notes,
-        profile=extracted_profile,
-        selected_variants=evaluated_variants,
-        bonus_pairs=bonus_pairs,
-    )
-
+def _format_bundle_variants_out(
+    evaluated_variants: list[EvaluatedCombo],
+    rationales_map: dict[int, str],
+) -> list[BundleVariantOut]:
+    """Преобразует оцененные комбинации EvaluatedCombo в выходные схемы BundleVariantOut."""
     bundle_variants_out: list[BundleVariantOut] = []
     for idx, ev_var in enumerate(evaluated_variants, start=1):
         items_out = [
@@ -933,7 +938,6 @@ async def run_client_matching_pipeline(
             )
             for cand, tar in zip(ev_var.candidates, ev_var.chosen_tariffs)
         ]
-
         if idx == 1:
             title = (
                 "Вариант 1: Максимальное совпадение по темам (требует согласования бюджета)"
@@ -955,32 +959,37 @@ async def run_client_matching_pipeline(
                 is_over_budget_tolerance=ev_var.is_over_budget_tolerance,
             )
         )
+    return bundle_variants_out
 
-    bonus_items_out: list[BundleEventItemOut] = [
-        _to_bundle_event_item(
-            cand=cand,
-            recommended_tariff=tar,
-            rationale=rationales_map.get(cand.event.id, ""),
+
+async def _persist_draft_selection(
+    session: AsyncSession,
+    client_id: int,
+    pitch_text: str,
+    budget_limit: float,
+    bundle_variants_out: list[BundleVariantOut],
+) -> int:
+    """Удаляет устаревшие черновики клиента и атомарно сохраняет новый черновик подборки."""
+    await session.execute(
+        delete(Selection).where(
+            Selection.client_id == client_id,
+            Selection.status == "draft",
         )
-        for cand, tar in bonus_pairs
-    ]
+    )
+    new_selection = Selection(
+        client_id=client_id,
+        status="draft",
+        generated_pitch_text=pitch_text,
+        total_budget_limit=budget_limit,
+    )
+    session.add(new_selection)
+    await session.flush()
+    selection_id = new_selection.id
 
-    # [AUDIT-FAKE]: Захардкоженный фейковый selection_id = 10 при отсутствии клиента в БД вместо возврата HTTP 404 Not Found.
-    selection_id = 10  # fallback ID, если вызвано для несуществующего в БД клиента
-    if client_obj is not None:
-        new_selection = Selection(
-            client_id=client_obj.id,
-            status="draft",
-            generated_pitch_text=pitch_text,
-            total_budget_limit=extracted_profile.total_budget_max,
-        )
-        session.add(new_selection)
-        await session.flush()
-        selection_id = new_selection.id
-
-        for variant in bundle_variants_out:
-            for item in variant.items:
-                sel_item = SelectionItem(
+    for variant in bundle_variants_out:
+        for item in variant.items:
+            session.add(
+                SelectionItem(
                     selection_id=selection_id,
                     event_id=item.event_id,
                     recommended_tariff_id=item.recommended_tariff.tariff_id,
@@ -988,9 +997,60 @@ async def run_client_matching_pipeline(
                     ai_rationale=item.ai_rationale,
                     client_reaction="pending",
                 )
-                session.add(sel_item)
+            )
+    await session.commit()
+    return selection_id
 
-        await session.commit()
+
+async def _load_and_update_client_profile(
+    session: AsyncSession,
+    client_id: int,
+    payload: MatchRequestIn,
+) -> tuple[Client, ClientQueryExtracted]:
+    """Загружает клиента из БД и обновляет его сохраненный NER-профиль."""
+    client_res = await session.execute(select(Client).where(Client.id == client_id))
+    client_obj = client_res.scalar_one_or_none()
+    if client_obj is None:
+        raise LookupError(f"Клиент с ID={client_id} не найден")
+
+    extracted_profile = (
+        payload.override_profile
+        if payload.override_profile is not None
+        else await extract_client_profile(payload.raw_manager_notes)
+    )
+    client_obj.raw_manager_notes = payload.raw_manager_notes
+    client_obj.extracted_profile = extracted_profile.model_dump(mode="json")
+    return client_obj, extracted_profile
+
+
+async def run_client_matching_pipeline(
+    session: AsyncSession,
+    client_id: int,
+    payload: MatchRequestIn,
+) -> MatchResponseOut:
+    """
+    Полный цикл Задачи D-07 + сохранение черновика подборки в БД.
+    Выбрасывает LookupError, если клиент с указанным client_id отсутствует в БД.
+    """
+    client_obj, extracted_profile = await _load_and_update_client_profile(session, client_id, payload)
+    candidates = await get_scored_candidates(session, extracted_profile, datetime.date.today())
+    evaluated_variants, bonus_pairs = build_bundles(candidates, extracted_profile)
+
+    rationales_map, pitch_text = await generate_pitch_and_rationales(
+        client_name=client_obj.company_name,
+        raw_notes=payload.raw_manager_notes,
+        profile=extracted_profile,
+        selected_variants=evaluated_variants,
+        bonus_pairs=bonus_pairs,
+    )
+    bundle_variants_out = _format_bundle_variants_out(evaluated_variants, rationales_map)
+    bonus_items_out = [
+        _to_bundle_event_item(cand, tar, rationales_map.get(cand.event.id, ""))
+        for cand, tar in bonus_pairs
+    ]
+    selection_id = await _persist_draft_selection(
+        session, client_obj.id, pitch_text, extracted_profile.total_budget_max, bundle_variants_out
+    )
 
     return MatchResponseOut(
         selection_id=selection_id,
