@@ -20,6 +20,7 @@ export const queryKeys = {
   showcase: (magicToken: string) => ["public", "showcase", magicToken] as const,
 };
 
+// [AUDIT-TIMEBOMB]: Поллинг списка клиентов каждые 10 секунд работает даже в фоновой вкладке (отсутствует refetchIntervalInBackground: false), а сам эндпоинт /api/manager/clients не возвращает ни реакций клиента, ни вопросов из чата.
 export function useManagerDashboard() {
   return useQuery({
     queryKey: queryKeys.managerDashboard,
@@ -68,6 +69,8 @@ export function usePublishSelectionMutation() {
   });
 }
 
+// [AUDIT-STUB]: Вместо выделенного легковесного эндпоинта GET /api/manager/selections/{id}/activity (раздел 11.4 artifact.md) менеджерский монитор вынужден поллить тяжелый публичный эндпоинт витрины /api/public/s/{magic_token}, который вообще не отдает историю чата и вопросы с needs_manager_attention=true!
+// [AUDIT-TIMEBOMB]: Отсутствует refetchIntervalInBackground: false и остановка поллинга при HTTP 404/422, из-за чего невалидный токен спамит бэкенд каждые 10 секунд.
 export function usePublicShowcase(magicToken: string | null | undefined, pollInterval = 10000) {
   return useQuery({
     queryKey: queryKeys.showcase(magicToken || ""),

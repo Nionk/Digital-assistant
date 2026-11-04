@@ -40,6 +40,7 @@ interface RegulationConsultantDrawerProps {
   onEscalateQuestion?: (exchangeId: string, questionText: string) => void;
 }
 
+// [AUDIT-STUB]: Шторка ИИ-консультанта не подгружает историю чата из таблицы chat_messages на бэкенде (ответы менеджера через POST /api/manager/selections/{id}/reply никогда сюда не попадут!) и не имеет вкладки для чтения полного текста регламента (full_regulation_markdown)
 export function RegulationConsultantDrawer({
   isOpen,
   onClose,

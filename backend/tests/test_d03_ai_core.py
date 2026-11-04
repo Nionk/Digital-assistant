@@ -1,22 +1,20 @@
-import asyncio
 import math
 import sys
 import unittest
 from pathlib import Path
+
 from pydantic import BaseModel
 
 # Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
-from app.core.constants import normalize_city, CITY_ALIASES, _clean_key
+from app.core.constants import normalize_city
 from app.services.ai_client import (
-    structured_llm_client,
-    embedding_client,
     get_embedding,
     get_embeddings_batch,
     l2_normalize,
-    EMBEDDING_SEMAPHORE,
+    structured_llm_client,
 )
 
 
@@ -25,6 +23,7 @@ class CityExtractionSchema(BaseModel):
     budget: int
 
 
+# [AUDIT-CRUTCH]: Дублирование тестового набора из backend/scripts/test_ai_core.py; при отсутствии API-ключей интеграционные тесты молча пропускаются через skipTest.
 class TestCityNormalizationUnit(unittest.TestCase):
     """Юнит-тесты на канонизацию названий городов (DoD: >= 10 вариаций)."""
 

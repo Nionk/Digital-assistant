@@ -1,25 +1,28 @@
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import List, Optional
+
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    String,
-    Integer,
     BigInteger,
     Boolean,
-    Numeric,
-    Text,
+    CheckConstraint,
+    Computed,
     Date,
     ForeignKey,
-    Computed,
     Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
     text,
-    CheckConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
-from pgvector.sqlalchemy import Vector
-from app.core.database import Base
+
 from app.core.config import settings
+from app.core.database import Base
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -27,6 +30,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255))
+    # [AUDIT-TIMEBOMB]: Использование DateTime без timezone=True (TIMESTAMP WITHOUT TIME ZONE вместо TIMESTAMPTZ из раздела 8.2 artifact.md) вызывает ошибку asyncpg при передаче timezone-aware дат на всех таблицах модели.
     telegram_chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -39,6 +43,7 @@ class Client(Base):
     company_name: Mapped[str] = mapped_column(String(255))
     contact_person: Mapped[Optional[str]] = mapped_column(String(255))
     raw_manager_notes: Mapped[str] = mapped_column(Text)
+    # [AUDIT-TIMEBOMB]: Отсутствует DateTime(timezone=True) — колонки created_at и updated_at создаются без часового пояса вопреки схеме TIMESTAMPTZ в artifact.md.
     extracted_profile: Mapped[dict] = mapped_column(JSONB, server_default='{}')
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
@@ -81,6 +86,7 @@ class Event(Base):
     )
     
     is_active: Mapped[bool] = mapped_column(Boolean, server_default='true')
+    # [AUDIT-TIMEBOMB]: Отсутствует DateTime(timezone=True) (в artifact.md требуется TIMESTAMPTZ).
     last_scraped_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     tariffs: Mapped[List["EventTariff"]] = relationship(back_populates="event", cascade="all, delete-orphan", lazy="selectin")
@@ -93,6 +99,7 @@ class EventTariff(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey('events.id', ondelete='CASCADE'))
     tariff_name: Mapped[str] = mapped_column(String(255))
     participation_role: Mapped[str] = mapped_column(String(50))
+    # [AUDIT-CRUTCH]: Аннотация Mapped[Optional[float]] не соответствует типу Numeric(12, 2), который возвращает Decimal из БД (риск TypeError при сложении с float).
     base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2))
     early_bird_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2))
     early_bird_deadline: Mapped[Optional[date]] = mapped_column(Date)
@@ -134,6 +141,7 @@ class Selection(Base):
     __tablename__ = 'selections'
     id: Mapped[int] = mapped_column(primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey('clients.id', ondelete='CASCADE'))
+    # [AUDIT-CRUTCH]: Аннотация Mapped[str] конфликтует с UUID(as_uuid=True), возвращающим объект uuid.UUID, а также тип Numeric(12, 2) у total_budget_limit аннотирован как float вместо Decimal.
     magic_token: Mapped[str] = mapped_column(UUID(as_uuid=True), unique=True, server_default=func.gen_random_uuid())
     status: Mapped[str] = mapped_column(String(50), server_default='draft')
     generated_pitch_text: Mapped[Optional[str]] = mapped_column(Text)
@@ -158,6 +166,7 @@ class SelectionItem(Base):
 
     selection: Mapped["Selection"] = relationship(back_populates="items")
     event: Mapped["Event"] = relationship(back_populates="selection_items")
+    # [AUDIT-TIMEBOMB]: Связи event и recommended_tariff не имеют lazy="selectin", что в AsyncSession приводит к падению с MissingGreenlet при обращении без явного selectinload.
     recommended_tariff: Mapped[Optional["EventTariff"]] = relationship()
 
 class ChatMessage(Base):

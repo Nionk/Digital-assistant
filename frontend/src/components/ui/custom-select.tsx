@@ -106,6 +106,7 @@ export function CustomSelect<T extends number | string = number | string>({
               menuClassName
             )}
           >
+            // [AUDIT-CRUTCH]: Кастомный выпадающий список сверстан на div без ARIA-атрибутов (role="listbox"/role="option") и без поддержки клавиатурной навигации (ArrowUp/ArrowDown/Enter)
             {options.map((option) => {
               const isSelected = option.value === value;
               return (

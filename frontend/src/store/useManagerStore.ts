@@ -20,6 +20,7 @@ export interface ProducerProfile {
   dealsCount: number;
 }
 
+// [AUDIT-FAKE]: Бутафорский список кураторов с захардкоженными счетчиками сделок (dealsCount: 6, 5, 3) — переключение профиля меняет только аватарку в шапке и никак не связано с реальной авторизацией или manager_id на бэкенде
 export const PRODUCER_PROFILES: ProducerProfile[] = [
   {
     id: "anna",
@@ -136,6 +137,7 @@ interface ManagerState {
   setProducerModalOpen: (open: boolean) => void;
 }
 
+// [AUDIT-TIMEBOMB]: Все черновики подборок, отредактированные обоснования и опубликованные ссылки хранятся исключительно в оперативной памяти Zustand без persist и без загрузки черновика с бэкенда — нажатие F5 полностью уничтожает несохраненную работу менеджера
 export const useManagerStore = create<ManagerState>((set, get) => ({
   currentProducer: PRODUCER_PROFILES[0],
   isProducerModalOpen: false,
@@ -354,6 +356,7 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
       },
     })),
 
+  // [AUDIT-FAKE]: Вместо перегенерации питча через LLM с учетом измененного пакета мероприятий функция перезаписывает сопроводительное письмо жестким захардкоженным строковым шаблоном
   syncPitchNumbersWithPackage: (clientId, companyName) => {
     const state = get();
     const summary = computeClientFinancialSummary(state, clientId);

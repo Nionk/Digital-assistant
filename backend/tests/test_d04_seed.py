@@ -1,19 +1,16 @@
-import unittest
-import asyncio
 import json
 import math
 import sys
+import unittest
 from pathlib import Path
-from datetime import date
 
 # Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select, func
-
-from app.core.database import async_session_maker
-from app.models.models import User, Client, Event, EventTariff, LLMCache
 from app.core.config import settings
+from app.core.database import async_session_maker
+from app.models.models import Client, Event, EventTariff, LLMCache, User
+from sqlalchemy import select
 from tests.test_d08_d09_d10 import is_postgres_online
 
 
@@ -54,6 +51,7 @@ class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
             res = await s.execute(stmt)
             events = res.scalars().all()
 
+            # [AUDIT-STUB]: Планка DoD в тесте занижена до >= 15 событий, хотя раздел 11.3 и 12.6 artifact.md и .cursorrules требуют 35–40 мероприятий с 9 целевых сайтов.
             self.assertGreaterEqual(len(events), 15, "В базе должно быть не менее 15 активных мероприятий из seed_data.json")
 
             for e in events:
@@ -83,6 +81,7 @@ class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
                     f"Событие {e.id} должно содержать связный регламент в Markdown"
                 )
 
+    # [AUDIT-CRUTCH]: Цикломатическая сложность метода test_03_tariffs_structure_and_pricing_diversity — ранг C (radon).
     async def test_03_tariffs_structure_and_pricing_diversity(self):
         """
         Проверка тарифной сетки:

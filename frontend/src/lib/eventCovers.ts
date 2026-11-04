@@ -9,6 +9,7 @@ export interface EventCoverVisual {
   categoryCaption: string;
 }
 
+// [AUDIT-TIMEBOMB]: Захардкоженные внешние URL картинок с images.unsplash.com — в закрытых корпоративных контурах РФ или при блокировке/троттлинге Unsplash браузер будет висеть на таймаутах загрузки для каждой карточки
 const ARCHITECTURAL_COVERS: EventCoverVisual[] = [
   {
     // Современные небоскребы делового центра (аналог левой карточки с Фото 8 «Форум по девелопменту»)

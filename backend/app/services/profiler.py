@@ -2,13 +2,15 @@ import asyncio
 import datetime
 import logging
 import re
-from app.services.ai_client import structured_llm_client
-from app.schemas.manager import ClientQueryExtracted
-from app.core.constants import normalize_city
+
 from app.core.config import settings
+from app.core.constants import normalize_city
+from app.schemas.manager import ClientQueryExtracted
+from app.services.ai_client import structured_llm_client
 
 logger = logging.getLogger(__name__)
 
+# [AUDIT-CRUTCH]: Хардкод всего 9 городов в регулярках дублирует и противоречит словарю из 100+ городов в app/core/constants.py.
 _CITY_PATTERNS: list[tuple[str, str]] = [
     (r"\bмоскв[а-яё]*\b|\bмск\b", "Москва"),
     (r"\bсанкт[\s\-]*петербург[а-яё]*\b|\bпетербург[а-яё]*\b|\bспб\b|\bпитер[а-яё]*\b", "Санкт-Петербург"),
@@ -37,6 +39,8 @@ _THEME_PATTERNS: list[tuple[str, str]] = [
     (r"операционн[а-яё]*|управлен[а-яё]*|персонал|hr\b", "управление"),
 ]
 
+# [AUDIT-CRUTCH]: Экстремальная цикломатическая сложность (ранг F в complexity_report.txt).
+# [AUDIT-FAKE]: Функция-обманка с захардкоженными регулярками под конкретные фразы из бенчмарка ("полтора миллиона", "ноябрь 2026", "начало 2027"), имитирующая работу NER при сбое LLM.
 def extract_profile_heuristic(
     raw_notes: str,
     today: datetime.date | None = None,
@@ -65,6 +69,7 @@ def extract_profile_heuristic(
     explicit_online = bool(re.search(r"онлайн|вебинар|трансляц", low))
     include_online = False if (strict_offline and not explicit_online) else True
 
+    # [AUDIT-FAKE]: Хардкод дефолтного бюджета 400 000 руб. и точечной фразы "полтора миллиона" из раздела 13.1 artifact.md для подгонки под тесты.
     budget = 400000.0
     if "полтора миллиона" in low or "полтора млн" in low:
         budget = 1500000.0
@@ -145,6 +150,7 @@ def extract_profile_heuristic(
         if re.search(pattern, low) and tag not in themes:
             themes.append(tag)
     if not themes:
+        # [AUDIT-FAKE]: При отсутствии совпадений с узким списком регулярок принудительно подставляются темы ["строительство", "девелопмент"], ломая мультиотраслевую универсальность платформы.
         themes = ["строительство", "девелопмент"]
 
     sem_parts = [*themes]
@@ -170,6 +176,7 @@ def extract_profile_heuristic(
         semantic_search_query=semantic_query,
     )
 
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt) и жесткая привязка системного промпта к строительной отрасли.
 async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
     today = datetime.date.today()
     current_date_str = today.isoformat()
@@ -212,10 +219,12 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
                     {"role": "user", "content": f"Заметка менеджера:\n{raw_notes}"},
                 ],
                 max_retries=1,
+                # [AUDIT-TIMEBOMB]: Нестандартный параметр extra_body={"reasoning": {"effort": "low"}} вызывает ошибку 400 Bad Request на шлюзах, не поддерживающих reasoning API, а timeout=30.0 нарушает лимит 20.0 сек из задачи D-06.
                 extra_body={"reasoning": {"effort": "low"}},
             ),
             timeout=30.0,
         )
+    # [AUDIT-FAKE]: Проглатывание любых ошибок LLM/сети/валидации с тихим возвратом фейкового регулярного парсера heuristic_fallback.
     except Exception as exc:
         logger.warning(
             "LLM profile extraction fallback triggered (%s: %s). Using deterministic heuristic parser.",
@@ -248,6 +257,7 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
 
     # Страховка "ТОЛЬКО <Город>": отключаем онлайн, если онлайн не запрошен явно
     if re.search(
+        # [AUDIT-CRUTCH]: Хардкод проверки "только" всего для 6 городов в обход нормализованного списка extracted_data.cities.
         r"только\s+(в\s+)?(москв|мск|спб|питер|санкт|екатеринбург|казан|сочи)",
         low_notes,
     ) and "онлайн" not in low_notes:

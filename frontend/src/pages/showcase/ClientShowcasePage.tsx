@@ -98,6 +98,7 @@ export function ClientShowcasePage() {
     city: item.city,
   }));
 
+  // [AUDIT-CRUTCH]: Фолбэк || items[0] подставляет первое попавшееся мероприятие из пакета, если activeDrawerEventId не найден (например, после пересборки пакета менеджером)
   const activeDrawerEvent = React.useMemo(() => {
     if (!activeDrawerEventId) return null;
     return (

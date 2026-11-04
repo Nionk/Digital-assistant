@@ -1,5 +1,6 @@
 import socket
 from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,8 @@ class Settings(BaseSettings):
 
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
+    # [AUDIT-TIMEBOMB]: Синхронный блокирующий DNS-запрос socket.getaddrinfo("db", 5432) при импорте модуля может повесить старт приложения при проблемах с DNS.
+    # [AUDIT-CRUTCH]: Мутация DATABASE_URL на лету внутри валидатора вместо явного разделения конфигураций окружения (.env vs docker-compose).
     def resolve_db_host(cls, v: str) -> str:
         """
         Автоматический фолбэк для хоста БД:
@@ -26,6 +29,7 @@ class Settings(BaseSettings):
         return v
 
     # Security
+    # [AUDIT-BACKDOOR]: Захардкоженный предсказуемый SECRET_KEY по умолчанию позволяет подделывать JWT-токены, если переменная не переопределена в окружении.
     SECRET_KEY: str = "super_secret_key_for_jwt_change_me_in_production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440

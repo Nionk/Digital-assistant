@@ -1,6 +1,8 @@
 from datetime import date
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel, Field, model_validator
+
 
 class TariffExtracted(BaseModel):
     """Тариф участия в мероприятии, извлеченный из HTML или PDF."""
@@ -20,6 +22,7 @@ class TariffExtracted(BaseModel):
     )
     included_benefits: str = Field(..., description="Подробный перечень опций, входящих в тариф, одной строкой.")
 
+# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (C в complexity_report.txt) из-за костыльной подмены вопросов по подстроке вместо строгого Literal из спецификации get_data.md.
 class FAQCacheItem(BaseModel):
     """Готовый ответ на типовой вопрос для предзаполнения llm_cache."""
     question: str = Field(..., description="Вопрос по регламенту мероприятия (нормализуется к каноническому чипсу при совпадении).")
@@ -28,6 +31,7 @@ class FAQCacheItem(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    # [AUDIT-CRUTCH]: Грубая эвристика по вхождению слова "тариф" или "спикер" принудительно перезаписывает любой кастомный вопрос в один из 3 шаблонных чипсов.
     def normalize_question(cls, data):
         """Нормализует вариации вопросов к единому каноническому стандарту."""
         if isinstance(data, dict) and "question" in data:
@@ -68,6 +72,7 @@ class EventIngestionSchema(BaseModel):
     venue: Optional[str] = Field(None, description="Название площадки, отеля или экспоцентра (или 'Онлайн-платформа').")
     start_date: date = Field(..., description="Дата начала проведения (строго YYYY-MM-DD).")
     end_date: date = Field(..., description="Дата окончания проведения (строго YYYY-MM-DD, совпадает со start_date для однодневных).")
+    # [AUDIT-CRUTCH]: Порог min_length=100, max_length=1500 занижен по сравнению с Quality Gate в get_data.md (требуется min_length=250, max_length=850 для статуса READY).
     summary: str = Field(
         ..., min_length=100, max_length=1500,
         description="Содержательное резюме мероприятия (300–800 символов): главные темы, формат и целевая аудитория."
@@ -84,6 +89,7 @@ class EventIngestionSchema(BaseModel):
     )
 
     @model_validator(mode="after")
+    # [AUDIT-CRUTCH]: Валидатор обнуляет онлайн-маркеры в city, но не вызывает normalize_city(self.city) для канонизации названия города перед записью в БД.
     def validate_event_ingestion(self):
         """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true) и end_date >= start_date."""
         if not self.city or (isinstance(self.city, str) and self.city.strip().lower() in ("онлайн", "online", "нет", "null")):

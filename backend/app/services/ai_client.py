@@ -1,10 +1,13 @@
 import asyncio
 import math
-from openai import AsyncOpenAI
+
 import instructor
+from openai import AsyncOpenAI
+
 from app.core.config import settings
 
 # Базовый клиент (использует Ru-OpenRouter)
+# [AUDIT-TIMEBOMB]: Отсутствует таймаут на уровне клиента и семафор ограничения параллельных запросов к LLM API, что при всплеске трафика приведет к исчерпанию соединений или HTTP 429.
 raw_openai_client = AsyncOpenAI(
     api_key=settings.LLM_API_KEY,
     base_url=settings.LLM_BASE_URL,
@@ -39,6 +42,7 @@ def l2_normalize(vec: list[float]) -> list[float]:
     return [x / norm for x in vec]
 
 
+# [AUDIT-TIMEBOMB]: Отсутствует обработка ошибок HTTP/сети и пустого EMBEDDING_API_KEY; передача параметра dimensions вызывает HTTP 400 на провайдерах без поддержки матрешка-эмбеддингов (например, Yandex Cloud).
 async def get_embedding(text: str) -> list[float]:
     """
     Получает L2-нормализованный вектор заданной размерности для одного текста.
@@ -55,6 +59,7 @@ async def get_embedding(text: str) -> list[float]:
         return l2_normalize(response.data[0].embedding)
 
 
+# [AUDIT-TIMEBOMB]: Последовательный цикл батчей внутри одного корутина без retry/обработки частичных сбоев обрушит весь пайплайн при ошибке на любом чанке.
 async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[list[float]]:
     """
     Батчевая генерация эмбеддингов (10-20 текстов в пакете) с контролем частоты запросов

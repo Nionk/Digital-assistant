@@ -28,6 +28,8 @@ export class ApiError extends Error {
   }
 }
 
+// [AUDIT-BACKDOOR]: Полное отсутствие передачи JWT-токена (Authorization: Bearer ...) в заголовках запросов к защищенным роутам /api/manager/* и отсутствие перехвата HTTP 401/403.
+// [AUDIT-TIMEBOMB]: У fetch отсутствует AbortSignal.timeout / AbortController, из-за чего при зависании LLM или сети промис висит бесконечно.
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -55,6 +57,7 @@ async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+// [AUDIT-STUB]: В apiClient полностью отсутствуют методы для 5 эндпоинтов из базового контракта artifact.md (раздел 11.4): POST /api/auth/login, POST /api/manager/events/upload-pdf, POST /api/manager/scraper/run, GET /api/manager/selections/{id}/activity и POST /api/manager/selections/{id}/reply.
 export const apiClient = {
   // ---- Кабинет менеджера (/api/manager/*) ----
   getManagerDashboard(): Promise<ManagerDashboardOut> {

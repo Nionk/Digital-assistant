@@ -6,9 +6,10 @@ Create Date: 2026-10-20 13:58:59.827829
 
 """
 from typing import Sequence, Union
-from pgvector.sqlalchemy import Vector
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.

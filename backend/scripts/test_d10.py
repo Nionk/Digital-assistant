@@ -1,22 +1,24 @@
 import asyncio
 import sys
 from pathlib import Path
-from sqlalchemy import select
+
 import httpx
+from sqlalchemy import select
 
 # Настройка путей и UTF-8 консоли Windows
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from app.main import app
 from app.core.database import async_session_maker, engine, get_async_session
+from app.main import app
 from app.models.models import Selection, SelectionItem
 from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 
 
 async def get_or_create_published_token(client: httpx.AsyncClient, pg_up: bool, fake_db: InMemoryAsyncSession) -> str:
     """Находит актуальный magic_token опубликованной подборки или публикует новую через API."""
+    # [AUDIT-FAKE]: Подмена реальной БД на InMemoryAsyncSession при остановленном контейнере PostgreSQL.
     if not pg_up:
         return str(fake_db.token_published)
 
@@ -68,11 +70,13 @@ async def get_or_create_published_token(client: httpx.AsyncClient, pg_up: bool, 
     return str(pub_resp.json()["magic_token"])
 
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции main — ранг C (radon).
 async def main() -> None:
     print("=== Тест D-10: Публичная витрина клиента (/s/{magic_token}) и Telegram-алерты ===\n")
 
     pg_up = is_postgres_online()
     fake_db = InMemoryAsyncSession()
+    # [AUDIT-FAKE]: Подмена реальной БД на InMemoryAsyncSession при остановленном контейнере PostgreSQL.
     if not pg_up:
         print("[INFO] PostgreSQL (порт 5432) остановлен — используем InMemoryAsyncSession.\n")
 
@@ -155,6 +159,7 @@ async def main() -> None:
         print(f"     escalated_to_telegram: {ask_data['escalated_to_telegram']}")
         print(f"     Текст ответа: {ask_data['answer_text'][:90]}...")
         assert ask_data["is_answer_found"] is False
+        # [AUDIT-TIMEBOMB]: Гарантированное падение с AssertionError, поскольку эндпоинт /ask больше не делает автоматическую эскалацию в Telegram (возвращает escalated_to_telegram=False).
         assert ask_data["escalated_to_telegram"] is True
 
         print("\n[SUCCESS] ВСЕ ТЕСТЫ D-10 ПРОЙДЕНЫ УСПЕШНО!")

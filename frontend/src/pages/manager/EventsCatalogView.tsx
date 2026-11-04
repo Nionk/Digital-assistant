@@ -61,6 +61,7 @@ const SORT_OPTIONS = [
  * 2. Выпадающие фильтры по формату, локации, тематике и сортировке.
  * 3. Детальная боковая шторка по клику на событие для углубленного изучения тарифов.
  */
+// [AUDIT-STUB]: В реестре площадок полностью отсутствуют модальное окно «Умный импорт и обогащение события (PDF / Ссылка)» (POST /api/manager/events/upload-pdf) и кнопка запуска парсера 9 сайтов (POST /api/manager/scraper/run) из п. 7.1 и 11.4 artifact.md
 export function EventsCatalogView() {
   const { data, isLoading } = useManagerEventsCatalog(true);
   const [searchQuery, setSearchQuery] = React.useState("");

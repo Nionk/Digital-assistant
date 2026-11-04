@@ -1,10 +1,12 @@
 from typing import Annotated
+
 from fastapi import Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
 # Схема безопасности для Swagger UI: регистрирует заголовок Authorization: Bearer <token>,
 # но auto_error=False позволяет выполнять запросы без токена на этапе Демо.
+# [AUDIT-BACKDOOR]: auto_error=False отключает автоматическую блокировку неавторизованных запросов без заголовка Authorization.
 security_scheme = HTTPBearer(auto_error=False)
 
 class ManagerUser(BaseModel):
@@ -19,6 +21,9 @@ class ManagerUser(BaseModel):
     full_name: str
     telegram_chat_id: int | None = None
 
+# [AUDIT-BACKDOOR]: Полностью отключена проверка JWT-токена — любой анонимный запрос получает полный доступ к /api/manager/* от имени менеджера id=1.
+# [AUDIT-STUB]: Не реализована декодировка JWT через pyjwt и загрузка реального пользователя из таблицы users (параметр auth не используется).
+# [AUDIT-FAKE]: Возвращается захардкоженный мок-объект с фейковым telegram_chat_id=123456789 вместо чтения из БД.
 async def get_current_manager(
     auth: HTTPAuthorizationCredentials | None = Depends(security_scheme)
 ) -> ManagerUser:

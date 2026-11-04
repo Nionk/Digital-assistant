@@ -1,10 +1,13 @@
 import html
 import logging
+
 import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# [AUDIT-CRUTCH]: Хардкод магического числа 123456789 для обхода фейкового telegram_chat_id из стаба авторизации и сидов.
 DUMMY_SEED_CHAT_IDS = {None, "", 0, "0", 123456789, "123456789"}
 
 def escape_html(value: str | None) -> str:
@@ -30,6 +33,7 @@ def format_reaction_alert(
         cleaned = comment.strip()
         lines.append(f"Комментарий: <i>{escape_html(cleaned)}</i>")
         lower_c = cleaned.lower()
+        # [AUDIT-CRUTCH]: Костыльная проверка подстрок в текстовом комментарии вместо передачи структурированных флагов дополнительных услуг в схеме ClientReactionIn.
         if any(
             kw in lower_c
             for kw in (
@@ -76,6 +80,7 @@ async def send_manager_alert(
     )
     bot_token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
 
+    # [AUDIT-FAKE]: При отсутствии токена или chat_id функция пишет лог [TELEGRAM MOCK] и возвращает True, обманывая вызывающий код и фронтенд об успешной доставке уведомления.
     if not bot_token or not target_chat_id:
         logger.info("[TELEGRAM MOCK] Алерт менеджеру (chat_id=%s): %s", target_chat_id, text)
         return True
@@ -88,6 +93,7 @@ async def send_manager_alert(
             "text": text,
             "parse_mode": "HTML",
         }
+        # [AUDIT-CRUTCH]: Создание нового экземпляра httpx.AsyncClient на каждое сообщение вместо переиспользования пула соединений.
         async with httpx.AsyncClient(timeout=10.0) as client:
             return await client.post(url, json=payload)
 

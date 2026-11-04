@@ -120,6 +120,7 @@ export function SearchableMultiSelectPopover({
   // Автофокус на поле поиска при открытии
   React.useEffect(() => {
     if (isOpen) {
+      // [AUDIT-CRUTCH]: Таймер setTimeout запускается в useEffect без возврата функции очистки clearTimeout при размонтировании или быстром закрытии поповера
       setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);

@@ -1,6 +1,8 @@
 from datetime import date
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from app.core.constants import FAQ_QUICK_CHIPS
 
 # СХЕМЫ ПУБЛИЧНОЙ ИНТЕРАКТИВНОЙ ВИТРИНЫ КЛИЕНТА (/api/public/s/{magic_token})
@@ -15,6 +17,7 @@ class ShowcaseEventItemOut(BaseModel):
     )
     event_id: int = Field(..., description="ID события")
     canonical_title: str = Field(..., description="Официальное название мероприятия")
+    # [AUDIT-CRUTCH]: Тип event_format объявлен как произвольный str вместо строгого Literal["roundtable", "business_breakfast", "forum", "conference", "session"].
     event_format: str = Field(..., description="Формат: roundtable, business_breakfast, forum, conference, session")
     city: str | None = Field(None, description="Город проведения в именительном падеже (None для онлайн)")
     is_online: bool = Field(False, description="Признак онлайн-формата (вебинар, трансляция)")
@@ -124,6 +127,7 @@ class AskRegulationQuestionOut(BaseModel):
         description="True, если неотвеченный вопрос отправлен в виде пуша в Telegram менеджеру"
     )
 
+# [AUDIT-CRUTCH]: Схемы EscalateQuestionIn и EscalateQuestionOut не описаны в базовом контракте artifact.md (раздел 11.4) и забыты в экспорте schemas/__init__.py.
 class EscalateQuestionIn(BaseModel):
     """Запрос клиента на осознанную передачу неотвеченного вопроса куратору в Telegram."""
     question_text: str = Field(

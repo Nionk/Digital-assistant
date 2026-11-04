@@ -9,9 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import Settings
 from app.models.models import Event
 from app.schemas.event_ingestion import (
-    TariffExtracted,
-    FAQCacheItem,
     EventIngestionSchema,
+    FAQCacheItem,
 )
 
 
@@ -190,6 +189,7 @@ class TestEventIngestionAndSchema(unittest.TestCase):
         })
         self.assertEqual(faq_custom.question, "Что входит в рекомендованный тариф?")
 
+    # [AUDIT-CRUTCH]: Тест закрепляет ослабление валидации min_length для summary с эталонных 250 символов (по правилам датасета) до 100 символов ради прохождения сырых данных.
     def test_07_summary_min_length_relaxed_and_date_protection(self):
         """Проверка relaxed min_length=100 и автоматической коррекции end_date < start_date."""
         data = {
@@ -212,18 +212,18 @@ class TestEventIngestionAndSchema(unittest.TestCase):
 
     def test_08_orm_relationships_and_bigint(self):
         """Проверка BigInteger для telegram_chat_id и наличия relationship-связей в моделях."""
-        from sqlalchemy import BigInteger
         from app.models.models import (
-            User,
+            ChatMessage,
             Client,
             Event,
-            EventTariff,
             EventChunk,
+            EventTariff,
+            LLMCache,
             Selection,
             SelectionItem,
-            ChatMessage,
-            LLMCache,
+            User,
         )
+        from sqlalchemy import BigInteger
 
         # 1. Проверка типа telegram_chat_id
         col_type = User.telegram_chat_id.property.columns[0].type
@@ -255,6 +255,7 @@ class TestEventIngestionAndSchema(unittest.TestCase):
     def test_09_ai_client_encoding_format_float(self):
         """Проверка передачи encoding_format='float' в методах ai_client."""
         import inspect
+
         from app.services import ai_client
 
         get_emb_src = inspect.getsource(ai_client.get_embedding)

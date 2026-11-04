@@ -140,6 +140,7 @@ export function ManagerWorkspacePage() {
       "")
     : "";
 
+  // [AUDIT-TIMEBOMB]: Передача всего корневого объекта state = useManagerStore() в зависимости useMemo полностью убивает мемоизацию — пересчет финансовой сводки и конфликтов дат выполняется на каждый чих стора (ввод символа в поиск клиента, открытие модалки и т.д.)
   const computedSummary = React.useMemo(
     () =>
       activeClient
@@ -236,6 +237,7 @@ export function ManagerWorkspacePage() {
     toast.success("Цифры бюджета, выгоды и список площадок в письме обновлены");
   };
 
+  // [AUDIT-FAKE]: Проглатывание ошибки записи в буфер обмена через .catch(() => {}) с безусловным показом уведомления об успехе
   const handleCopyShowcaseLink = (relativeUrl: string) => {
     const fullUrl = `${window.location.origin}${relativeUrl}`;
     navigator.clipboard.writeText(fullUrl).catch(() => {});

@@ -6,17 +6,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select, func
 from app.core.database import async_session_maker, engine
-from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
+from app.models.models import Client, EventTariff, Selection, SelectionItem
 from app.schemas.manager import ClientQueryExtracted, MatchRequestIn
 from app.services.matcher import (
+    build_bundles,
     build_fts_or_query,
     build_tariff_option,
     get_scored_candidates,
-    build_bundles,
     run_client_matching_pipeline,
 )
+from sqlalchemy import func, select
 from tests.test_d08_d09_d10 import is_postgres_online
 
 
@@ -146,6 +146,7 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
             # SLA check: < 15 ms
+            # [AUDIT-TIMEBOMB]: Жесткий тайминг-ассерт < 15.0 мс на выполнение build_bundles делает тест нестабильным (flaky) при запуске на нагруженном CI-раннере (в BENCHMARK_RESULTS.md p95 уже составляет 15.13 мс, max 15.90 мс).
             self.assertLess(elapsed_ms, 15.0, f"build_bundles exceeded 15ms SLA: {elapsed_ms:.3f} ms")
             self.assertGreaterEqual(len(variants), 1)
 

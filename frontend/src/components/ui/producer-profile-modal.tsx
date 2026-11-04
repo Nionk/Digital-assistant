@@ -14,6 +14,7 @@ interface ProducerProfileModalProps {
   onClose: () => void;
 }
 
+// [AUDIT-FAKE]: Бутафорское модальное окно «Выбор куратора», переключающее локальную аватарку в Zustand без обращения к серверу авторизации и без смены JWT-сессии
 export function ProducerProfileModal({
   isOpen,
   onClose,

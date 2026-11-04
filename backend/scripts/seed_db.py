@@ -1,10 +1,11 @@
 import asyncio
-import json
 import hashlib
+import json
 import sys
 from pathlib import Path
+
 import bcrypt
-from sqlalchemy import select, delete, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Настройка sys.path для прямого запуска скрипта из любой директории
@@ -12,10 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from app.core.database import async_session_maker
-from app.models.models import User, Client, Event, EventTariff, LLMCache
-from app.services.ai_client import get_embeddings_batch
+from app.models.models import Client, Event, EventTariff, LLMCache, User
 from app.schemas.event_ingestion import EventIngestionSchema
-
+from app.services.ai_client import get_embeddings_batch
 
 
 def hash_password(password: str) -> str:
@@ -24,6 +24,7 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
+# [AUDIT-BACKDOOR]: Захардкоженный открытый пароль дефолтного менеджера ('scart_manager_2026') и реальный Telegram ID прямо в исходном коде скрипта сидинга.
 DEFAULT_MANAGER_DATA = {
     "id": 1,
     "email": "manager@skart.ru",
@@ -172,6 +173,7 @@ async def seed_test_clients(session: AsyncSession, manager_id: int) -> list[Clie
     return seeded_clients
 
 
+# [AUDIT-CRUTCH]: Поиск seed_data.json среди 4 путей из-за хранения двух идентичных копий файла по 987 КБ в корне репозитория и в backend/scripts/seed_data.json.
 def find_seed_data_file() -> Path:
     """Определяет путь к seed_data.json в зависимости от рабочей директории."""
     candidates = [
@@ -186,6 +188,7 @@ def find_seed_data_file() -> Path:
     raise FileNotFoundError("Файл seed_data.json не найден ни в одной из доступных директорий.")
 
 
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции seed_events — ранг D (radon), а сам датасет содержит только 15 событий вместо обязательных 35–40 по разделу 11.3/12.6 artifact.md и .cursorrules.
 async def seed_events(session: AsyncSession) -> list[Event]:
     """
     Идемпотентное наполнение базы данных мероприятиями, тарифами,
@@ -195,6 +198,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     """
     seed_file = find_seed_data_file()
     print(f"[INFO] Загрузка золотого датасета из: {seed_file}")
+    # [AUDIT-TIMEBOMB]: Синхронное чтение и парсинг ~1 МБ JSON-файла внутри async-функции без asyncio.to_thread.
     with open(seed_file, "r", encoding="utf-8") as f:
         raw_items = json.load(f)
 
@@ -221,6 +225,8 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             for i, f_emb in zip(need_fetch_indices, fetched):
                 embeddings[i] = f_emb
             print(f"[OK] Успешно получено {len(fetched)} векторов (размерность {len(fetched[0]) if fetched else 0}).")
+        # [AUDIT-TIMEBOMB]: При сбое Jina API записывает нулевые векторы [0.0]*1024 в summary_embedding, что при расчете косинусного расстояния (<=>) в pgvector дает NaN и ломает сортировку RRF.
+        # [AUDIT-FAKE]: Лог обманывает («Использованы детерминированные векторы»), хотя подставляются нули [0.0] * 1024.
         except Exception as e:
             print(f"[WARN] Jina Embeddings API недоступен ({e}). Использованы детерминированные векторы.")
             for i in need_fetch_indices:
@@ -232,6 +238,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     total_tariffs_count = 0
     total_cache_count = 0
 
+    # [AUDIT-TIMEBOMB]: N+1 SQL-запросов и множественные session.flush() внутри цикла по каждому мероприятию (SELECT Event, DELETE EventTariff, DELETE LLMCache).
     for i, item in enumerate(raw_items):
         e_raw = item["event_data"]
         # Валидируем и нормализуем через строгую Pydantic v2 схему
@@ -250,6 +257,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
                 canonical_title=e_schema.canonical_title,
                 normalized_title=e_raw.get("normalized_title") or e_schema.canonical_title.lower().strip(),
                 event_format=e_schema.event_format,
+                # [AUDIT-CRUTCH]: Запись города напрямую из схемы без вызова канонического нормализатора normalize_city(e_schema.city) (нарушение п. 12.6 artifact.md).
                 city=e_schema.city,
                 is_online=e_schema.is_online,
                 venue=e_schema.venue,
@@ -347,6 +355,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     return seeded_events
 
 
+# [AUDIT-CRUTCH]: Использование f-string интерполяции в SQL text(), пропуск таблиц selection_items, chat_messages, event_chunks и глушение ошибок через except Exception: pass.
 async def sync_database_sequences(session: AsyncSession):
     """
     Синхронизирует последовательности (sequence) автоинкремента после вставки явных ID.

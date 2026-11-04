@@ -15,6 +15,7 @@ export function ShowcaseExecutiveHeader({
     (i) => i.client_reaction === "interested"
   ).length;
 
+  // [AUDIT-CRUTCH]: Подсчет базовой стоимости (totalBasePrice) суммирует 0 для спецпроектов «По запросу» (actual_price = null) и не выводит пометку «+ спецпроект по запросу» рядом с итоговой суммой в шапке витрины
   const totalBasePrice = showcase.items.reduce(
     (acc, item) => acc + (item.base_price ?? item.actual_price ?? 0),
     0

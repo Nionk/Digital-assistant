@@ -8,6 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.services.profiler import extract_client_profile
 
+
+# [AUDIT-CRUTCH]: Цикломатическая сложность функции main — ранг D (radon); все 7 тестовых фраз жестко зашиты в regex-эвристики extract_profile_heuristic в app/services/profiler.py.
 async def main():
     print("=== Тест D-06: Профилировщик заметок менеджера (5 сценариев) ===\n")
 
