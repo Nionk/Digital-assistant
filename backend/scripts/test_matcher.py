@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 # Force UTF-8 output on Windows consoles
 if sys.stdout.encoding != "utf-8":
@@ -11,6 +12,7 @@ if sys.stdout.encoding != "utf-8":
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core.config import settings
 from app.core.database import async_session_maker, engine
 from app.models.models import Client, Selection, SelectionItem
 from app.schemas.manager import ClientQueryExtracted, MatchRequestIn
@@ -174,13 +176,22 @@ async def run_tests() -> None:
             client_id=client.id,
             payload=payload_3,
         )
-        assert len(response_3.bundle_variants) >= 1, "Expected graceful bundle even on tiny budget!"
-        # [AUDIT-FAKE]: В стресс-тесте с бюджетом 15 000 ₽ отсутствует assert на непревышение бюджета (v1_tiny.total_actual_price <= 15000 * 1.10), тест рапортует Passed даже при возврате фолбэк-пакета в десятки раз дороже лимита.
-        v1_tiny = response_3.bundle_variants[0]
-        print(
-            f"✅ Scenario 3 Passed! Assembled {len(v1_tiny.items)} events within {v1_tiny.total_actual_price:,.0f} ₽ "
-            f"(Budget limit: {profile_3.total_budget_max:,.0f} ₽)."
-        )
+        max_allowed_budget_3 = profile_3.total_budget_max * 1.10
+        for variant_3 in response_3.bundle_variants:
+            assert variant_3.total_actual_price <= max_allowed_budget_3, (
+                f"Budget invariant violated! {variant_3.total_actual_price:,.0f} ₽ > {max_allowed_budget_3:,.0f} ₽"
+            )
+        if response_3.bundle_variants:
+            v1_tiny = response_3.bundle_variants[0]
+            print(
+                f"✅ Scenario 3 Passed! Assembled {len(v1_tiny.items)} events within {v1_tiny.total_actual_price:,.0f} ₽ "
+                f"(Budget limit: {profile_3.total_budget_max:,.0f} ₽, max +10%: {max_allowed_budget_3:,.0f} ₽)."
+            )
+        else:
+            print(
+                f"✅ Scenario 3 Passed! No paid bundle exceeded budget limit {profile_3.total_budget_max:,.0f} ₽ "
+                f"(strictly returned 0 over-budget variants; bonus items={len(response_3.bonus_on_request_items)})."
+            )
 
         # =========================================================================
         # Scenario 4: Pure Combinatorial Speed Benchmark (< 15 ms SLA)
@@ -201,5 +212,9 @@ async def run_tests() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_tests())
+    with patch(
+        "app.services.matcher.get_embedding",
+        return_value=[1.0] + [0.0] * (settings.EMBEDDING_DIM - 1),
+    ):
+        asyncio.run(run_tests())
 

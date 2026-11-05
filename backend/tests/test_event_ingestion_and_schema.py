@@ -181,6 +181,28 @@ class TestEventIngestionAndSchema(unittest.TestCase):
         })
         self.assertEqual(faq3.question, "Формат участия и требования к спикеру")
 
+        # Канонизация сокращенных вопросов из seed_data.json / get_data.md к 3 чипсам витрины
+        faq_short_1 = FAQCacheItem.model_validate({
+            "question": "Что входит в тариф?",
+            "answer": "В тариф входит посещение всех сессий.",
+            "source_quote": "Посещение всех сессий",
+        })
+        self.assertEqual(faq_short_1.question, "Что входит в рекомендованный тариф?")
+
+        faq_short_2 = FAQCacheItem.model_validate({
+            "question": "Условия Early Bird",
+            "answer": "Скидка действует до 31 октября.",
+            "source_quote": "До 31 октября",
+        })
+        self.assertEqual(faq_short_2.question, "Какие условия раннего бронирования и дедлайны?")
+
+        faq_short_3 = FAQCacheItem.model_validate({
+            "question": "Требования к спикеру",
+            "answer": "Доклад 20 минут.",
+            "source_quote": "Доклад 20 минут",
+        })
+        self.assertEqual(faq_short_3.question, "Формат участия и требования к спикеру")
+
         # Неканонический произвольный вопрос отклоняется строгим Literal-валидатором
         from pydantic import ValidationError
         with self.assertRaises(ValidationError):
@@ -291,7 +313,7 @@ class TestEventIngestionAndSchema(unittest.TestCase):
 
     def test_10_pdf_extraction_via_pymupdf(self):
         """Проверка реального парсинга PDF через PyMuPDF (fitz) в extract_relevant_pdf_text_sync."""
-        import fitz
+        import pymupdf as fitz
         from app.services.scraper import extract_relevant_pdf_text_sync
 
         doc = fitz.open()
@@ -324,6 +346,44 @@ class TestEventIngestionAndSchema(unittest.TestCase):
         self.assertNotIn("СТРАНИЦА PDF 3", extracted_text)
         self.assertIn("СТРАНИЦА PDF 4", extracted_text)
         self.assertEqual(ocr_images, [])
+
+        # Отклонение поврежденного / не-PDF потока
+        with self.assertRaises(ValueError):
+            extract_relevant_pdf_text_sync(b"not a pdf file content")
+
+    def test_11_chunking_and_catalog_url_filtering(self):
+        """Проверка нарезки длинного регламента на чанки и строгой фильтрации URL карточек 9 площадок."""
+        from app.services.scraper import (
+            CUSTOMER_SOURCES_REGISTRY,
+            extract_filtered_card_urls,
+            split_regulation_into_chunks,
+        )
+
+        # 1. Нарезка текста с перекрытием
+        long_md = "Раздел регламента. " * 300  # ~5700 символов
+        chunks = split_regulation_into_chunks(long_md, chunk_size=2000, overlap=200)
+        self.assertGreaterEqual(len(chunks), 3)
+        for ch in chunks:
+            self.assertLessEqual(len(ch), 2000)
+
+        # 2. Фильтрация ссылок каталога (HTML + Markdown r.jina.ai) с отсечением меню/футера
+        archi_src = next(s for s in CUSTOMER_SOURCES_REGISTRY if s.source_key == "archi_ru")
+        sample_jina_md = """
+        # Архи.ру События
+        - [О проекте](https://archi.ru/about)
+        - [Контакты](https://archi.ru/contacts)
+        - [Архитектурный форум Зодчество 2026](https://archi.ru/events/19540/arkhitekturnyi-forum-zodchestvo)
+        - [Круглый стол по КРТ](https://archi.ru/events/19541/kruglyi-stol-krt)
+        - [Политика конфиденциальности](https://archi.ru/privacy)
+        """
+        filtered_urls = extract_filtered_card_urls(sample_jina_md, archi_src)
+        self.assertEqual(
+            filtered_urls,
+            [
+                "https://archi.ru/events/19540/arkhitekturnyi-forum-zodchestvo",
+                "https://archi.ru/events/19541/kruglyi-stol-krt",
+            ],
+        )
 
 
 if __name__ == "__main__":

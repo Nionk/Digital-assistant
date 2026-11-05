@@ -124,7 +124,10 @@ class BundleEventItemOut(BaseModel):
         default=None,
         description="Официальный сайт мероприятия или страница регистрации"
     )
-    data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
+    data_status: Literal["ready", "needs_enrichment", "archived"] = Field(
+        default="ready",
+        description="Статус полноты карточки: ready, needs_enrichment или archived",
+    )
     missing_data_warnings: list[str] = Field(
         default_factory=list, description="Список предупреждений о недостающих данных"
     )
@@ -217,7 +220,10 @@ class CatalogEventItemOut(BaseModel):
         default=None,
         description="Официальный сайт мероприятия или страница регистрации"
     )
-    data_status: str = Field(default="ready", description="Статус карточки: ready или needs_enrichment")
+    data_status: Literal["ready", "needs_enrichment", "archived"] = Field(
+        default="ready",
+        description="Статус полноты карточки: ready, needs_enrichment или archived",
+    )
     missing_data_warnings: list[str] = Field(
         default_factory=list, description="Список предупреждений о недостающих данных"
     )

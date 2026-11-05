@@ -167,7 +167,7 @@ async def get_current_manager(
         id=1,
         email="manager@skart.ru",
         full_name="Анна Соколова (Ведущий менеджер сопровождения)",
-        telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID or 123456789,
+        telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID,
     )
 
 

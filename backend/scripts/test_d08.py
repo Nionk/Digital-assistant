@@ -11,6 +11,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from app.core.database import engine, get_async_session
 from app.main import app
+from app.services.telegram import StubTelegramTransport, set_telegram_transport
 from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 
 
@@ -18,6 +19,7 @@ from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 async def main() -> None:
     print("=== Тест D-08: Бизнес-эндпоинты менеджера (/clients, /match, /publish) ===\n")
 
+    set_telegram_transport(StubTelegramTransport())
     pg_up = is_postgres_online()
     fake_db = InMemoryAsyncSession()
     # [AUDIT-FAKE]: При остановленном PostgreSQL скрипт прозрачно подменяет БД на InMemoryAsyncSession с хардкодными словарями и рапортует [SUCCESS] без реальной проверки SQL.
@@ -120,6 +122,7 @@ async def main() -> None:
         print("\n[SUCCESS] ВСЕ ТЕСТЫ D-08 ПРОЙДЕНЫ УСПЕШНО!")
 
     app.dependency_overrides.pop(get_async_session, None)
+    set_telegram_transport(None)
     await engine.dispose()
 
 

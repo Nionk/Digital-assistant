@@ -174,7 +174,6 @@ async def benchmark_block_1(session) -> dict[str, Any]:
             query_vec=dummy_vec,
             fts_query_str=fts_str,
             today=today,
-            strict_filters=True,
             limit=15,
         )
         dt_ms = (time.perf_counter() - t0) * 1000.0

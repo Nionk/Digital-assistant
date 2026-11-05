@@ -4,6 +4,7 @@ import socket
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import httpx
@@ -11,6 +12,7 @@ import httpx
 # Добавляем backend в sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core.config import settings
 from app.core.database import engine, get_async_session
 from app.main import app
 from app.models.models import (
@@ -25,10 +27,14 @@ from app.models.models import (
 )
 from app.services.rag import ask_regulation_question, build_rag_cache_key
 from app.services.telegram import (
+    HttpTelegramTransport,
+    StubTelegramTransport,
     escape_html,
     format_escalation_alert,
+    format_monitoring_summary_alert,
     format_reaction_alert,
     send_manager_alert,
+    set_telegram_transport,
 )
 
 
@@ -78,7 +84,7 @@ class InMemoryAsyncSession:
     def __init__(self):
         today = datetime.date.today()
         self.users = {
-            1: User(id=1, email="manager@skart.ru", password_hash="x", full_name="Анна Соколова", telegram_chat_id=123456789)
+            1: User(id=1, email="manager@skart.ru", password_hash="x", full_name="Анна Соколова", telegram_chat_id=None)
         }
         self.clients = {
             1: Client(
@@ -324,7 +330,15 @@ class InMemoryAsyncSession:
             return InMemoryResult(list(self.clients.values()))
 
         if "candidates" in sql_str or "ranked" in sql_str or "rrf_score" in sql_str:
-            return InMemoryResult([(ev, 0.032) for ev in self.events.values()])
+            candidates = list(self.events.values())
+            for k, v in params.items():
+                if k.startswith("city") and isinstance(v, (list, tuple, set)):
+                    candidates = [ev for ev in candidates if ev.city in v or ev.is_online]
+                elif k.startswith("start_date") and isinstance(v, datetime.date):
+                    candidates = [ev for ev in candidates if ev.start_date >= v]
+                elif k.startswith("end_date") and isinstance(v, datetime.date):
+                    candidates = [ev for ev in candidates if ev.end_date <= v]
+            return InMemoryResult([(ev, 0.032) for ev in candidates])
 
         if "from event_tariffs" in sql_str:
             if "join events" in sql_str:
@@ -380,6 +394,8 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
     """
 
     async def asyncSetUp(self):
+        self.stub_telegram = StubTelegramTransport()
+        set_telegram_transport(self.stub_telegram)
         self.fake_db = InMemoryAsyncSession()
 
         async def _override_session():
@@ -390,12 +406,13 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         self.client = httpx.AsyncClient(transport=self.transport, base_url="http://testserver", timeout=45.0)
 
     async def asyncTearDown(self):
+        set_telegram_transport(None)
         app.dependency_overrides.pop(get_async_session, None)
         await self.client.aclose()
         await engine.dispose()
 
     async def test_01_telegram_html_escaping_and_alert(self):
-        """Проверка экранирования спецсимволов HTML (<, >, &) и отправки алерта."""
+        """Проверка экранирования спецсимволов HTML (<, >, &), сводки мониторинга и честного контракта транспорта."""
         raw_comment = "Бюджет < 300к & нужен стенд > 10 м2"
         escaped = escape_html(raw_comment)
         self.assertIn("&lt;", escaped)
@@ -411,8 +428,22 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         esc_alert = format_escalation_alert("ГК <Тест>", "Форум & Выставка", "Вопрос <1>?")
         self.assertIn("Вопрос &lt;1&gt;?", esc_alert)
 
-        ok = await send_manager_alert(esc_alert, chat_id=123456789)
+        summary_alert = format_monitoring_summary_alert(14, ["Форум <КРТ> & Девелопмент"])
+        self.assertIn("14 новых мероприятий", summary_alert)
+        self.assertIn("Форум &lt;КРТ&gt; &amp; Девелопмент", summary_alert)
+
+        ok = await send_manager_alert(esc_alert)
         self.assertTrue(ok)
+        self.assertEqual(len(self.stub_telegram.sent_messages), 1)
+
+        # Проверка честного контракта боевого HttpTelegramTransport: при отсутствии кредов возвращает False
+        http_transport = HttpTelegramTransport()
+        with (
+            patch.object(settings, "TELEGRAM_BOT_TOKEN", ""),
+            patch.object(settings, "TELEGRAM_MANAGER_CHAT_ID", None),
+        ):
+            honest_res = await send_manager_alert(esc_alert, chat_id=None, transport=http_transport)
+            self.assertFalse(honest_res)
 
     async def test_02_rag_duplicate_bundle_groups_and_cache_commit(self):
         """

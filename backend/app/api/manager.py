@@ -37,6 +37,15 @@ ManagerEventFormat = Literal[
     "roundtable", "business_breakfast", "forum", "conference", "session"
 ]
 SelectionStatusLiteral = Literal["draft", "published"]
+EventDataStatusLiteral = Literal["ready", "needs_enrichment", "archived"]
+
+
+def _normalize_data_status(st: str | None) -> EventDataStatusLiteral:
+    if st == "needs_enrichment":
+        return "needs_enrichment"
+    if st == "archived":
+        return "archived"
+    return "ready"
 
 
 def _normalize_event_format(fmt: str | None) -> ManagerEventFormat:
@@ -587,7 +596,7 @@ async def get_manager_events_catalog(
                     themes=list(ev.themes or []),
                     tariffs=tariffs_by_event.get(ev.id, []),
                     website_url=primary_url,
-                    data_status=ev.data_status or "ready",
+                    data_status=_normalize_data_status(ev.data_status),
                     missing_data_warnings=list(ev.missing_data_warnings or []),
                 )
             )

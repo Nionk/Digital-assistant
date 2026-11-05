@@ -9,9 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
-from app.models.models import Client, EventTariff, Selection, SelectionItem
-from app.schemas.manager import ClientQueryExtracted, MatchRequestIn
+from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
+from app.schemas.manager import ClientQueryExtracted, MatchRequestIn, TariffOptionOut
 from app.services.matcher import (
+    ScoredEventCandidate,
     build_bundles,
     build_fts_or_query,
     build_tariff_option,
@@ -129,6 +130,112 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(opt_on_req.actual_price)
         self.assertIsNone(opt_on_req.base_price)
         self.assertEqual(opt_on_req.savings, 0.0)
+
+    def test_02b_combinatorial_bundle_invariants_unit(self) -> None:
+        """Автономная проверка инвариантов build_bundles без СУБД (роли, накладки дат, +10% бюджет)."""
+        e1 = Event(
+            id=1,
+            canonical_title="Форум КРТ 1",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 11, 10),
+            end_date=date(2026, 11, 11),
+        )
+        e2_conflict = Event(
+            id=2,
+            canonical_title="Конференция КРТ 2 (Конфликт дат)",
+            city="Санкт-Петербург",
+            is_online=False,
+            start_date=date(2026, 11, 11),
+            end_date=date(2026, 11, 12),
+        )
+        e3_ok = Event(
+            id=3,
+            canonical_title="Саммит Девелопмент 3",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 11, 20),
+            end_date=date(2026, 11, 21),
+        )
+
+        t_del = TariffOptionOut(
+            tariff_id=11,
+            tariff_name="Делегат",
+            participation_role="delegate",
+            base_price=50000.0,
+            actual_price=50000.0,
+            savings=0.0,
+        )
+        t_spk = TariffOptionOut(
+            tariff_id=12,
+            tariff_name="Спикер",
+            participation_role="speaker",
+            base_price=120000.0,
+            actual_price=120000.0,
+            savings=0.0,
+        )
+
+        # Кандидаты, у которых есть ТОЛЬКО делегатский тариф (нет спикера и нет спонсора)
+        c1_del_only = ScoredEventCandidate(
+            event=e1, rrf_score=0.03, all_tariffs=[t_del], priced_tariffs=[t_del], on_request_tariffs=[]
+        )
+        c3_del_only = ScoredEventCandidate(
+            event=e3_ok, rrf_score=0.025, all_tariffs=[t_del], priced_tariffs=[t_del], on_request_tariffs=[]
+        )
+
+        # 1. Запрет подмены роли спикера на делегата при min_speaker_events=1
+        prof_need_speaker = ClientQueryExtracted(
+            cities=["Москва"],
+            include_online=True,
+            total_budget_max=300000.0,
+            target_events_count=2,
+            required_roles=["speaker", "delegate"],
+            min_speaker_events=1,
+            themes_keywords=["КРТ"],
+            semantic_search_query="КРТ",
+        )
+        variants_no_spk, _ = build_bundles([c1_del_only, c3_del_only], prof_need_speaker)
+        self.assertEqual(len(variants_no_spk), 0, "Must not silently substitute speaker slot with delegate tariff")
+
+        # 2. Когда есть спикерский тариф и второй кандидат конфликтует по датам — конфликт отсекается
+        c1_with_spk = ScoredEventCandidate(
+            event=e1,
+            rrf_score=0.032,
+            all_tariffs=[t_del, t_spk],
+            priced_tariffs=[t_del, t_spk],
+            on_request_tariffs=[],
+        )
+        c2_conflict_cand = ScoredEventCandidate(
+            event=e2_conflict,
+            rrf_score=0.031,
+            all_tariffs=[t_del],
+            priced_tariffs=[t_del],
+            on_request_tariffs=[],
+        )
+        variants_valid, _ = build_bundles([c1_with_spk, c2_conflict_cand, c3_del_only], prof_need_speaker)
+        self.assertGreaterEqual(len(variants_valid), 1)
+        v1 = variants_valid[0]
+        v1_ids = {c.event.id for c in v1.candidates}
+        self.assertEqual(v1_ids, {1, 3}, "Event #2 with overlapping dates must be excluded from bundle of size 2")
+        self.assertEqual(v1.matched_speaker_count, 1)
+        self.assertEqual(v1.total_actual_price, 170000.0)
+
+        # 3. Проверка допуска +10% бюджета (170 000 ₽ при бюджете 160 000 ₽ укладывается в 160k * 1.10 = 176k)
+        prof_tight_budget = ClientQueryExtracted(
+            cities=["Москва"],
+            include_online=True,
+            total_budget_max=160000.0,
+            target_events_count=2,
+            required_roles=["speaker", "delegate"],
+            min_speaker_events=1,
+            themes_keywords=["КРТ"],
+            semantic_search_query="КРТ",
+        )
+        variants_tol, _ = build_bundles([c1_with_spk, c3_del_only], prof_tight_budget)
+        # При бюджете 160к строгий пакет размера K=1 (c1_with_spk за 120к) укладывается строго (<=160к),
+        # а пакет размера K=2 (170к) попадает в +10% допуск (<=176к) как второй вариант
+        self.assertEqual(len(variants_tol), 2)
+        self.assertTrue(any(v.is_over_budget_tolerance for v in variants_tol))
 
     @unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
     async def test_03_build_bundles_performance_and_diversification(self) -> None:
