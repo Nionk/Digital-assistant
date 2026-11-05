@@ -236,8 +236,8 @@ class ChatMessage(Base):
 class LLMCache(Base):
     __tablename__ = "llm_cache"
     cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     response_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    event: Mapped["Event | None"] = relationship(lazy="selectin")
+    event: Mapped["Event | None"] = relationship()

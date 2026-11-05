@@ -131,14 +131,13 @@ class EventIngestionSchema(BaseModel):
     @model_validator(mode="after")
     def validate_event_ingestion(self) -> Self:
         """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true), нормализацию города и end_date >= start_date."""
-        if not self.city or (
-            isinstance(self.city, str)
-            and self.city.strip().lower() in ("онлайн", "online", "нет", "null")
-        ):
-            self.city = None
-            self.is_online = True
-        elif self.city:
+        if self.city and self.city.strip().lower() not in ("онлайн", "online", "нет", "null"):
             self.city = normalize_city(self.city)
+        else:
+            self.city = None
+
+        if not self.city:
+            self.is_online = True
 
         self.end_date = max(self.end_date, self.start_date)
         return self

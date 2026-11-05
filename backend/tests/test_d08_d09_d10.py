@@ -368,6 +368,10 @@ class InMemoryAsyncSession:
                 obj.magic_token = uuid4()
             self.selections[obj.id] = obj
 
+    async def merge(self, obj):
+        self.add(obj)
+        return obj
+
     async def flush(self):
         pass
 

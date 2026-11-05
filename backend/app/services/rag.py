@@ -4,6 +4,7 @@ import hashlib
 import logging
 
 import httpx
+from instructor.core import InstructorError
 from openai import APIError
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import case, delete, func, select
@@ -319,6 +320,13 @@ async def _query_rag_llm(
     user_prompt: str,
 ) -> RAGResponse:
     """Выполняет защищенный LLM_SEMAPHORE запрос к LLM со схемой RAGResponse."""
+    if not settings.LLM_API_KEY:
+        return RAGResponse(
+            is_answer_found=False,
+            answer_text=POLITE_FALLBACK_TEXT,
+            source_quote=None,
+        )
+
     try:
         async with LLM_SEMAPHORE:
             llm_res: RAGResponse = await asyncio.wait_for(
@@ -333,7 +341,7 @@ async def _query_rag_llm(
                 ),
                 timeout=25.0,
             )
-    except (TimeoutError, APIError, httpx.HTTPError) as exc:
+    except (TimeoutError, APIError, httpx.HTTPError, InstructorError, ValidationError, ValueError) as exc:
         logger.exception(
             "Сетевой сбой при обращении к LLM в RAG (event_id=%s)",
             event_id,
@@ -358,7 +366,7 @@ async def _persist_and_escalate_rag_result(
 ) -> AskRegulationQuestionOut:
     """Сохраняет ответ LLM в кэш/историю чата и при необходимости эскалирует вопрос менеджеру в Telegram."""
     if llm_res.is_answer_found:
-        session.add(
+        await session.merge(
             LLMCache(
                 cache_key=primary_cache_key,
                 event_id=event.id,
@@ -367,14 +375,6 @@ async def _persist_and_escalate_rag_result(
         )
 
     selection_obj, company_name, manager_chat_id = await _resolve_selection_context(session, selection_id)
-    escalated = False
-    if not llm_res.is_answer_found and auto_escalate:
-        alert_text = format_escalation_alert(
-            company_name=company_name,
-            event_title=event.canonical_title,
-            question_text=question_clean,
-        )
-        escalated = await send_manager_alert(alert_text, chat_id=manager_chat_id)
 
     if selection_obj is not None:
         await _save_chat_message(
@@ -386,6 +386,15 @@ async def _persist_and_escalate_rag_result(
             needs_attention=not llm_res.is_answer_found,
         )
     await session.commit()
+
+    escalated = False
+    if not llm_res.is_answer_found and auto_escalate:
+        alert_text = format_escalation_alert(
+            company_name=company_name,
+            event_title=event.canonical_title,
+            question_text=question_clean,
+        )
+        escalated = await send_manager_alert(alert_text, chat_id=manager_chat_id)
 
     return AskRegulationQuestionOut(
         event_id=event.id,
