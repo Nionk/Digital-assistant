@@ -438,7 +438,8 @@ async def benchmark_block_2(session) -> dict[str, Any]:
             correct_budgets += 1
 
         # Check cities (set comparison)
-        expected_cities = set(case["cities"])
+        raw_exp_cities = case.get("cities")
+        expected_cities = set(raw_exp_cities) if isinstance(raw_exp_cities, (list, tuple, set)) else set()
         actual_cities = set(prof.cities)
         if expected_cities == actual_cities:
             correct_cities += 1

@@ -342,11 +342,17 @@ async def _query_rag_llm(
                 timeout=25.0,
             )
     except (TimeoutError, APIError, httpx.HTTPError, InstructorError, ValidationError, ValueError) as exc:
-        logger.exception(
-            "Сетевой сбой при обращении к LLM в RAG (event_id=%s)",
+        logger.warning(
+            "Сетевой сбой или таймаут при обращении к LLM в RAG (event_id=%s): %s. Применяется штатный фолбэк.",
             event_id,
+            exc,
+            exc_info=True,
         )
-        raise RuntimeError(f"Сервис RAG временно недоступен: {exc}") from exc
+        return RAGResponse(
+            is_answer_found=False,
+            answer_text=POLITE_FALLBACK_TEXT,
+            source_quote=None,
+        )
 
     if not llm_res.is_answer_found:
         llm_res.source_quote = None
