@@ -25,11 +25,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    # Флаг переходного режима авторизации для этапа Демо:
-    # При True: если заголовок Authorization отсутствует, запрос обслуживается от имени ведущего менеджера id=1 из БД.
-    # При False (Production): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
-    # [TODO-PHASE-P01]: Переключить в False по умолчанию после добавления экрана входа во фронтенде (Шаг 6).
-    ALLOW_DEMO_AUTH_BYPASS: bool = True
+    # Режим авторизации:
+    # При True: если заголовок Authorization отсутствует, запрос обслуживается от имени ведущего менеджера id=1 (только для локальной разработки и демо).
+    # При False (Production / По умолчанию): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
+    ALLOW_DEMO_AUTH_BYPASS: bool = False
 
     @field_validator("DATABASE_URL", mode="after")
     @classmethod

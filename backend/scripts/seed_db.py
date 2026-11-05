@@ -117,7 +117,7 @@ async def seed_default_manager(session: AsyncSession) -> User:
         manager = User(
             id=DEFAULT_MANAGER_DATA["id"],
             email=DEFAULT_MANAGER_DATA["email"],
-            password_hash=hash_password(DEFAULT_MANAGER_DATA["password"]),
+            password_hash=hash_password(str(DEFAULT_MANAGER_DATA["password"])),
             full_name=DEFAULT_MANAGER_DATA["full_name"],
             telegram_chat_id=DEFAULT_MANAGER_DATA["telegram_chat_id"],
         )
