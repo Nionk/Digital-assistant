@@ -1,9 +1,21 @@
 from datetime import date
-from typing import Literal, Self
+from typing import Literal, Self, TypeAlias
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.constants import normalize_city
+
+CanonicalFAQQuestion: TypeAlias = Literal[
+    "Что входит в рекомендованный тариф?",
+    "Какие условия раннего бронирования и дедлайны?",
+    "Формат участия и требования к спикеру",
+]
+
+_LEGACY_SEED_FAQ_ALIASES: dict[str, CanonicalFAQQuestion] = {
+    "что входит в тариф?": "Что входит в рекомендованный тариф?",
+    "условия early bird": "Какие условия раннего бронирования и дедлайны?",
+    "требования к спикеру": "Формат участия и требования к спикеру",
+}
 
 
 class TariffExtracted(BaseModel):
@@ -40,14 +52,9 @@ class TariffExtracted(BaseModel):
 class FAQCacheItem(BaseModel):
     """Готовый ответ на типовой вопрос для предзаполнения llm_cache согласно разделу 5.3 get_data.md."""
 
-    question: Literal[
-        "Что входит в рекомендованный тариф?",
-        "Какие условия раннего бронирования и дедлайны?",
-        "Формат участия и требования к спикеру",
-        "Что входит в тариф?",
-        "Условия Early Bird",
-        "Требования к спикеру",
-    ] = Field(..., description="Канонический вопрос по регламенту мероприятия.")
+    question: CanonicalFAQQuestion = Field(
+        ..., description="Канонический вопрос по регламенту мероприятия из FAQ_QUICK_CHIPS."
+    )
     answer: str = Field(
         ...,
         description="Точный ответ на основе регламента. Если данных нет — напиши 'Уточняется у организаторов'.",
@@ -55,6 +62,16 @@ class FAQCacheItem(BaseModel):
     source_quote: str = Field(
         ..., description="Дословная цитата из регламента, подтверждающая ответ."
     )
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def canonicalize_seed_question(cls, value: object) -> object:
+        """Приводит сокращенные ключи из seed_data.json / get_data.md к 3 каноническим вопросам витрины."""
+        if not isinstance(value, str):
+            return value
+        cleaned = value.strip()
+        mapped = _LEGACY_SEED_FAQ_ALIASES.get(cleaned.lower())
+        return mapped if mapped is not None else cleaned
 
 
 class EventIngestionSchema(BaseModel):

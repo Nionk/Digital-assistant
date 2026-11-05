@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from app.core.config import settings
 from app.main import app
+from app.services.telegram import StubTelegramTransport, set_telegram_transport
 
 
 class TestD05APIContracts(unittest.TestCase):
@@ -22,6 +23,7 @@ class TestD05APIContracts(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        set_telegram_transport(StubTelegramTransport())
         cls._tc = TestClient(app)
         cls.client = cls._tc.__enter__()
         # [AUDIT-FAKE]: Контрактный тест проходит без заголовка Authorization (JWT) и использует несуществующие в сидах ID (selection_id=10, event_id=101, tariff_id=501, item_id=1001, magic_token=550e8400...), рассчитывая на хардкодные фолбэки и моки внутри API.
@@ -36,6 +38,7 @@ class TestD05APIContracts(unittest.TestCase):
     def tearDownClass(cls):
         cls._emb_patcher.stop()
         cls._tc.__exit__(None, None, None)
+        set_telegram_transport(None)
 
     def test_01_system_health(self):
         """Проверка работоспособности системного эндпоинта /health."""

@@ -329,7 +329,7 @@ async def react_to_showcase_item(
             reaction=payload.reaction,
             comment=payload.comment,
         )
-        notified = await send_manager_alert(alert_html, chat_id=123456789)
+        notified = await send_manager_alert(alert_html, chat_id=None)
         return ClientReactionOut(
             selection_item_id=item_id,
             new_reaction=payload.reaction,
@@ -506,7 +506,7 @@ async def escalate_question_to_manager(
             event_title=f"Мероприятие #{event_id}",
             question_text=payload.question_text,
         )
-        await send_manager_alert(alert_html, chat_id=123456789)
+        await send_manager_alert(alert_html, chat_id=None)
         return EscalateQuestionOut(
             event_id=event_id,
             question_text=payload.question_text,

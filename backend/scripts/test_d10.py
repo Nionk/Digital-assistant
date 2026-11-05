@@ -13,6 +13,7 @@ if hasattr(sys.stdout, "reconfigure"):
 from app.core.database import async_session_maker, engine, get_async_session
 from app.main import app
 from app.models.models import Selection, SelectionItem
+from app.services.telegram import StubTelegramTransport, set_telegram_transport
 from tests.test_d08_d09_d10 import InMemoryAsyncSession, is_postgres_online
 
 
@@ -74,6 +75,7 @@ async def get_or_create_published_token(client: httpx.AsyncClient, pg_up: bool, 
 async def main() -> None:
     print("=== Тест D-10: Публичная витрина клиента (/s/{magic_token}) и Telegram-алерты ===\n")
 
+    set_telegram_transport(StubTelegramTransport())
     pg_up = is_postgres_online()
     fake_db = InMemoryAsyncSession()
     # [AUDIT-FAKE]: Подмена реальной БД на InMemoryAsyncSession при остановленном контейнере PostgreSQL.
@@ -165,6 +167,7 @@ async def main() -> None:
         print("\n[SUCCESS] ВСЕ ТЕСТЫ D-10 ПРОЙДЕНЫ УСПЕШНО!")
 
     app.dependency_overrides.pop(get_async_session, None)
+    set_telegram_transport(None)
     await engine.dispose()
 
 

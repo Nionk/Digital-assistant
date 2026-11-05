@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 import httpx
+from instructor.exceptions import InstructorRetryException
 from openai import APIError
-from pydantic import BaseModel, Field
-from sqlalchemy import and_, delete, exists, func, or_, select
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import and_, case, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 EventFormat: TypeAlias = Literal["roundtable", "business_breakfast", "forum", "conference", "session"]
 ParticipationRole: TypeAlias = Literal["delegate", "speaker", "sponsor"]
+EventDataStatus: TypeAlias = Literal["ready", "needs_enrichment", "archived"]
 
 
 @dataclass
@@ -104,6 +106,15 @@ def _normalize_event_format(raw_format: str | None) -> EventFormat:
     if raw_format == "session":
         return "session"
     return "conference"
+
+
+def _normalize_data_status(raw_status: str | None) -> EventDataStatus:
+    """Приводит статус полноты данных из БД к строгому типу EventDataStatus."""
+    if raw_status == "needs_enrichment":
+        return "needs_enrichment"
+    if raw_status == "archived":
+        return "archived"
+    return "ready"
 
 
 def _clean_fts_term(kw: str) -> str | None:
@@ -182,38 +193,22 @@ def build_default_rationale(
     return f"Приоритетная площадка по направлениям ({themes_str}) в {loc}: обеспечивает {role_label}."
 
 
-def _matches_location_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
-    """Проверяет строгое соответствие мероприятия географическому фильтру клиента."""
-    if profile.cities:
-        if profile.include_online:
-            return (ev.city in profile.cities) or bool(ev.is_online)
-        return (ev.city in profile.cities) and not bool(ev.is_online)
-    if not profile.include_online:
-        return not bool(ev.is_online)
-    return True
-
-
-def _matches_date_filter(ev: Event, profile: ClientQueryExtracted) -> bool:
-    """Проверяет попадание мероприятия в календарный диапазон клиента."""
-    if profile.date_from is not None and ev.start_date < profile.date_from:
-        return False
-    return not (profile.date_to is not None and ev.end_date > profile.date_to)
-
-
 def _build_sql_filter_conditions(
     profile: ClientQueryExtracted,
     today: datetime.date,
-    strict_filters: bool,
-    enforce_dates: bool,
+    *,
+    enforce_dates: bool = True,
+    budget_ceiling: float | None = None,
 ) -> list[ColumnElement[bool]]:
-    """Формирует список предикатов SQL WHERE для гибридного RRF-поиска."""
+    """
+    Формирует список предикатов SQL WHERE для гибридного RRF-поиска (artifact.md раздел 10.3).
+    Строго проверяет Quality Gate (data_status == 'ready'), локацию, даты и актуальную цену Early Bird через CASE.
+    """
     conditions: list[ColumnElement[bool]] = [
         Event.is_active.is_(True),
         Event.summary_embedding.is_not(None),
-        or_(Event.data_status == "ready", Event.data_status.is_(None)),
+        Event.data_status == "ready",
     ]
-    if not strict_filters:
-        return conditions
 
     if enforce_dates:
         if profile.date_from is not None:
@@ -229,20 +224,25 @@ def _build_sql_filter_conditions(
     elif not profile.include_online:
         conditions.append(Event.is_online.is_(False))
 
-    max_allowed_price = profile.total_budget_max * 1.10
+    max_price = budget_ceiling if budget_ceiling is not None else profile.total_budget_max
+    effective_price_expr = case(
+        (
+            and_(
+                EventTariff.early_bird_deadline.is_not(None),
+                EventTariff.early_bird_deadline >= today,
+                EventTariff.early_bird_price.is_not(None),
+            ),
+            EventTariff.early_bird_price,
+        ),
+        else_=EventTariff.base_price,
+    )
     tariff_exists_stmt = exists(
         select(1).where(
             and_(
                 EventTariff.event_id == Event.id,
                 or_(
                     EventTariff.base_price.is_(None),
-                    EventTariff.base_price <= max_allowed_price,
-                    and_(
-                        EventTariff.early_bird_deadline.is_not(None),
-                        EventTariff.early_bird_deadline >= today,
-                        EventTariff.early_bird_price.is_not(None),
-                        EventTariff.early_bird_price <= max_allowed_price,
-                    ),
+                    effective_price_expr <= max_price,
                 ),
             )
         )
@@ -257,15 +257,21 @@ async def fetch_hybrid_rrf_candidates(
     query_vec: list[float],
     fts_query_str: str,
     today: datetime.date,
-    strict_filters: bool = True,
+    *,
     limit: int = 15,
     enforce_dates: bool = True,
+    budget_ceiling: float | None = None,
 ) -> list[tuple[Event, float]]:
     """
     Выполняет гибридный поиск (векторная близость pgvector + полнотекстовый поиск FTS)
     с объединением рангов по формуле Reciprocal Rank Fusion (k=60).
     """
-    conditions = _build_sql_filter_conditions(profile, today, strict_filters, enforce_dates)
+    conditions = _build_sql_filter_conditions(
+        profile,
+        today,
+        enforce_dates=enforce_dates,
+        budget_ceiling=budget_ceiling,
+    )
 
     vec_dist_expr = Event.summary_embedding.cosine_distance(query_vec)
     ts_query_expr = func.websearch_to_tsquery("russian", fts_query_str)
@@ -343,23 +349,55 @@ async def _fetch_filtered_events_map(
     fts_query_str: str,
     today: datetime.date,
 ) -> dict[int, tuple[Event, float]]:
-    """Выполняет гибридный RRF-поиск с каскадным ослаблением дат при сохранении географии."""
+    """
+    Выполняет каскадный гибридный RRF-поиск в PostgreSQL:
+    1) Топ-15 строго в пределах бюджета и дат;
+    2) При нехватке кандидатов (< K) — добор в пределах +10% допуска бюджета;
+    3) При нехватке кандидатов (< K) — добор с ослаблением дат при сохранении географии.
+    """
     strict_rows = await fetch_hybrid_rrf_candidates(
-        session, profile, query_vec, fts_query_str, today, strict_filters=True, limit=20, enforce_dates=True
+        session,
+        profile,
+        query_vec,
+        fts_query_str,
+        today,
+        limit=15,
+        enforce_dates=True,
+        budget_ceiling=profile.total_budget_max,
     )
-    events_map: dict[int, tuple[Event, float]] = {
-        ev.id: (ev, score)
-        for ev, score in strict_rows
-        if _matches_location_filter(ev, profile) and _matches_date_filter(ev, profile)
-    }
+    events_map: dict[int, tuple[Event, float]] = {ev.id: (ev, score) for ev, score in strict_rows}
+    if len(events_map) >= profile.target_events_count:
+        return events_map
+
+    tolerance_ceiling = profile.total_budget_max * 1.10
+    tolerance_rows = await fetch_hybrid_rrf_candidates(
+        session,
+        profile,
+        query_vec,
+        fts_query_str,
+        today,
+        limit=15,
+        enforce_dates=True,
+        budget_ceiling=tolerance_ceiling,
+    )
+    for ev, score in tolerance_rows:
+        if ev.id not in events_map and len(events_map) < 15:
+            events_map[ev.id] = (ev, score)
     if len(events_map) >= profile.target_events_count:
         return events_map
 
     relaxed_rows = await fetch_hybrid_rrf_candidates(
-        session, profile, query_vec, fts_query_str, today, strict_filters=True, limit=20, enforce_dates=False
+        session,
+        profile,
+        query_vec,
+        fts_query_str,
+        today,
+        limit=15,
+        enforce_dates=False,
+        budget_ceiling=tolerance_ceiling,
     )
     for ev, score in relaxed_rows:
-        if ev.id not in events_map and _matches_location_filter(ev, profile) and len(events_map) < 20:
+        if ev.id not in events_map and len(events_map) < 15:
             events_map[ev.id] = (ev, score * 0.85)
     return events_map
 
@@ -425,27 +463,38 @@ def _tariff_sort_key(t: TariffOptionOut) -> tuple[float, float]:
     return (t.actual_price if t.actual_price is not None else 0.0, -(t.savings or 0.0))
 
 
+def _pick_cheapest_by_role(
+    priced_tariffs: list[TariffOptionOut],
+    role: ParticipationRole,
+) -> TariffOptionOut | None:
+    """Возвращает самый выгодный тариф заданной роли или None, если подходящих тарифов нет."""
+    matches = [t for t in priced_tariffs if t.participation_role == role]
+    return min(matches, key=_tariff_sort_key) if matches else None
+
+
 def pick_best_tariff_for_role(
     priced_tariffs: list[TariffOptionOut],
-    target_role: str,
+    target_role: ParticipationRole,
     allow_role_fallback: bool = False,
 ) -> tuple[TariffOptionOut | None, bool]:
     """
     Выбирает оптимальный по цене тариф для заданной роли ('speaker', 'delegate', 'sponsor').
     Возвращает кортеж (TariffOptionOut | None, is_strict_role_match: bool).
+    Спикерский слот при allow_role_fallback=True может быть заменен только на партнерский ('sponsor'),
+    но никогда не подменяется на обычный билет слушателя ('delegate').
     """
-    role_matches = [t for t in priced_tariffs if t.participation_role == target_role]
-    if role_matches:
-        return min(role_matches, key=_tariff_sort_key), True
+    strict_match = _pick_cheapest_by_role(priced_tariffs, target_role)
+    if strict_match is not None:
+        return strict_match, True
 
-    if allow_role_fallback and priced_tariffs:
-        if target_role == "speaker":
-            sponsor_matches = [t for t in priced_tariffs if t.participation_role == "sponsor"]
-            if sponsor_matches:
-                return min(sponsor_matches, key=_tariff_sort_key), False
-        return min(priced_tariffs, key=_tariff_sort_key), False
+    if not allow_role_fallback or not priced_tariffs:
+        return None, False
 
-    return None, False
+    if target_role == "speaker":
+        return _pick_cheapest_by_role(priced_tariffs, "sponsor"), False
+    if target_role == "sponsor":
+        return _pick_cheapest_by_role(priced_tariffs, "speaker"), False
+    return min(priced_tariffs, key=_tariff_sort_key), False
 
 
 def _sum_tariff_totals(chosen_tariffs: list[TariffOptionOut]) -> tuple[float, float, float]:
@@ -488,14 +537,14 @@ def _build_evaluated_combo(
 def _match_tariffs_for_speaker_set(
     combo: tuple[ScoredEventCandidate, ...],
     speaker_set: set[int],
-    default_role: str,
+    default_role: ParticipationRole,
     allow_role_fallback: bool,
 ) -> tuple[list[TariffOptionOut], bool] | None:
     """Подбирает тарифы для заданного распределения спикерских слотов внутри комбинации."""
     chosen_tariffs: list[TariffOptionOut] = []
     strict_roles_ok = True
     for idx, cand in enumerate(combo):
-        desired_role = "speaker" if idx in speaker_set else default_role
+        desired_role: ParticipationRole = "speaker" if idx in speaker_set else default_role
         t, is_strict = pick_best_tariff_for_role(cand.priced_tariffs, desired_role, allow_role_fallback)
         if t is None:
             return None
@@ -515,15 +564,19 @@ def evaluate_candidate_tuple(
     """
     Для выбранной комбинации из K мероприятий перебирает распределение спикерских/спонсорских
     и делегатских слотов и возвращает валидные оцененные комбинации.
+    Еcли комбинация размера K меньше запрошенного min_speaker_events, комбинация отклоняется.
     """
     date_conflict = has_offline_date_conflict(combo)
     if check_dates and date_conflict:
         return []
 
     k = len(combo)
-    s_needed = min(max(0, min_speaker_events), k)
+    s_needed = max(0, min_speaker_events)
+    if s_needed > k:
+        return []
+
     is_pure_sponsor = "sponsor" in required_roles and "delegate" not in required_roles and s_needed == 0
-    default_role = "sponsor" if is_pure_sponsor else "delegate"
+    default_role: ParticipationRole = "sponsor" if is_pure_sponsor else "delegate"
 
     valid_evaluations: list[EvaluatedCombo] = []
     for speaker_indices in itertools.combinations(range(k), s_needed):
@@ -702,9 +755,6 @@ def build_bundles(
     return selected_variants, _select_bonus_on_request_pairs(candidates, profile, v1_event_ids, limit=2)
 
 
-assemble_bundles_and_bonus = build_bundles
-
-
 def build_fallback_pitch(
     client_name: str,
     profile: ClientQueryExtracted,
@@ -712,7 +762,7 @@ def build_fallback_pitch(
 ) -> str:
     """
     Формирует чистый, выверенный шаблон КП на случай недоступности внешнего LLM-шлюза.
-    Корректно адаптируется к отсутствию скидок Early Bird (total_savings == 0.0).
+    Корректно адаптируется к составу ролей и отсутствию скидок Early Bird (total_savings == 0.0).
     """
     titles = ", ".join(f"«{c.event.canonical_title}»" for c in v1.candidates)
     themes_str = ", ".join(profile.themes_keywords[:3]) if profile.themes_keywords else "ключевым отраслевым направлениям"
@@ -737,10 +787,16 @@ def build_fallback_pitch(
             f"(базовая стоимость без скидки — {base_str} ₽)."
         )
 
-    pitch += (
-        "\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, "
-        "подготовку экспертного выступления спикера и организацию целевых деловых знакомств на площадках."
-    )
+    if v1.matched_speaker_count > 0:
+        pitch += (
+            "\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, "
+            "подготовку экспертного выступления спикера и организацию целевых деловых знакомств на площадках."
+        )
+    else:
+        pitch += (
+            "\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, "
+            "аккредитацию участников и организацию целевых деловых знакомств на площадках."
+        )
     return pitch
 
 
@@ -790,6 +846,11 @@ def _build_pitch_prompts(
         if (v1.total_savings > 0 and v1.earliest_deadline is not None)
         else "Специальных скидок Early Bird в данном пакете нет (экономия 0 руб., не упоминай скидки в письме)."
     )
+    agency_role_clause = (
+        "подготовку спикера и организацию целевых встреч"
+        if v1.matched_speaker_count > 0
+        else "согласование участия с организаторами и организацию целевых встреч"
+    )
     v1_summary = (
         f"Состав Варианта №1 ({len(v1.candidates)} событий): "
         + ", ".join(f"«{c.event.canonical_title}» (тариф {t.tariff_name})" for c, t in zip(v1.candidates, v1.chosen_tariffs))
@@ -802,8 +863,8 @@ def _build_pitch_prompts(
         "Сформируй персональные аргументы выбора площадки (ai_rationale) для каждого мероприятия из списка "
         "(укажи ценность целевой аудитории и какую задачу решает формат: целевые деловые знакомства, экспертное выступление в сессии или вовлечение аудитории на стенде) "
         "и напиши живое, убедительное сопроводительное письмо клиенту (generated_pitch_text) без канцеляризмов и спам-штампов. "
-        "В письме подчеркни, что календарь сверен без пересечений по срокам, укажи бюджет внешних взносов организаторам "
-        "и готовность агентства взять на себя подготовку спикера и организацию целевых встреч. "
+        f"В письме подчеркни, что календарь сверен без пересечений по срокам, укажи бюджет внешних взносов организаторам "
+        f"и готовность агентства взять на себя {agency_role_clause}. "
         "КРИТИЧЕСКОЕ ПРАВИЛО: В письме используй ТОЛЬКО переданные ниже цифры стоимости Варианта №1 и дат. "
         "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
     )
@@ -836,7 +897,7 @@ async def _request_pitch_from_llm(
                 timeout=25.0,
             )
             return res
-    except (TimeoutError, APIError, httpx.HTTPError) as exc:
+    except (TimeoutError, APIError, httpx.HTTPError, ValidationError, InstructorRetryException) as exc:
         logger.warning(
             "Сбой генерации текста КП через LLM (%s: %s). Применяется детерминированный шаблон.",
             type(exc).__name__,
@@ -918,7 +979,7 @@ def _to_bundle_event_item(
         available_tariffs=cand.all_tariffs,
         ai_rationale=rationale,
         website_url=primary_url,
-        data_status=ev.data_status or "ready",
+        data_status=_normalize_data_status(ev.data_status),
         missing_data_warnings=list(ev.missing_data_warnings or []),
     )
 
@@ -945,7 +1006,11 @@ def _format_bundle_variants_out(
                 else f"Вариант 1: Максимальный охват тем ({len(items_out)} события)"
             )
         else:
-            title = f"Вариант 2: Оптимальный по экономии бюджета ({len(items_out)} события)"
+            title = (
+                f"Вариант 2: Альтернативный состав ({len(items_out)} события, требует согласования бюджета)"
+                if ev_var.is_over_budget_tolerance
+                else f"Вариант 2: Оптимальный по экономии бюджета ({len(items_out)} события)"
+            )
 
         bundle_variants_out.append(
             BundleVariantOut(

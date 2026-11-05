@@ -3,24 +3,30 @@ import datetime
 import io
 import json
 import logging
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
-
-try:
-    import fitz
-except ImportError:
-    fitz = None
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
+import pymupdf as fitz
+from bs4 import BeautifulSoup
+from markdownify import markdownify as html_to_markdown
 from openai import APIError
 from rapidfuzz import fuzz
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.models import Event, EventTariff, LLMCache
+from app.models.models import Event, EventChunk, EventTariff, LLMCache
 from app.schemas.event_ingestion import EventIngestionSchema
-from app.services.ai_client import LLM_SEMAPHORE, get_embedding, structured_llm_client
+from app.services.ai_client import (
+    LLM_SEMAPHORE,
+    get_embedding,
+    get_embeddings_batch,
+    structured_llm_client,
+)
 from app.services.rag import build_rag_cache_key, invalidate_rag_cache
 
 logger = logging.getLogger(__name__)
@@ -53,6 +59,36 @@ IMPORTANT_PDF_KEYWORDS: tuple[str, ...] = (
     "возврат",
 )
 
+_STOP_URL_EXTENSIONS: tuple[str, ...] = (
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+    ".css",
+    ".js",
+    ".zip",
+    ".rar",
+    ".mp4",
+    ".mp3",
+)
+
+_STOP_URL_SUBSTRINGS: tuple[str, ...] = (
+    "/login",
+    "/register",
+    "/privacy",
+    "/policy",
+    "/agreement",
+    "/contacts",
+    "/about",
+    "/advertising",
+    "mailto:",
+    "tel:",
+    "javascript:",
+)
+
 
 @dataclass(frozen=True)
 class CustomerSourceConfig:
@@ -61,6 +97,7 @@ class CustomerSourceConfig:
     source_key: str
     display_name: str
     catalog_url: str
+    card_url_patterns: tuple[str, ...]
     encoding: str = "utf-8"
     use_jina_reader: bool = False
     required_cookies: tuple[tuple[str, str], ...] = ()
@@ -71,49 +108,58 @@ CUSTOMER_SOURCES_REGISTRY: tuple[CustomerSourceConfig, ...] = (
         source_key="expomap_construction",
         display_name="Expomap — Строительство",
         catalog_url="https://expomap.ru/expo/city/moscow/theme/stroitelstvo/",
+        card_url_patterns=(r"^https?://(?:www\.)?expomap\.ru/expo/[a-z0-9\-]+/?$",),
     ),
     CustomerSourceConfig(
         source_key="expomap_design",
         display_name="Expomap — Дизайн",
         catalog_url="https://expomap.ru/expo/city/moscow/theme/dizain/",
+        card_url_patterns=(r"^https?://(?:www\.)?expomap\.ru/expo/[a-z0-9\-]+/?$",),
     ),
     CustomerSourceConfig(
         source_key="architime",
         display_name="ARCHITIME",
         catalog_url="https://www.architime.ru/lecturexibition.htm",
+        card_url_patterns=(r"^https?://(?:www\.)?architime\.ru/activity/202\d/[a-z0-9_\-]+\.htm$",),
         encoding="windows-1251",
     ),
     CustomerSourceConfig(
         source_key="archi_ru",
         display_name="Архи.ру",
         catalog_url="https://archi.ru/events",
+        card_url_patterns=(r"^https?://(?:www\.)?archi\.ru/events/\d+/[a-z0-9_\-]+",),
         use_jina_reader=True,
     ),
     CustomerSourceConfig(
         source_key="helpinver",
         display_name="Хелпинвер",
         catalog_url="https://helpinver.com/events/",
+        card_url_patterns=(r"^https?://(?:www\.)?helpinver\.com/events/[a-z0-9_\-]+/?$",),
         required_cookies=(("beget", "begetok"),),
     ),
     CustomerSourceConfig(
         source_key="archdialog",
         display_name="АрхДиалог (Timepad)",
         catalog_url="https://archdialog.timepad.ru/events/",
+        card_url_patterns=(r"^https?://archdialog\.timepad\.ru/event/\d+/?$",),
     ),
     CustomerSourceConfig(
         source_key="design_mate",
         display_name="Design Mate",
         catalog_url="https://design-mate.ru/read/go",
+        card_url_patterns=(r"^https?://(?:www\.)?design-mate\.ru/read/go/[a-z0-9_\-]+/?$",),
     ),
     CustomerSourceConfig(
         source_key="votkuda",
         display_name="ВотКуда",
         catalog_url="https://votkuda.ru/moskva/vyistavki",
+        card_url_patterns=(r"^https?://(?:www\.)?votkuda\.ru/[a-z\-]+/vyistavki/[a-z0-9_\-]+/?$",),
     ),
     CustomerSourceConfig(
         source_key="archdaily",
         display_name="ArchDaily",
         catalog_url="https://www.archdaily.com/tag/events",
+        card_url_patterns=(r"^https?://(?:www\.)?archdaily\.com/\d+/[a-z0-9\-]+/?$",),
     ),
 )
 
@@ -124,57 +170,273 @@ class CatalogSourceScraperProtocol(Protocol):
     async def fetch_catalog_urls(self, source: CustomerSourceConfig) -> list[str]: ...
 
 
-# [DEV-STUB: Двухшаговый фоновый обход 9 внешних порталов заказчика (Hop 1 -> Hop 2) и селекторы карточек]
+class VisionOCRProviderProtocol(Protocol):
+    """Протокол распознавания отсканированных страниц PDF без текстового слоя."""
+
+    async def extract_text_from_images(self, images_png: Sequence[bytes]) -> str: ...
+
+
+# [DEV-STUB: Распознавание отсканированных страниц PDF без текстового слоя через внешнюю Vision LLM]
+class StubVisionOCRProvider:
+    """
+    Изолированный провайдер-заглушка для распознавания сканов страниц PDF.
+    Используется по умолчанию, когда текстовый слой PDF уже извлечен через PyMuPDF.
+    """
+
+    async def extract_text_from_images(self, images_png: Sequence[bytes]) -> str:
+        logger.info(
+            "[DEV-STUB VISION OCR] Пропуск OCR для %d PNG-страниц без текстового слоя.",
+            len(images_png),
+        )
+        return ""
+
+
+# [DEV-STUB: Изолированный провайдер каталогов для автономных unit-тестов без сетевых запросов]
 class StubCatalogSourceScraper:
     """
-    Изолированный провайдер-заглушка для фонового краулинга внешних каталогов.
-    Возвращает пустой список новых URL до подключения парсеров отдельных площадок в Спринте 3.
+    Изолированный провайдер-заглушка для тестирования пайплайна мониторинга без выхода в интернет.
     """
 
     async def fetch_catalog_urls(self, source: CustomerSourceConfig) -> list[str]:
         logger.info(
-            "[DEV-STUB SCRAPER] Пропуск обхода внешнего каталога %s (%s): адаптер в разработке.",
+            "[DEV-STUB SCRAPER] Автономный режим для %s (%s).",
             source.display_name,
             source.catalog_url,
         )
         return []
 
 
+def _normalize_clean_url(raw_href: str, base_url: str) -> str | None:
+    """Приводит ссылку к абсолютному виду без fragment/query и отсекает невалидные схемы/расширения."""
+    href = raw_href.strip()
+    if not href or href.startswith("#"):
+        return None
+    low_href = href.lower()
+    if any(sub in low_href for sub in _STOP_URL_SUBSTRINGS):
+        return None
+
+    abs_url = urljoin(base_url, href)
+    parts = urlsplit(abs_url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return None
+
+    clean_path = parts.path
+    if any(clean_path.lower().endswith(ext) for ext in _STOP_URL_EXTENSIONS):
+        return None
+
+    normalized = urlunsplit((parts.scheme, parts.netloc, clean_path, "", ""))
+    if normalized.rstrip("/") == base_url.rstrip("/"):
+        return None
+    return normalized
+
+
+def _extract_urls_from_ld_dict(obj: dict[str, object]) -> list[str]:
+    """Извлекает URL из одного объекта JSON-LD (включая вложенный itemListElement)."""
+    urls: list[str] = []
+    url_val = obj.get("url")
+    if isinstance(url_val, str) and url_val.strip():
+        urls.append(url_val.strip())
+
+    item_list = obj.get("itemListElement")
+    if not isinstance(item_list, list):
+        return urls
+
+    for el in item_list:
+        if not isinstance(el, dict):
+            continue
+        nested_item = el.get("item")
+        el_url = el.get("url") or (nested_item.get("url") if isinstance(nested_item, dict) else None)
+        if isinstance(el_url, str) and el_url.strip():
+            urls.append(el_url.strip())
+    return urls
+
+
+def _extract_urls_from_ld_json(soup: BeautifulSoup) -> list[str]:
+    """Извлекает URL карточек мероприятий из блоков Schema.org (<script type='application/ld+json'>)."""
+    extracted: list[str] = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw_json = (script.string or "").strip()
+        if not raw_json:
+            continue
+        try:
+            payload = json.loads(raw_json)
+        except json.JSONDecodeError:
+            continue
+
+        items = payload if isinstance(payload, list) else [payload]
+        for obj in items:
+            if isinstance(obj, dict):
+                extracted.extend(_extract_urls_from_ld_dict(obj))
+    return extracted
+
+
+def _collect_raw_links(raw_content: str) -> list[str]:
+    """Собирает все сырые ссылки из HTML (<a>, JSON-LD) и Markdown-разметки."""
+    raw_candidates: list[str] = []
+    content_lower = raw_content.lower()
+    if "<a" in content_lower or "<script" in content_lower:
+        soup = BeautifulSoup(raw_content, "lxml")
+        raw_candidates.extend(_extract_urls_from_ld_json(soup))
+        for a_tag in soup.find_all("a", href=True):
+            href_val = a_tag.get("href")
+            if isinstance(href_val, str):
+                raw_candidates.append(href_val)
+
+    raw_candidates.extend(re.findall(r"\]\((https?://[^\s\)\"']+)\)", raw_content))
+    return raw_candidates
+
+
+def extract_filtered_card_urls(raw_content: str, source: CustomerSourceConfig) -> list[str]:
+    """
+    Извлекает ссылки на карточки мероприятий из HTML или Markdown (включая ответ r.jina.ai)
+    и строго фильтрует их по декларативным regex-паттернам source.card_url_patterns.
+    """
+    raw_candidates = _collect_raw_links(raw_content)
+    compiled_patterns = [re.compile(pat, re.IGNORECASE) for pat in source.card_url_patterns]
+    matched_urls: list[str] = []
+    seen: set[str] = set()
+
+    for cand in raw_candidates:
+        norm_url = _normalize_clean_url(cand, source.catalog_url)
+        if norm_url is None or norm_url in seen:
+            continue
+        if any(regex.search(norm_url) for regex in compiled_patterns):
+            seen.add(norm_url)
+            matched_urls.append(norm_url)
+
+    return matched_urls
+
+
+async def _fetch_via_jina_reader(client: httpx.AsyncClient, target_url: str) -> str:
+    """Запрашивает очищенный Markdown страницы через облачный рендер r.jina.ai."""
+    jina_url = f"https://r.jina.ai/{target_url}"
+    headers: dict[str, str] = {"X-With-Links-Summary": "true"}
+    if settings.jina_token:
+        headers["Authorization"] = f"Bearer {settings.jina_token}"
+    resp = await client.get(jina_url, headers=headers)
+    resp.raise_for_status()
+    return resp.text.strip()
+
+
+async def _fetch_raw_page_content(
+    url: str,
+    *,
+    encoding: str = "utf-8",
+    use_jina_reader: bool = False,
+    cookies: dict[str, str] | None = None,
+) -> tuple[str, bool]:
+    """
+    Загружает содержимое веб-страницы с учетом кодировки (windows-1251), cookies (beget=begetok)
+    и автоматического фолбэка на r.jina.ai при SPA / JS-защите (< 300 видимых символов).
+    Возвращает кортеж (content, is_markdown).
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        )
+    }
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, cookies=cookies) as client:
+        if use_jina_reader:
+            md_text = await _fetch_via_jina_reader(client, url)
+            return md_text, True
+
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        decoded_html = resp.content.decode(encoding, errors="replace")
+
+        soup = BeautifulSoup(decoded_html, "lxml")
+        visible_text = soup.get_text(" ", strip=True)
+        if len(visible_text) < 300 or "хостадмин.онлайн" in visible_text.lower():
+            md_text = await _fetch_via_jina_reader(client, url)
+            return md_text, True
+
+        return decoded_html, False
+
+
+class HttpCatalogSourceScraper:
+    """Боевой адаптер обхода каталогов 9 утвержденных площадок заказчика."""
+
+    async def fetch_catalog_urls(self, source: CustomerSourceConfig) -> list[str]:
+        cookies_dict = dict(source.required_cookies) if source.required_cookies else None
+        raw_content, _ = await _fetch_raw_page_content(
+            source.catalog_url,
+            encoding=source.encoding,
+            use_jina_reader=source.use_jina_reader,
+            cookies=cookies_dict,
+        )
+        return extract_filtered_card_urls(raw_content, source)
+
+
+def _convert_html_to_dossier_markdown(html_content: str) -> str:
+    """Преобразует HTML-страницу мероприятия в очищенный Markdown с сохранением Schema.org JSON-LD."""
+    soup = BeautifulSoup(html_content, "lxml")
+    ld_blocks = [
+        (s.string or "").strip()
+        for s in soup.find_all("script", attrs={"type": "application/ld+json"})
+        if (s.string or "").strip()
+    ]
+    for tag in soup(["script", "style", "noscript", "svg", "footer", "nav"]):
+        tag.decompose()
+
+    md_body = str(html_to_markdown(str(soup), heading_style="ATX")).strip()
+    if ld_blocks:
+        ld_section = "\n\n--- SCHEMA.ORG LD+JSON ---\n" + "\n".join(ld_blocks)
+        return f"{md_body}{ld_section}".strip()
+    return md_body
+
+
+async def fetch_url_dossier_text(
+    url: str,
+    source_config: CustomerSourceConfig | None = None,
+) -> str:
+    """
+    Загружает страницу мероприятия по URL и преобразует её в структурированный Markdown-текст
+    для передачи в LLM-3 (EventIngestionSchema).
+    """
+    enc = source_config.encoding if source_config else "utf-8"
+    use_jina = source_config.use_jina_reader if source_config else False
+    cookies_dict = dict(source_config.required_cookies) if (source_config and source_config.required_cookies) else None
+
+    content, is_markdown = await _fetch_raw_page_content(
+        url,
+        encoding=enc,
+        use_jina_reader=use_jina,
+        cookies=cookies_dict,
+    )
+    return content if is_markdown else _convert_html_to_dossier_markdown(content)
+
+
+def _validate_pdf_bytes(pdf_bytes: bytes) -> None:
+    """Проверяет непустоту и сигнатуру %PDF у переданного байтового потока."""
+    if not pdf_bytes:
+        raise ValueError("Передан пустой байтовый поток PDF-документа.")
+    if not pdf_bytes.lstrip().startswith(b"%PDF"):
+        raise ValueError("Переданный файл не является валидным PDF-документом (отсутствует сигнатура %PDF).")
+
+
 def extract_relevant_pdf_text_sync(pdf_bytes: bytes) -> tuple[str, list[bytes]]:
     """
     Синхронное извлечение текстового слоя из PDF-брошюры через PyMuPDF (fitz).
     Всегда включает первые 2 страницы (обложка + оглавление) и страницы,
-    содержащие ключевые слова из IMPORTANT_PDF_KEYWORDS (get_data.md раздел 4, Шаг 3).
+    содержащие ключевые слова из IMPORTANT_PDF_KEYWORDS (get_data.md раздел 4, Шаг 4Б и раздел 5.2).
     Вызывается строго внутри asyncio.to_thread.
     """
-    if not pdf_bytes:
-        raise ValueError("Передан пустой байтовый поток PDF-документа.")
-
-    if fitz is None or not pdf_bytes.lstrip().startswith(b"%PDF"):
-        if fitz is None:
-            logger.warning("PyMuPDF (fitz) не установлен в окружении. Используется текстовый фоллбэк.")
-        decoded_preview = pdf_bytes.decode("utf-8", errors="ignore").strip()
-        return decoded_preview, []
-
+    _validate_pdf_bytes(pdf_bytes)
     relevant_text_blocks: list[str] = []
     ocr_images_bytes: list[bytes] = []
 
     with fitz.open(stream=io.BytesIO(pdf_bytes), filetype="pdf") as doc:
-        for page_num in range(len(doc)):
+        for page_num in range(min(len(doc), 50)):
             page = doc[page_num]
             raw_text = str(page.get_text("text") or "").strip()
-            text_lower = raw_text.lower()
-
             if len(raw_text) < 50:
-                if len(ocr_images_bytes) < 3:
-                    pix = page.get_pixmap(dpi=150)
-                    ocr_images_bytes.append(pix.tobytes("png"))
+                if len(ocr_images_bytes) < 5:
+                    ocr_images_bytes.append(page.get_pixmap(dpi=150).tobytes("png"))
                 continue
 
-            is_relevant = page_num in (0, 1) or any(
-                kw in text_lower for kw in IMPORTANT_PDF_KEYWORDS
-            )
-            if is_relevant:
+            text_lower = raw_text.lower()
+            if page_num in (0, 1) or any(kw in text_lower for kw in IMPORTANT_PDF_KEYWORDS):
                 relevant_text_blocks.append(f"--- СТРАНИЦА PDF {page_num + 1} ---\n{raw_text}")
 
     return "\n\n".join(relevant_text_blocks), ocr_images_bytes
@@ -183,6 +445,70 @@ def extract_relevant_pdf_text_sync(pdf_bytes: bytes) -> tuple[str, list[bytes]]:
 async def extract_pdf_text_async(pdf_bytes: bytes) -> tuple[str, list[bytes]]:
     """Асинхронная обертка над CPU-bound парсингом PDF без блокировки Event Loop (rules.md п. 1.6)."""
     return await asyncio.to_thread(extract_relevant_pdf_text_sync, pdf_bytes)
+
+
+def split_regulation_into_chunks(
+    markdown_text: str,
+    chunk_size: int = 2500,
+    overlap: int = 250,
+) -> list[str]:
+    """
+    Нарезает длинный текст регламента на перекрывающиеся смысловые фрагменты для таблицы event_chunks.
+    Используется при превышении порога Context Stuffing (35 000 символов, раздел 10.4 artifact.md).
+    """
+    cleaned = markdown_text.strip()
+    if not cleaned:
+        return []
+    if chunk_size <= overlap:
+        raise ValueError("chunk_size должен быть строго больше overlap.")
+    if len(cleaned) <= chunk_size:
+        return [cleaned]
+
+    chunks: list[str] = []
+    step = chunk_size - overlap
+    start = 0
+    total_len = len(cleaned)
+    while start < total_len:
+        end = min(start + chunk_size, total_len)
+        fragment = cleaned[start:end].strip()
+        if fragment:
+            chunks.append(fragment)
+        if end >= total_len:
+            break
+        start += step
+    return chunks
+
+
+async def _sync_event_chunks(
+    session: AsyncSession,
+    event_obj: Event,
+    regulation_md: str,
+) -> None:
+    """
+    Синхронизирует записи EventChunk для мероприятия.
+    Если длина регламента превышает 35 000 символов (раздел 10.4 artifact.md),
+    нарезает текст на чанки и выполняет батчевую векторизацию через get_embeddings_batch.
+    """
+    await session.execute(delete(EventChunk).where(EventChunk.event_id == event_obj.id))
+    cleaned_md = regulation_md.strip()
+    if len(cleaned_md) <= 35000:
+        return
+
+    chunks = split_regulation_into_chunks(cleaned_md)
+    if not chunks:
+        return
+
+    vectors = await get_embeddings_batch(chunks)
+    for idx, (chunk_text, vec) in enumerate(zip(chunks, vectors)):
+        session.add(
+            EventChunk(
+                event_id=event_obj.id,
+                source_type="regulation_markdown",
+                chunk_index=idx,
+                content=chunk_text,
+                embedding=vec,
+            )
+        )
 
 
 def evaluate_event_quality_gate(
@@ -202,7 +528,7 @@ def evaluate_event_quality_gate(
     if not schema.is_online and not schema.city:
         gate_failures.append("missing_city_for_offline_event")
 
-    warnings: list[str] = [*schema.missing_data_warnings, *gate_failures]
+    warnings: list[str] = list(dict.fromkeys([*schema.missing_data_warnings, *gate_failures]))
     status: DataQualityStatus = "needs_enrichment" if gate_failures else "ready"
     return status, warnings
 
@@ -210,11 +536,11 @@ def evaluate_event_quality_gate(
 async def find_duplicate_event(
     session: AsyncSession,
     schema: EventIngestionSchema,
-    similarity_threshold: float = 85.0,
+    similarity_threshold: float = 82.0,
 ) -> Event | None:
     """
     Дедупликация событий через RapidFuzz (artifact.md п. 9.2.4, get_data.md раздел 4, Шаг 6):
-    Сравнивает нормализованные названия через token_set_ratio среди событий того же города
+    Сравнивает нормализованные названия через token_set_ratio (>= 82%) среди событий того же города
     (или онлайн) в окне start_date +- 1 день.
     """
     date_min = schema.start_date - datetime.timedelta(days=1)
@@ -251,7 +577,10 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
         "Ты — аналитик базы знаний B2B-мероприятий. Извлеки из текста структурированную карточку "
         "события по схеме EventIngestionSchema: официальное название, формат, город (или null для онлайн), "
         "даты проведения, содержательное summary (250-850 символов), подробный full_regulation_markdown, "
-        "все тарифы с НДС и 3 ответа faq_cache."
+        "все тарифы с НДС и 3 ответа faq_cache строго по вопросам: "
+        "'Что входит в рекомендованный тариф?', "
+        "'Какие условия раннего бронирования и дедлайны?', "
+        "'Формат участия и требования к спикеру'."
     )
     try:
         async with LLM_SEMAPHORE:
@@ -315,6 +644,22 @@ def _populate_event_tariffs_and_faq(
         )
 
 
+def _merge_regulation_markdown(
+    existing_md: str | None,
+    new_md: str,
+    source_url: str | None,
+    *,
+    is_update: bool,
+) -> str:
+    """Объединяет старый и новый текст регламента при обогащении существующей карточки."""
+    clean_new = new_md.strip()
+    clean_existing = (existing_md or "").strip()
+    if is_update and clean_existing and clean_new not in clean_existing:
+        src_label = source_url or "дополнительный источник"
+        return f"{clean_existing}\n\n--- Дополнение из источника ({src_label}) ---\n\n{clean_new}"
+    return new_md
+
+
 def _apply_schema_to_event(
     target: Event,
     schema: EventIngestionSchema,
@@ -335,17 +680,12 @@ def _apply_schema_to_event(
     target.start_date = schema.start_date
     target.end_date = schema.end_date
     target.summary = schema.summary
-
-    new_md = schema.full_regulation_markdown.strip()
-    existing_md = (target.full_regulation_markdown or "").strip()
-    if is_update and existing_md and new_md not in existing_md:
-        src_label = source_url or "дополнительный источник"
-        target.full_regulation_markdown = (
-            f"{existing_md}\n\n--- Дополнение из источника ({src_label}) ---\n\n{new_md}"
-        )
-    else:
-        target.full_regulation_markdown = schema.full_regulation_markdown
-
+    target.full_regulation_markdown = _merge_regulation_markdown(
+        target.full_regulation_markdown,
+        schema.full_regulation_markdown,
+        source_url,
+        is_update=is_update,
+    )
     target.themes = list(dict.fromkeys([*(target.themes or []), *schema.themes]))
     target.data_status = data_status
     target.missing_data_warnings = warnings
@@ -365,8 +705,11 @@ async def ingest_event_from_text(
     1. Извлекает EventIngestionSchema через LLM-3.
     2. Проверяет Quality Gate (ready vs needs_enrichment) и дубли через RapidFuzz.
     3. Вычисляет 1024-мерный эмбеддинг summary_embedding через Jina AI.
-    4. Сохраняет/обновляет мероприятие, его тарифы и сбрасывает устаревший кэш RAG.
+    4. Сохраняет/обновляет мероприятие, его тарифы, чанки регламента и сбрасывает устаревший кэш RAG.
     """
+    if not raw_dossier_text or not raw_dossier_text.strip():
+        raise ValueError("Передан пустой текст досье для извлечения карточки мероприятия.")
+
     schema = await _extract_structured_event_via_llm(raw_dossier_text)
     data_status, warnings = evaluate_event_quality_gate(schema)
     emb_text = f"{schema.canonical_title}. {schema.summary}. Темы: {', '.join(schema.themes)}"
@@ -388,6 +731,153 @@ async def ingest_event_from_text(
         session.add(event_obj)
         await session.flush()
 
+    await _sync_event_chunks(session, event_obj, event_obj.full_regulation_markdown or "")
     _populate_event_tariffs_and_faq(session, event_obj, schema)
     await session.commit()
     return event_obj
+
+
+async def _extract_pdf_dossier_parts(
+    pdf_bytes: bytes,
+    vision_ocr: VisionOCRProviderProtocol | None,
+) -> list[str]:
+    """Извлекает текстовый слой и результаты Vision OCR из PDF-документа для общего досье."""
+    parts: list[str] = []
+    pdf_text, ocr_images = await extract_pdf_text_async(pdf_bytes)
+    if pdf_text:
+        parts.append(f"=== ТЕКСТ ИЗ PDF-РЕГЛАМЕНТА ===\n{pdf_text}")
+    if ocr_images:
+        ocr_provider = vision_ocr if vision_ocr is not None else StubVisionOCRProvider()
+        ocr_text = await ocr_provider.extract_text_from_images(ocr_images)
+        if ocr_text.strip():
+            parts.append(f"=== РАСПОЗНАННЫЙ OCR ТЕКСТ PDF ===\n{ocr_text.strip()}")
+    return parts
+
+
+async def ingest_smart_event(
+    session: AsyncSession,
+    *,
+    source_url: str | None = None,
+    raw_text: str | None = None,
+    pdf_bytes: bytes | None = None,
+    vision_ocr: VisionOCRProviderProtocol | None = None,
+) -> Event:
+    """
+    Универсальный 3-режимный умный импорт и обогащение события (get_data.md раздел 6, Способ А):
+    объединяет данные из внешнего URL, вставленного текста и/или PDF-брошюры.
+    """
+    dossier_parts: list[str] = []
+
+    if source_url and source_url.strip():
+        clean_url = source_url.strip()
+        url_text = await fetch_url_dossier_text(clean_url)
+        if url_text:
+            dossier_parts.append(f"=== ДАННЫЕ СО СТРАНИЦЫ ({clean_url}) ===\n{url_text}")
+
+    if raw_text and raw_text.strip():
+        dossier_parts.append(f"=== ТЕКСТОВОЕ ОПИСАНИЕ / ЗАМЕТКА ===\n{raw_text.strip()}")
+
+    if pdf_bytes:
+        dossier_parts.extend(await _extract_pdf_dossier_parts(pdf_bytes, vision_ocr))
+
+    if not dossier_parts:
+        raise ValueError("Необходимо передать хотя бы один источник данных: source_url, raw_text или pdf_bytes.")
+
+    return await ingest_event_from_text(
+        session=session,
+        raw_dossier_text="\n\n".join(dossier_parts),
+        source_url=source_url.strip() if source_url else None,
+    )
+
+
+@dataclass(frozen=True)
+class ScrapingRunSummary:
+    """Сводный результат запуска фонового мониторинга источников заказчика."""
+
+    checked_sources: int
+    discovered_urls: int
+    ingested_ready_count: int
+    needs_enrichment_count: int
+    needs_enrichment_titles: list[str]
+
+
+async def _load_known_source_urls(session: AsyncSession) -> set[str]:
+    """Загружает множество всех уже известных URL из колонки events.source_urls (SQL Delta-Check)."""
+    res = await session.execute(select(Event.source_urls))
+    known: set[str] = set()
+    for urls_list in res.scalars().all():
+        if isinstance(urls_list, list):
+            for u in urls_list:
+                if isinstance(u, str) and u.strip():
+                    known.add(u.strip().rstrip("/"))
+    return known
+
+
+async def _ingest_source_new_urls(
+    session: AsyncSession,
+    src: CustomerSourceConfig,
+    new_urls: list[str],
+    known_urls: set[str],
+) -> tuple[int, list[str]]:
+    """Обходит список новых URL одного источника и возвращает (ready_count, enrichment_titles)."""
+    ready_count = 0
+    enrichment_titles: list[str] = []
+    for card_url in new_urls:
+        try:
+            dossier_text = await fetch_url_dossier_text(card_url, source_config=src)
+            ev = await ingest_event_from_text(session, dossier_text, source_url=card_url)
+            known_urls.add(card_url.strip().rstrip("/"))
+            if ev.data_status == "ready":
+                ready_count += 1
+            else:
+                enrichment_titles.append(ev.canonical_title)
+        except (TimeoutError, APIError, httpx.HTTPError, ValueError, RuntimeError):
+            logger.exception("Не удалось импортировать карточку %s из источника %s", card_url, src.source_key)
+    return ready_count, enrichment_titles
+
+
+async def run_customer_sources_monitoring(
+    session: AsyncSession,
+    *,
+    source_key: str | None = None,
+    catalog_scraper: CatalogSourceScraperProtocol | None = None,
+    max_urls_per_source: int = 10,
+) -> ScrapingRunSummary:
+    """
+    Оркестратор мониторинга 9 утвержденных площадок ГК «СКАРТ» (get_data.md раздел 4, Шаг 0):
+    1. Выбирает целевые источники из CUSTOMER_SOURCES_REGISTRY.
+    2. Получает ссылки на карточки через CatalogSourceScraperProtocol.
+    3. Выполняет SQL Delta-Check против уже сохраненных в БД events.source_urls.
+    4. Импортирует новые мероприятия и собирает статистику READY vs NEEDS_ENRICHMENT.
+    """
+    sources = [s for s in CUSTOMER_SOURCES_REGISTRY if source_key is None or s.source_key == source_key]
+    if not sources:
+        raise LookupError(f"Источник мониторинга с ключом {source_key!r} не найден в CUSTOMER_SOURCES_REGISTRY.")
+
+    scraper = catalog_scraper if catalog_scraper is not None else HttpCatalogSourceScraper()
+    known_urls = await _load_known_source_urls(session)
+
+    discovered_count = 0
+    ready_count = 0
+    enrichment_titles: list[str] = []
+
+    for src in sources:
+        try:
+            card_urls = await scraper.fetch_catalog_urls(src)
+        except httpx.HTTPError:
+            logger.exception("Сбой загрузки каталога площадки %s (%s)", src.display_name, src.catalog_url)
+            continue
+
+        new_urls = [u for u in card_urls if u.strip().rstrip("/") not in known_urls][:max_urls_per_source]
+        discovered_count += len(new_urls)
+        src_ready, src_enrichment = await _ingest_source_new_urls(session, src, new_urls, known_urls)
+        ready_count += src_ready
+        enrichment_titles.extend(src_enrichment)
+
+    return ScrapingRunSummary(
+        checked_sources=len(sources),
+        discovered_urls=discovered_count,
+        ingested_ready_count=ready_count,
+        needs_enrichment_count=len(enrichment_titles),
+        needs_enrichment_titles=enrichment_titles,
+    )

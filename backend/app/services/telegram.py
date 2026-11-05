@@ -1,6 +1,7 @@
 import html
 import logging
-from typing import Literal, TypeAlias
+from collections.abc import Sequence
+from typing import Literal, Protocol, TypeAlias
 
 import httpx
 
@@ -20,9 +21,6 @@ _AGENCY_SUPPORT_MARKERS: tuple[str, ...] = (
     "стенд",
     "деловая игра",
 )
-
-# [DEV-STUB: Изоляция демо/тестовых chat_id из стаба авторизации (security.py) и локального запуска без бота]
-DEV_STUB_CHAT_IDS: frozenset[str] = frozenset({"0", "123456789"})
 
 
 class _TelegramClientPool:
@@ -48,6 +46,119 @@ async def close_telegram_http_client() -> None:
     await _TelegramClientPool.close()
 
 
+class TelegramTransportProtocol(Protocol):
+    """Протокол транспорта отправки HTML-уведомлений в Telegram."""
+
+    async def send_message(self, text: str, chat_id: int | str | None = None) -> bool: ...
+
+
+async def _post_telegram_message(url: str, chat_id: int | str, text: str) -> httpx.Response:
+    """Отправляет сообщение в Telegram Bot API через общий пул соединений."""
+    client = _TelegramClientPool.get_client()
+    payload: dict[str, int | str] = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+    }
+    return await client.post(url, json=payload)
+
+
+def _is_valid_chat_id(chat_id: int | str | None) -> bool:
+    """Проверяет, что переданный идентификатор чата не пуст и не равен нулю."""
+    return chat_id is not None and str(chat_id).strip() not in ("", "0")
+
+
+def _resolve_target_chat_id(chat_id: int | str | None) -> int | str | None:
+    """Определяет целевой chat_id: явный аргумент либо дефолтный TELEGRAM_MANAGER_CHAT_ID из настроек."""
+    return chat_id if _is_valid_chat_id(chat_id) else settings.TELEGRAM_MANAGER_CHAT_ID
+
+
+def _should_retry_with_fallback_chat(
+    status_code: int,
+    target_chat_id: int | str,
+    fallback_chat: int | str | None,
+) -> bool:
+    """Определяет, нужно ли повторить отправку на резервный TELEGRAM_MANAGER_CHAT_ID."""
+    if status_code == 200 or fallback_chat is None or not _is_valid_chat_id(fallback_chat):
+        return False
+    return str(target_chat_id).strip() != str(fallback_chat).strip()
+
+
+class HttpTelegramTransport:
+    """
+    Боевой HTTP-транспорт к api.telegram.org поверх переиспользуемого пула соединений.
+    При отсутствии TELEGRAM_BOT_TOKEN или целевого chat_id логирует warning и честно возвращает False.
+    """
+
+    async def send_message(self, text: str, chat_id: int | str | None = None) -> bool:
+        bot_token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
+        target_chat_id = _resolve_target_chat_id(chat_id)
+
+        if not bot_token or target_chat_id is None or not _is_valid_chat_id(target_chat_id):
+            logger.warning(
+                "Telegram-алерт не отправлен: не задан TELEGRAM_BOT_TOKEN или chat_id получателя (chat_id=%s).",
+                target_chat_id,
+            )
+            return False
+
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        try:
+            resp = await _post_telegram_message(url, target_chat_id, text)
+            fallback_chat = settings.TELEGRAM_MANAGER_CHAT_ID
+            if fallback_chat is not None and _should_retry_with_fallback_chat(
+                resp.status_code, target_chat_id, fallback_chat
+            ):
+                resp = await _post_telegram_message(url, fallback_chat, text)
+
+            if resp.status_code != 200:
+                logger.error("Ошибка Telegram API (%s): %s", resp.status_code, resp.text)
+                return False
+            return True
+        except httpx.HTTPError:
+            logger.exception("Сетевая ошибка при отправке в Telegram")
+            return False
+
+
+# [DEV-STUB: Изолированный провайдер Telegram-уведомлений для автотестов и автономного демо-стенда]
+class StubTelegramTransport:
+    """
+    Тестовый провайдер уведомлений (активируется явно через set_telegram_transport в тестах).
+    Записывает отправленные сообщения в память (sent_messages) и лог, возвращая True без сетевых вызовов.
+    """
+
+    def __init__(self) -> None:
+        self.sent_messages: list[tuple[int | str | None, str]] = []
+
+    async def send_message(self, text: str, chat_id: int | str | None = None) -> bool:
+        self.sent_messages.append((chat_id, text))
+        logger.info("[DEV-STUB TELEGRAM] Зафиксирован алерт менеджеру (chat_id=%s): %s", chat_id, text)
+        return True
+
+
+class _TelegramTransportRegistry:
+    """Реестр активного транспорта уведомлений (позволяет чистое DI-переопределение в автотестах)."""
+
+    _active_transport: TelegramTransportProtocol = HttpTelegramTransport()
+
+    @classmethod
+    def get(cls) -> TelegramTransportProtocol:
+        return cls._active_transport
+
+    @classmethod
+    def set(cls, transport: TelegramTransportProtocol | None) -> None:
+        cls._active_transport = transport if transport is not None else HttpTelegramTransport()
+
+
+def get_telegram_transport() -> TelegramTransportProtocol:
+    """Возвращает текущий зарегистрированный транспорт Telegram-уведомлений."""
+    return _TelegramTransportRegistry.get()
+
+
+def set_telegram_transport(transport: TelegramTransportProtocol | None) -> None:
+    """Устанавливает кастомный транспорт уведомлений (или сбрасывает на боевой HttpTelegramTransport при None)."""
+    _TelegramTransportRegistry.set(transport)
+
+
 def escape_html(value: str | None) -> str:
     """Безопасное экранирование пользовательских строк для Telegram parse_mode='HTML'."""
     if not value:
@@ -64,11 +175,14 @@ def _detect_agency_support_request(comment: str) -> bool:
 def format_reaction_alert(
     company_name: str,
     event_title: str,
-    reaction: ReactionType | str,
+    reaction: ReactionType,
     comment: str | None = None,
     needs_agency_support: bool | None = None,
 ) -> str:
     """Форматирует HTML-сообщение менеджеру о реакции клиента на карточку витрины."""
+    if reaction not in ("interested", "rejected"):
+        raise ValueError(f"Недопустимый тип реакции клиента: {reaction!r}")
+
     reaction_label = "Интересно (👍)" if reaction == "interested" else "Заменить (👎)"
     lines = [
         f"<b>Реакция клиента на витрине ({escape_html(company_name)})</b>",
@@ -108,64 +222,34 @@ def format_escalation_alert(
     )
 
 
-async def _post_telegram_message(url: str, chat_id: int | str, text: str) -> httpx.Response:
-    """Отправляет сообщение в Telegram Bot API через общий пул соединений."""
-    client = _TelegramClientPool.get_client()
-    payload: dict[str, int | str] = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-    }
-    return await client.post(url, json=payload)
-
-
-def _resolve_telegram_target(
-    chat_id: int | str | None,
-    text: str,
-) -> tuple[str, int | str, str] | None:
-    """Проверяет конфигурацию и стабовые chat_id; возвращает (bot_token, target_chat_id, target_str) или None."""
-    explicit_str = str(chat_id or "").strip()
-    # [DEV-STUB: При вызове со стабовым chat_id из демо-режима или автотестов не спамим реальный Telegram API]
-    if explicit_str in DEV_STUB_CHAT_IDS:
-        logger.info("[DEV-STUB TELEGRAM] Алерт для стабового chat_id=%s: %s", explicit_str, text)
-        return None
-
-    target_chat_id: int | str | None = chat_id or settings.TELEGRAM_MANAGER_CHAT_ID
-    target_str = str(target_chat_id or "").strip()
-    bot_token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
-
-    # [DEV-STUB: Локальный запуск без настроенного TELEGRAM_BOT_TOKEN или TELEGRAM_MANAGER_CHAT_ID]
-    if not bot_token or target_chat_id is None or target_str in (*DEV_STUB_CHAT_IDS, ""):
-        logger.info("[DEV-STUB TELEGRAM] Алерт менеджеру (chat_id=%s): %s", target_chat_id, text)
-        return None
-
-    return bot_token, target_chat_id, target_str
+def format_monitoring_summary_alert(
+    ready_count: int,
+    needs_enrichment_titles: Sequence[str],
+) -> str:
+    """Форматирует утреннюю сводку итогов фонового мониторинга рынка (get_data.md раздел 6, Способ Б)."""
+    lines = [
+        "<b>Итоги ночного мониторинга рынка:</b>",
+        f"Полностью готовы к подбору: <b>{ready_count} новых мероприятий</b>.",
+    ]
+    if needs_enrichment_titles:
+        lines.append(
+            f"Требуют быстрой проверки (не найдены цены на сайте или закрыт доступ): "
+            f"<b>{len(needs_enrichment_titles)} мероприятия</b>."
+        )
+        for idx, title in enumerate(needs_enrichment_titles[:10], start=1):
+            lines.append(f"{idx}. {escape_html(title)}")
+    return "\n".join(lines)
 
 
 async def send_manager_alert(
     text: str,
     chat_id: int | str | None = None,
+    *,
+    transport: TelegramTransportProtocol | None = None,
 ) -> bool:
     """
-    Асинхронно отправляет сообщение менеджеру в Telegram Bot API по его telegram_chat_id.
-    Для стабовых ID (DEV_STUB_CHAT_IDS) или при отсутствии токена использует изолированный DEV-STUB логгер.
+    Асинхронно отправляет сообщение менеджеру через активный TelegramTransportProtocol.
+    В боевом режиме использует HttpTelegramTransport и возвращает True только при реальной доставке (HTTP 200).
     """
-    resolved = _resolve_telegram_target(chat_id, text)
-    if resolved is None:
-        return True
-
-    bot_token, target_chat_id, target_str = resolved
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    try:
-        resp = await _post_telegram_message(url, target_chat_id, text)
-        fallback_chat = settings.TELEGRAM_MANAGER_CHAT_ID
-        if resp.status_code != 200 and fallback_chat and target_str != str(fallback_chat).strip():
-            resp = await _post_telegram_message(url, fallback_chat, text)
-
-        if resp.status_code != 200:
-            logger.error("Ошибка Telegram API (%s): %s", resp.status_code, resp.text)
-            return False
-        return True
-    except httpx.HTTPError:
-        logger.exception("Сетевая ошибка при отправке в Telegram")
-        return False
+    active_transport = transport if transport is not None else get_telegram_transport()
+    return await active_transport.send_message(text=text, chat_id=chat_id)
