@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Базовый клиент генерации текста и Pydantic-структур с ограничением времени ответа
 raw_openai_client = AsyncOpenAI(
-    api_key=settings.LLM_API_KEY,
+    api_key=settings.LLM_API_KEY or "unconfigured",
     base_url=settings.LLM_BASE_URL,
     timeout=30.0,
 )
@@ -27,7 +27,7 @@ structured_llm_client = instructor.from_openai(
 
 # Клиент эмбеддингов с базовым таймаутом соединения
 embedding_client = AsyncOpenAI(
-    api_key=settings.EMBEDDING_API_KEY,
+    api_key=settings.EMBEDDING_API_KEY or "unconfigured",
     base_url=settings.EMBEDDING_BASE_URL,
     timeout=30.0,
 )
@@ -79,6 +79,8 @@ async def get_embedding(text: str) -> list[float]:
     Получает L2-нормализованный вектор заданной размерности для одного текста.
     Вызов защищен семафором параллелизма (EMBEDDING_SEMAPHORE).
     """
+    if not text or not text.strip():
+        return [0.0] * settings.EMBEDDING_DIM
     if not settings.EMBEDDING_API_KEY:
         raise RuntimeError("EMBEDDING_API_KEY не задан в конфигурации приложения.")
 

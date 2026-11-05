@@ -45,7 +45,11 @@ class Settings(BaseSettings):
         """Валидация длины и безопасности секретного ключа JWT."""
         if not v or len(v.strip()) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long for security.")
-        if v == "super_secret_key_for_jwt_change_me_in_production":
+        insecure_templates = {
+            "super_secret_key_for_jwt_change_me_in_production",
+            "generate_with_openssl_rand_hex_32",
+        }
+        if v.strip() in insecure_templates:
             logger.warning(
                 "SECURITY WARNING: SECRET_KEY is set to insecure default template! "
                 "Generate a cryptographically secure key with `openssl rand -hex 32`."

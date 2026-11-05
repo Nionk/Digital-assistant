@@ -1,8 +1,8 @@
 from datetime import date
-from typing import Literal, cast
+from typing import Literal, Self, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BurningDeadlineOut(BaseModel):
@@ -65,6 +65,17 @@ class ClientQueryExtracted(BaseModel):
         ...,
         description="Развернутый поисковый запрос для векторного поиска (pgvector cosine ops)"
     )
+
+    @model_validator(mode="after")
+    def validate_query_invariants(self) -> Self:
+        """Синхронизирует границы дат, слоты спикера и непустой семантический запрос."""
+        if self.date_from and self.date_to and self.date_to < self.date_from:
+            self.date_to = self.date_from
+        self.min_speaker_events = min(self.min_speaker_events, self.target_events_count)
+        if not self.semantic_search_query or not self.semantic_search_query.strip():
+            fallback_parts = [*self.themes_keywords, *self.cities]
+            self.semantic_search_query = " ".join(fallback_parts).strip() or "деловые мероприятия форумы конференции"
+        return self
 
 class MatchRequestIn(BaseModel):
     """Входной запрос на подбор пакетов деловых мероприятий."""

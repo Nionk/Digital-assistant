@@ -6,7 +6,9 @@ import re
 from typing import Literal, TypeAlias
 
 import httpx
+from instructor.core import InstructorError
 from openai import APIError
+from pydantic import ValidationError
 
 from app.core.config import settings
 from app.core.constants import CITY_ALIASES, is_online_format, normalize_city
@@ -349,11 +351,23 @@ def _extract_dates_heuristic(low: str, today: datetime.date) -> tuple[datetime.d
     detected_months.extend(_detect_seasons_and_quarters(low))
 
     if detected_months:
-        min_m, max_m = min(detected_months), max(detected_months)
-        if not year_found and max_m < today.month:
-            target_year = today.year + 1
-        date_from = max(today, datetime.date(target_year, min_m, 1))
-        date_to = datetime.date(target_year, max_m, calendar.monthrange(target_year, max_m)[1])
+        # Обработка сезона "зима" (12, 1, 2) на стыке годов
+        if 12 in detected_months and any(m in (1, 2) for m in detected_months):
+            if today.month in (1, 2):
+                start_year = target_year - 1
+                end_year = target_year
+            else:
+                start_year = target_year
+                end_year = target_year + 1
+            date_from = max(today, datetime.date(start_year, 12, 1))
+            end_m = max(m for m in detected_months if m in (1, 2))
+            date_to = datetime.date(end_year, end_m, calendar.monthrange(end_year, end_m)[1])
+        else:
+            min_m, max_m = min(detected_months), max(detected_months)
+            if not year_found and max_m < today.month:
+                target_year = today.year + 1
+            date_from = max(today, datetime.date(target_year, min_m, 1))
+            date_to = datetime.date(target_year, max_m, calendar.monthrange(target_year, max_m)[1])
 
     if re.search(r"начал[оеу]\s*(?:след|20\d{2})", low):
         ny = target_year + 1 if not year_found else target_year
@@ -502,6 +516,7 @@ def _build_semantic_query(
     cities: list[str],
     content_tokens: list[str],
     low: str,
+    raw_text: str = "",
 ) -> str:
     """Собирает плотный семантический запрос для векторного поиска pgvector."""
     sem_parts = [*themes, *cities]
@@ -510,7 +525,10 @@ def _build_semantic_query(
     if "стенд" in low or "спонсор" in low:
         sem_parts.append("экспозиция стенд партнерское участие")
     cleaned_core = " ".join(content_tokens[:20])
-    return f"{' '.join(sem_parts)} {cleaned_core}"[:350].strip()
+    res = f"{' '.join(sem_parts)} {cleaned_core}"[:350].strip()
+    if not res:
+        res = raw_text[:350].strip() or "деловые мероприятия форумы конференции"
+    return res
 
 
 def _extract_themes_and_query_heuristic(text: str, low: str, cities: list[str]) -> tuple[list[str], str]:
@@ -534,7 +552,7 @@ def _extract_themes_and_query_heuristic(text: str, low: str, cities: list[str]) 
         if not any(re.search(rf"\b{re.escape(stem)}", t.lower()) for t in themes):
             themes.append(c_tok)
 
-    return themes, _build_semantic_query(themes, cities, content_tokens, low)
+    return themes, _build_semantic_query(themes, cities, content_tokens, low, raw_text=text)
 
 
 def extract_profile_heuristic(
@@ -674,7 +692,7 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
                 ),
                 timeout=20.0,
             )
-    except (TimeoutError, APIError, httpx.HTTPError) as exc:
+    except (TimeoutError, APIError, httpx.HTTPError, InstructorError, ValidationError, ValueError) as exc:
         logger.warning(
             "Сбой вызова LLM-шлюза профилирования (%s: %s). Применяется универсальный парсер.",
             type(exc).__name__,
