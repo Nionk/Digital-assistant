@@ -65,12 +65,20 @@ class ClientQueryExtracted(BaseModel):
         ...,
         description="Развернутый поисковый запрос для векторного поиска (pgvector cosine ops)"
     )
+    budget_is_assumed: bool = Field(
+        default=False,
+        description="True, если бюджет не был явно назван клиентом и применен дефолтный ориентир",
+    )
+    profile_source: Literal["llm", "heuristic", "manual"] = Field(
+        default="llm",
+        description="Способ формирования профиля: llm (нейросеть), heuristic (детерминированный парсер) или manual (правка менеджера)",
+    )
 
     @model_validator(mode="after")
     def validate_query_invariants(self) -> Self:
         """Синхронизирует границы дат, слоты спикера и непустой семантический запрос."""
         if self.date_from and self.date_to and self.date_to < self.date_from:
-            self.date_to = self.date_from
+            raise ValueError(f"date_to ({self.date_to}) не может быть раньше date_from ({self.date_from})")
         self.min_speaker_events = min(self.min_speaker_events, self.target_events_count)
         if not self.semantic_search_query or not self.semantic_search_query.strip():
             fallback_parts = [*self.themes_keywords, *self.cities]

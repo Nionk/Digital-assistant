@@ -81,7 +81,8 @@ class ClientReactionIn(BaseModel):
     )
     comment: str | None = Field(
         None,
-        description="Опциональный комментарий клиента (например: 'В эти даты командировка, подберите замену')"
+        max_length=1000,
+        description="Опциональный комментарий клиента (до 1000 символов)"
     )
 
 class ClientReactionOut(BaseModel):

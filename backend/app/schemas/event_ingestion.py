@@ -18,6 +18,9 @@ _LEGACY_SEED_FAQ_ALIASES: dict[str, CanonicalFAQQuestion] = {
 }
 
 
+VAT_RATE = 1.2
+
+
 class TariffExtracted(BaseModel):
     """Тариф участия в мероприятии, извлеченный из HTML или PDF."""
 
@@ -30,11 +33,11 @@ class TariffExtracted(BaseModel):
     )
     base_price: float | None = Field(
         None,
-        description="Базовая цена в рублях с учетом НДС. Если цена 'По запросу' — строго null. Если участие бесплатное — 0.0.",
+        description="Базовая цена в рублях. Если цена 'По запросу' — строго null. Если участие бесплатное — 0.0.",
     )
     early_bird_price: float | None = Field(
         None,
-        description="Льготная цена раннего бронирования с НДС. Если скидки нет — null.",
+        description="Льготная цена раннего бронирования. Если скидки нет — null.",
     )
     early_bird_deadline: date | None = Field(
         None,
@@ -42,11 +45,22 @@ class TariffExtracted(BaseModel):
     )
     is_vat_included: bool = Field(
         default=True,
-        description="True, если цена включает НДС (если в источнике указано '+ НДС 20%', прибавь 20% к числу и поставь True).",
+        description="True, если цена включает НДС. Если в источнике указано '+ НДС' — поставь False (арифметику выполнит валидатор).",
     )
     included_benefits: str = Field(
         ..., description="Подробный перечень опций, входящих в тариф, одной строкой."
     )
+
+    @model_validator(mode="after")
+    def normalize_vat(self) -> Self:
+        """Детерминированный пересчет цен с НДС в Python вместо делегирования вычислений LLM."""
+        if not self.is_vat_included:
+            if self.base_price is not None:
+                self.base_price = round(self.base_price * VAT_RATE, 2)
+            if self.early_bird_price is not None:
+                self.early_bird_price = round(self.early_bird_price * VAT_RATE, 2)
+            self.is_vat_included = True
+        return self
 
 
 class FAQCacheItem(BaseModel):

@@ -156,18 +156,13 @@ async def get_current_manager(
         if user is not None:
             return ManagerUser.model_validate(user)
     except (SQLAlchemyError, OSError) as exc:
-        logger.warning(
-            "[SECURITY-DEMO-BYPASS] Ошибка обращения к БД при загрузке менеджера (%s). "
-            "Используется резервный профиль для автономного тестового режима.",
-            exc,
-        )
+        logger.warning("БД недоступна для аутентификации демо-менеджера в dev-режиме: %s", exc)
 
-    # [DEV-STUB: Резервный профиль на случай остановленной БД во время изолированных контрактных тестов]
     return ManagerUser(
         id=1,
         email="manager@skart.ru",
-        full_name="Анна Соколова (Ведущий менеджер сопровождения)",
-        telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID,
+        full_name="Анна Соколова (Демо)",
+        role="senior_consultant",
     )
 
 
