@@ -8,15 +8,23 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+# pyrefly: ignore[missing-import]
 import httpx
-from instructor.exceptions import InstructorRetryException
+# pyrefly: ignore[missing-import]
+from instructor.core import InstructorRetryException
+# pyrefly: ignore[missing-import]
 from openai import APIError
+# pyrefly: ignore[missing-import]
 from pydantic import BaseModel, Field, ValidationError
+# pyrefly: ignore[missing-import]
 from sqlalchemy import and_, case, delete, exists, func, or_, select
+# pyrefly: ignore[missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore[missing-import]
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
+from app.core.timeutils import today_local
 from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
 from app.schemas.manager import (
     BundleEventItemOut,
@@ -208,6 +216,7 @@ def _build_sql_filter_conditions(
         Event.is_active.is_(True),
         Event.summary_embedding.is_not(None),
         Event.data_status == "ready",
+        Event.end_date >= today,
     ]
 
     if enforce_dates:
@@ -575,7 +584,7 @@ def evaluate_candidate_tuple(
     if s_needed > k:
         return []
 
-    is_pure_sponsor = "sponsor" in required_roles and "delegate" not in required_roles and s_needed == 0
+    is_pure_sponsor = "sponsor" in required_roles and "delegate" not in required_roles
     default_role: ParticipationRole = "sponsor" if is_pure_sponsor else "delegate"
 
     valid_evaluations: list[EvaluatedCombo] = []
@@ -628,6 +637,10 @@ def _collect_valid_combos(
                     strict_by_k[k].append(ev_combo)
                 elif ev_combo.total_actual_price <= max_tolerance_budget:
                     tolerance_by_k[k].append(ev_combo)
+
+        distinct_strict_sets = {frozenset(x.event.id for x in c.candidates) for c in strict_by_k[k]}
+        if len(distinct_strict_sets) >= 2:
+            break
 
     return strict_by_k, tolerance_by_k
 
@@ -731,7 +744,8 @@ def build_bundles(
     Комбинаторный сборщик пакетов (Задача D-07, время работы < 15 мс).
     Строго соблюдает отсутствие очных календарных коллизий и правило бюджета (допуск +10% только при < 2 строгих вариантов).
     """
-    priced_pool = [c for c in candidates if c.priced_tariffs][:15]
+    pool_size = min(15, profile.target_events_count + 5)
+    priced_pool = [c for c in candidates if c.priced_tariffs][:pool_size]
     if not priced_pool:
         return [], _select_bonus_on_request_pairs(candidates, profile, set(), limit=3)
 
@@ -748,7 +762,9 @@ def build_bundles(
     v1_event_ids = {c.event.id for c in variant_1.candidates}
     v2_pool = _build_v2_candidate_pool(strict_by_k, tolerance_by_k, target_k)
 
-    variant_2 = _select_second_variant(variant_1, v2_pool)
+    v1_k = len(variant_1.candidates)
+    same_size_pool = [c for c in v2_pool if len(c.candidates) == v1_k]
+    variant_2 = _select_second_variant(variant_1, same_size_pool) or _select_second_variant(variant_1, v2_pool)
     if variant_2 is not None:
         selected_variants.append(variant_2)
 
@@ -768,13 +784,18 @@ def build_fallback_pitch(
     themes_str = ", ".join(profile.themes_keywords[:3]) if profile.themes_keywords else "ключевым отраслевым направлениям"
     price_str = f"{int(v1.total_actual_price):,}".replace(",", " ")
     budget_str = f"{int(profile.total_budget_max):,}".replace(",", " ")
+    budget_clause = (
+        f" при согласованном ориентире бюджета {budget_str} ₽"
+        if not getattr(profile, "budget_is_assumed", False)
+        else ""
+    )
 
     pitch = (
         f"Добрый день! По итогам установочной встречи подготовили для компании {client_name} "
         f"рекомендованный календарь профильных мероприятий по направлениям: {themes_str}.\n\n"
         f"В приоритетный пакет вошли {len(v1.candidates)} площадки без пересечений по датам: {titles}.\n\n"
-        f"Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет {price_str} ₽ (с НДС) "
-        f"при согласованном ориентире бюджета {budget_str} ₽."
+        f"Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет {price_str} ₽ (с НДС)"
+        f"{budget_clause}."
     )
 
     if v1.total_savings > 0 and v1.earliest_deadline is not None:
@@ -868,9 +889,14 @@ def _build_pitch_prompts(
         "КРИТИЧЕСКОЕ ПРАВИЛО: В письме используй ТОЛЬКО переданные ниже цифры стоимости Варианта №1 и дат. "
         "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
     )
+    budget_line = (
+        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
+        if not getattr(profile, "budget_is_assumed", False)
+        else "Клиент не зафиксировал жесткий бюджет (не упоминай в письме формулировки 'согласованный бюджет').\n\n"
+    )
     user_prompt = (
         f"Клиент: {client_name}\nИсходная заметка созвона: {raw_notes}\n"
-        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
+        f"{budget_line}"
         f"Точные параметры Варианта №1 для письма:\n{v1_summary}\n\n"
         f"Список всех мероприятий для генерации ai_rationale:\n" + "\n".join(events_lines)
     )
@@ -970,7 +996,7 @@ def _to_bundle_event_item(
         canonical_title=ev.canonical_title,
         event_format=_normalize_event_format(ev.event_format),
         city=ev.city,
-        is_online=ev.is_online,
+        is_online=bool(ev.is_online),
         venue=ev.venue,
         start_date=ev.start_date,
         end_date=ev.end_date,
@@ -987,18 +1013,29 @@ def _to_bundle_event_item(
 def _format_bundle_variants_out(
     evaluated_variants: list[EvaluatedCombo],
     rationales_map: dict[int, str],
+    unique_events_info: dict[int, tuple[Event, TariffOptionOut]] | None = None,
+    profile: ClientQueryExtracted | None = None,
 ) -> list[BundleVariantOut]:
     """Преобразует оцененные комбинации EvaluatedCombo в выходные схемы BundleVariantOut."""
     bundle_variants_out: list[BundleVariantOut] = []
     for idx, ev_var in enumerate(evaluated_variants, start=1):
-        items_out = [
-            _to_bundle_event_item(
-                cand=cand,
-                recommended_tariff=tar,
-                rationale=rationales_map.get(cand.event.id, ""),
+        items_out = []
+        for cand, tar in zip(ev_var.candidates, ev_var.chosen_tariffs):
+            if unique_events_info and profile and cand.event.id in unique_events_info:
+                ref_tariff = unique_events_info[cand.event.id][1]
+                if tar.participation_role == ref_tariff.participation_role:
+                    rationale = rationales_map.get(cand.event.id, "")
+                else:
+                    rationale = build_default_rationale(cand.event, tar, profile)
+            else:
+                rationale = rationales_map.get(cand.event.id, "")
+            items_out.append(
+                _to_bundle_event_item(
+                    cand=cand,
+                    recommended_tariff=tar,
+                    rationale=rationale,
+                )
             )
-            for cand, tar in zip(ev_var.candidates, ev_var.chosen_tariffs)
-        ]
         if idx == 1:
             title = (
                 "Вариант 1: Максимальное совпадение по темам (требует согласования бюджета)"
@@ -1078,11 +1115,12 @@ async def _load_and_update_client_profile(
     if client_obj is None:
         raise LookupError(f"Клиент с ID={client_id} не найден")
 
-    extracted_profile = (
-        payload.override_profile
-        if payload.override_profile is not None
-        else await extract_client_profile(payload.raw_manager_notes)
-    )
+    if payload.override_profile is not None:
+        extracted_profile = payload.override_profile
+        extracted_profile.profile_source = "manual"
+    else:
+        extracted_profile = await extract_client_profile(payload.raw_manager_notes)
+
     client_obj.raw_manager_notes = payload.raw_manager_notes
     client_obj.extracted_profile = extracted_profile.model_dump(mode="json")
     return client_obj, extracted_profile
@@ -1098,8 +1136,10 @@ async def run_client_matching_pipeline(
     Выбрасывает LookupError, если клиент с указанным client_id отсутствует в БД.
     """
     client_obj, extracted_profile = await _load_and_update_client_profile(session, client_id, payload)
-    candidates = await get_scored_candidates(session, extracted_profile, datetime.date.today())
-    evaluated_variants, bonus_pairs = build_bundles(candidates, extracted_profile)
+    candidates = await get_scored_candidates(session, extracted_profile, today_local())
+    evaluated_variants, bonus_pairs = await asyncio.to_thread(
+        build_bundles, candidates, extracted_profile
+    )
 
     rationales_map, pitch_text = await generate_pitch_and_rationales(
         client_name=client_obj.company_name,
@@ -1108,7 +1148,10 @@ async def run_client_matching_pipeline(
         selected_variants=evaluated_variants,
         bonus_pairs=bonus_pairs,
     )
-    bundle_variants_out = _format_bundle_variants_out(evaluated_variants, rationales_map)
+    unique_events_info = _collect_unique_events_for_pitch(evaluated_variants, bonus_pairs)
+    bundle_variants_out = _format_bundle_variants_out(
+        evaluated_variants, rationales_map, unique_events_info, extracted_profile
+    )
     bonus_items_out = [
         _to_bundle_event_item(cand, tar, rationales_map.get(cand.event.id, ""))
         for cand, tar in bonus_pairs
