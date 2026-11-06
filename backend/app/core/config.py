@@ -1,7 +1,8 @@
 import logging
 from pathlib import Path
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("app.core.config")
@@ -16,6 +17,11 @@ class Settings(BaseSettings):
     Настройки загружаются из переменных окружения и .env файлов.
     """
 
+    # Окружение: prod (боевой режим по умолчанию) или dev (локальная разработка)
+    ENVIRONMENT: Literal["dev", "prod"] = "prod"
+    APP_TIMEZONE: str = "Europe/Moscow"
+    ENABLE_SCHEDULER: bool = False
+
     # Database (PostgreSQL 16 + pgvector)
     # Хост по умолчанию задается через .env (localhost:5432 для локальной разработки, db:5432 внутри Docker)
     DATABASE_URL: str = ""
@@ -26,7 +32,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
     # Режим авторизации:
-    # При True: если заголовок Authorization отсутствует, запрос обслуживается от имени ведущего менеджера id=1 (только для локальной разработки и демо).
+    # При True: если заголовок Authorization отсутствует, запрос обслуживается от имени ведущего менеджера id=1 (только для dev-окружения).
     # При False (Production / По умолчанию): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
     ALLOW_DEMO_AUTH_BYPASS: bool = False
 
@@ -42,18 +48,26 @@ class Settings(BaseSettings):
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
         """Валидация длины и безопасности секретного ключа JWT."""
-        if not v or len(v.strip()) < 32:
-            raise ValueError("SECRET_KEY must be at least 32 characters long for security.")
         insecure_templates = {
             "super_secret_key_for_jwt_change_me_in_production",
             "generate_with_openssl_rand_hex_32",
         }
-        if v.strip() in insecure_templates:
-            logger.warning(
-                "SECURITY WARNING: SECRET_KEY is set to insecure default template! "
-                "Generate a cryptographically secure key with `openssl rand -hex 32`."
+        if not v or len(v.strip()) < 32 or v.strip() in insecure_templates:
+            raise ValueError(
+                "SECRET_KEY must be a cryptographically secure key of at least 32 characters. "
+                "Do not use default templates. Generate with `openssl rand -hex 32`."
             )
         return v
+
+    @model_validator(mode="after")
+    def forbid_demo_bypass_in_prod(self) -> "Settings":
+        """Гарантирует, что обход авторизации никогда не будет включен в production-среде."""
+        if self.ENVIRONMENT == "prod" and self.ALLOW_DEMO_AUTH_BYPASS:
+            raise ValueError(
+                "ALLOW_DEMO_AUTH_BYPASS=true строго запрещен в production-режиме (ENVIRONMENT=prod). "
+                "Установите ALLOW_DEMO_AUTH_BYPASS=false или переключите ENVIRONMENT=dev для локальной разработки."
+            )
+        return self
 
     # LLM Gateway
     LLM_API_KEY: str = ""
@@ -66,6 +80,17 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: str = "https://api.jina.ai/v1"
     EMBEDDING_MODEL: str = "jina-embeddings-v3"
     EMBEDDING_DIM: int = 1024
+
+    @field_validator("EMBEDDING_DIM", mode="after")
+    @classmethod
+    def validate_embedding_dim(cls, v: int) -> int:
+        """Защита от рассинхрона размерности векторов со схемой базы данных."""
+        if v != 1024:
+            raise ValueError(
+                f"EMBEDDING_DIM={v} не поддерживается текущей схемой БД (alembic 58fff4bbf37c: vector(1024)). "
+                "Изменение размерности требует отдельной миграции БД и пересоздания векторных индексов."
+            )
+        return v
 
     @field_validator("EMBEDDING_MODEL", mode="after")
     @classmethod
