@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.core.config import settings
 from app.core.constants import CITY_ALIASES, is_online_format, normalize_city
+from app.core.timeutils import today_local
 from app.schemas.manager import ClientQueryExtracted
 from app.services.ai_client import LLM_SEMAPHORE, structured_llm_client
 
@@ -247,10 +248,10 @@ def _parse_numeral_phrase(text: str) -> float | None:
     return total if (has_numeral and total >= 10_000.0) else None
 
 
-def _extract_budget_heuristic(low: str) -> float:
+def _extract_budget_heuristic(low: str) -> float | None:
     """
     Универсальное извлечение бюджета: диапазоны, суммы с множителями (млн, тыс, к),
-    числительные прописью и прямые числа.
+    числительные прописью и прямые числа. Возвращает None, если бюджет не назван явно.
     """
     # 1. Диапазоны ("от 300 до 500 тыс", "1-2 млн") -> берется верхний потолок
     m_range = re.search(
@@ -262,11 +263,13 @@ def _extract_budget_heuristic(low: str) -> float:
         return float(m_range.group(2).replace(",", ".")) * scale
 
     # 2. Суммы с множителями разряда ("1.5 млн", "350к", "6 млн рублей", "800 тыс", "400 к")
-    m_scale = re.search(
+    for m_scale in re.finditer(
         r"(\d+(?:[.,]\d+)?)\s*(млн|миллион[а-яё]*|тыс[а-яё.]*|т\.?\s*р\.?|к\b|косар[а-яё]*)",
         low,
-    )
-    if m_scale:
+    ):
+        tail = low[m_scale.end() : m_scale.end() + 20]
+        if re.match(r"\s*(?:человек|чел\b|участник|гост|посетител|делегат|подписчик|сотрудник)", tail):
+            continue
         scale = _get_scale_multiplier(m_scale.group(2)) or 1.0
         return float(m_scale.group(1).replace(",", ".")) * scale
 
@@ -284,8 +287,7 @@ def _extract_budget_heuristic(low: str) -> float:
         if val >= 10000:
             return val
 
-    logger.info("Бюджет не обнаружен в тексте заметки, применен потолок по умолчанию: %s ₽", DEFAULT_UNCONSTRAINED_BUDGET)
-    return DEFAULT_UNCONSTRAINED_BUDGET
+    return None
 
 
 _QUARTER_PATTERNS: tuple[tuple[str, tuple[int, ...]], ...] = (
@@ -564,13 +566,15 @@ def extract_profile_heuristic(
     Используется как мгновенный страхующий фолбэк при недоступности внешнего LLM-шлюза
     или пустом API-ключе, сохраняя работоспособность конвейера подбора без отраслевой предвзятости.
     """
-    ref_today = today or datetime.date.today()
+    ref_today = today or today_local()
     text = raw_notes or ""
     low = text.lower()
 
     cities = _extract_cities_heuristic(low)
     include_online = _extract_include_online_heuristic(low, cities)
-    budget = _extract_budget_heuristic(low)
+    budget_raw = _extract_budget_heuristic(low)
+    budget = budget_raw if budget_raw is not None else DEFAULT_UNCONSTRAINED_BUDGET
+    budget_is_assumed = budget_raw is None
     date_from, date_to = _extract_dates_heuristic(low, ref_today)
     target_count = _extract_target_count_heuristic(low)
     roles, min_speaker = _extract_roles_and_speaker_heuristic(low, target_count)
@@ -583,6 +587,8 @@ def extract_profile_heuristic(
         date_from=date_from,
         date_to=date_to,
         total_budget_max=budget,
+        budget_is_assumed=budget_is_assumed,
+        profile_source="heuristic",
         target_events_count=target_count,
         preferred_formats=formats,
         required_roles=roles,
@@ -609,7 +615,7 @@ def _build_profiler_system_prompt(today: datetime.date) -> str:
    - Если указано "только онлайн" или город не важен, верни пустой список []. Слово "онлайн" городом не является!
 2. `include_online`: True по умолчанию! Ставь False ИСКЛЮЧИТЕЛЬНО если клиент прямо и однозначно требует строго очное участие ("только очно", "строго офлайн", "без онлайна", "без вебинаров", "только личные встречи"). Простое указание города ("2 встречи в Москве", "в Казани", "прилетим в Питер") НЕ запрещает онлайн — оставляй True!
 3. `date_from` и `date_to`: Период поиска (YYYY-MM-DD). Если сказано "не ранее чем через неделю от момента сейчас", то `date_from` = {next_week_str}.
-4. `total_budget_max`: Общий верхний потолок бюджета на ВСЮ серию мероприятий (число > 0). Распознавай любые разговорные числительные ("1млн" -> 1000000.0, "полтора миллиона" -> 1500000.0, "350к" -> 350000.0, "четыре миллиона" -> 4000000.0, "три с половиной миллиона" -> 3500000.0, "от 300 до 500 тыс" -> 500000.0). Если бюджет не назван, укажи верхний потолок серии по умолчанию (1000000.0).
+4. `total_budget_max`: Общий верхний потолок бюджета на ВСЮ серию мероприятий (число > 0). Распознавай любые разговорные числительные ("1млн" -> 1000000.0, "полтора миллиона" -> 1500000.0, "350к" -> 350000.0, "четыре миллиона" -> 4000000.0, "три с половиной миллиона" -> 3500000.0, "от 300 до 500 тыс" -> 500000.0). Если бюджет не назван клиентом вообще, укажи 1000000.0 и обязательно установи флаг budget_is_assumed=True. Если бюджет назван явно — budget_is_assumed=False.
 5. `target_events_count`: Сколько всего мероприятий нужно в пакете (целое число от 1 до 10). Если названо конкретное число ("на 2 мероприятиях", "пару встреч") — укажи это число (2). Если число не названо вообще — ставь 3 по умолчанию.
 6. `preferred_formats`: Массив из списка ["roundtable", "business_breakfast", "forum", "conference", "session"]. Если клиент отверг формат ("только не круглые столы"), обязательно исключи его.
 7. `required_roles`: Массив из ["delegate", "speaker", "sponsor"]. Если клиент отказался от роли ("отказались от спонсорства"), не включай её.
@@ -651,11 +657,24 @@ def _postprocess_extracted_profile(
     today: datetime.date,
 ) -> ClientQueryExtracted:
     """Выполняет канонизацию городов и проверку границ дат и формата участия."""
+    extracted_data.profile_source = "llm"
     if extracted_data.cities:
         _normalize_profile_cities(extracted_data)
 
     low_notes = (raw_notes or "").lower()
     _clamp_profile_date_from(extracted_data, low_notes, today)
+
+    if (
+        extracted_data.date_to is not None
+        and extracted_data.date_from is not None
+        and extracted_data.date_to < extracted_data.date_from
+    ):
+        logger.warning(
+            "date_to (%s) < date_from (%s), сбрасываем date_to",
+            extracted_data.date_to,
+            extracted_data.date_from,
+        )
+        extracted_data.date_to = None
 
     if extracted_data.cities and "онлайн" not in low_notes:
         city_regex_parts = [re.escape(c.lower()) for c in extracted_data.cities]
@@ -672,7 +691,7 @@ async def extract_client_profile(raw_notes: str) -> ClientQueryExtracted:
     и регламентным таймаутом 20.0 сек (DoD задачи D-06 в plan.md).
     При сбое сети или отсутствии API-ключа переключается на детерминированный универсальный парсер.
     """
-    today = datetime.date.today()
+    today = today_local()
     if not settings.LLM_API_KEY:
         logger.info("LLM_API_KEY не задан. Применяется универсальный детерминированный парсер.")
         return extract_profile_heuristic(raw_notes, today)

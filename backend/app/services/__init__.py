@@ -24,6 +24,7 @@ from app.services.matcher import (
     pick_best_tariff_for_role,
     run_client_matching_pipeline,
 )
+from app.services.monitoring_job import run_nightly_monitoring_job
 from app.services.profiler import (
     extract_client_profile,
     extract_profile_heuristic,
@@ -31,6 +32,7 @@ from app.services.profiler import (
 from app.services.rag import (
     POLITE_FALLBACK_TEXT,
     RAGResponse,
+    RAGUnavailableError,
     ask_regulation_question,
     build_rag_cache_key,
     invalidate_rag_cache,
@@ -80,6 +82,7 @@ __all__ = [
     "HttpCatalogSourceScraper",
     "HttpTelegramTransport",
     "RAGResponse",
+    "RAGUnavailableError",
     "ScoredEventCandidate",
     "ScrapingRunSummary",
     "StubCatalogSourceScraper",
@@ -124,6 +127,7 @@ __all__ = [
     "raw_openai_client",
     "run_client_matching_pipeline",
     "run_customer_sources_monitoring",
+    "run_nightly_monitoring_job",
     "send_manager_alert",
     "set_telegram_transport",
     "split_regulation_into_chunks",
