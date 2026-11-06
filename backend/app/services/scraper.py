@@ -5,21 +5,24 @@ import json
 import logging
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, TypeAlias
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 import pymupdf as fitz
 from bs4 import BeautifulSoup
+from instructor.core import InstructorError
 from markdownify import markdownify as html_to_markdown
 from openai import APIError
+from pydantic import ValidationError
 from rapidfuzz import fuzz
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.models import Event, EventChunk, EventTariff, LLMCache
+from app.models.models import Event, EventChunk, EventTariff, LLMCache, SelectionItem
 from app.schemas.event_ingestion import EventIngestionSchema
 from app.services.ai_client import (
     LLM_SEMAPHORE,
@@ -32,6 +35,7 @@ from app.services.rag import build_rag_cache_key, invalidate_rag_cache
 logger = logging.getLogger(__name__)
 
 DataQualityStatus: TypeAlias = Literal["ready", "needs_enrichment"]
+MAX_DOSSIER_CHARS: int = 60_000
 
 IMPORTANT_PDF_KEYWORDS: tuple[str, ...] = (
     "тариф",
@@ -369,7 +373,7 @@ class HttpCatalogSourceScraper:
 
 
 def _convert_html_to_dossier_markdown(html_content: str) -> str:
-    """Преобразует HTML-страницу мероприятия в очищенный Markdown с сохранением Schema.org JSON-LD."""
+    """Преобразует HTML-страницу мероприятия в очищенный Markdown с сохранением Schema.org JSON-LD в начале досье."""
     soup = BeautifulSoup(html_content, "lxml")
     ld_blocks = [
         (s.string or "").strip()
@@ -381,8 +385,8 @@ def _convert_html_to_dossier_markdown(html_content: str) -> str:
 
     md_body = str(html_to_markdown(str(soup), heading_style="ATX")).strip()
     if ld_blocks:
-        ld_section = "\n\n--- SCHEMA.ORG LD+JSON ---\n" + "\n".join(ld_blocks)
-        return f"{md_body}{ld_section}".strip()
+        ld_section = "--- SCHEMA.ORG LD+JSON ---\n" + "\n".join(ld_blocks)
+        return f"{ld_section}\n\n{md_body}".strip()
     return md_body
 
 
@@ -511,37 +515,63 @@ async def _sync_event_chunks(
         )
 
 
-def evaluate_event_quality_gate(
-    schema: EventIngestionSchema,
+def evaluate_event_quality(
+    *,
+    summary: str,
+    regulation_md: str,
+    has_tariffs: bool,
+    is_online: bool,
+    city: str | None,
+    extra_warnings: Sequence[str] = (),
 ) -> tuple[DataQualityStatus, list[str]]:
     """
-    Оценивает полноту извлеченной карточки по критериям Quality Gate (get_data.md раздел 2).
+    Оценивает полноту карточки по итоговым (объединенным) полям в базе данных.
     Возвращает кортеж (status: 'ready' | 'needs_enrichment', warnings: list[str]).
     """
     gate_failures: list[str] = []
-    if len(schema.summary.strip()) < 250:
+    if len(summary.strip()) < 250:
         gate_failures.append("summary_too_short")
-    if len(schema.full_regulation_markdown.strip()) < 600:
+    if len(regulation_md.strip()) < 600:
         gate_failures.append("regulation_markdown_too_short")
-    if not schema.tariffs:
+    if not has_tariffs:
         gate_failures.append("no_tariffs_extracted")
-    if not schema.is_online and not schema.city:
+    if not is_online and not city:
         gate_failures.append("missing_city_for_offline_event")
 
-    warnings: list[str] = list(dict.fromkeys([*schema.missing_data_warnings, *gate_failures]))
+    warnings: list[str] = list(dict.fromkeys([*extra_warnings, *gate_failures]))
     status: DataQualityStatus = "needs_enrichment" if gate_failures else "ready"
     return status, warnings
+
+
+def evaluate_event_quality_gate(
+    schema: EventIngestionSchema,
+) -> tuple[DataQualityStatus, list[str]]:
+    """Совместимая обертка над evaluate_event_quality для работы с исходной Pydantic-схемой."""
+    return evaluate_event_quality(
+        summary=schema.summary,
+        regulation_md=schema.full_regulation_markdown,
+        has_tariffs=bool(schema.tariffs),
+        is_online=schema.is_online,
+        city=schema.city,
+        extra_warnings=schema.missing_data_warnings,
+    )
+
+
+def _clean_title_for_comparison(title: str) -> str:
+    """Удаляет годы и спецсимволы для надежного сравнения названий мероприятий."""
+    cleaned = re.sub(r"\b20\d{2}\b", " ", title.lower())
+    return " ".join(re.sub(r"[^\w\s]", " ", cleaned).split())
 
 
 async def find_duplicate_event(
     session: AsyncSession,
     schema: EventIngestionSchema,
-    similarity_threshold: float = 82.0,
+    similarity_threshold: float = 85.0,
 ) -> Event | None:
     """
-    Дедупликация событий через RapidFuzz (artifact.md п. 9.2.4, get_data.md раздел 4, Шаг 6):
-    Сравнивает нормализованные названия через token_set_ratio (>= 82%) среди событий того же города
-    (или онлайн) в окне start_date +- 1 день.
+    Дедупликация событий через RapidFuzz:
+    Сравнивает нормализованные названия через token_sort_ratio и ratio (>= 85%) среди событий
+    того же города (или онлайн) в окне start_date +- 1 день.
     """
     date_min = schema.start_date - datetime.timedelta(days=1)
     date_max = schema.start_date + datetime.timedelta(days=1)
@@ -559,10 +589,13 @@ async def find_duplicate_event(
     res = await session.execute(stmt)
     candidates = res.scalars().all()
 
-    norm_new = schema.canonical_title.strip().lower()
+    norm_new = _clean_title_for_comparison(schema.canonical_title)
     for existing in candidates:
-        norm_existing = (existing.normalized_title or existing.canonical_title).strip().lower()
-        score = float(fuzz.token_set_ratio(norm_new, norm_existing))
+        norm_existing = _clean_title_for_comparison(existing.canonical_title)
+        score = max(
+            float(fuzz.token_sort_ratio(norm_new, norm_existing)),
+            float(fuzz.ratio(norm_new, norm_existing)),
+        )
         if score >= similarity_threshold:
             return existing
     return None
@@ -577,7 +610,7 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
         "Ты — аналитик базы знаний B2B-мероприятий. Извлеки из текста структурированную карточку "
         "события по схеме EventIngestionSchema: официальное название, формат, город (или null для онлайн), "
         "даты проведения, содержательное summary (250-850 символов), подробный full_regulation_markdown, "
-        "все тарифы с НДС и 3 ответа faq_cache строго по вопросам: "
+        "все тарифы и 3 ответа faq_cache строго по вопросам: "
         "'Что входит в рекомендованный тариф?', "
         "'Какие условия раннего бронирования и дедлайны?', "
         "'Формат участия и требования к спикеру'."
@@ -597,33 +630,79 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
                 timeout=30.0,
             )
             return schema
-    except (TimeoutError, APIError, httpx.HTTPError):
+    except (TimeoutError, APIError, httpx.HTTPError, InstructorError):
         logger.exception("Сбой LLM при извлечении EventIngestionSchema")
         raise
 
 
-def _populate_event_tariffs_and_faq(
+async def _sync_event_tariffs(
     session: AsyncSession,
     event_obj: Event,
     schema: EventIngestionSchema,
 ) -> None:
-    """Создает связанные записи EventTariff и предзаполняет LLMCache из EventIngestionSchema."""
-    for t_in in schema.tariffs:
-        session.add(
-            EventTariff(
-                event_id=event_obj.id,
-                tariff_name=t_in.tariff_name,
-                participation_role=t_in.participation_role,
-                base_price=t_in.base_price,
-                early_bird_price=t_in.early_bird_price,
-                early_bird_deadline=t_in.early_bird_deadline,
-                is_vat_included=t_in.is_vat_included,
-                included_benefits=t_in.included_benefits,
-            )
-        )
+    """
+    Выполняет детерминированный UPSERT тарифов мероприятия.
+    Предотвращает каскадный сброс recommended_tariff_id=NULL в selection_items
+    при обогащении карточки из дополнительного источника.
+    """
+    if not schema.tariffs:
+        return
 
+    existing_tariffs_res = await session.execute(
+        select(EventTariff).where(EventTariff.event_id == event_obj.id)
+    )
+    existing_tariffs = list(existing_tariffs_res.scalars().all())
+
+    # Тарифы, на которые ссылаются активные элементы подборок клиентов
+    ref_stmt = (
+        select(SelectionItem.recommended_tariff_id)
+        .where(
+            SelectionItem.event_id == event_obj.id,
+            SelectionItem.recommended_tariff_id.is_not(None),
+        )
+        .distinct()
+    )
+    referenced_ids = set((await session.execute(ref_stmt)).scalars().all())
+
+    def key_fn(role: str, name: str) -> tuple[str, str]:
+        return role, name.strip().lower()
+
+    tariffs_by_key = {key_fn(t.participation_role, t.tariff_name): t for t in existing_tariffs}
+    seen_keys: set[tuple[str, str]] = set()
+
+    for t_in in schema.tariffs:
+        k = key_fn(t_in.participation_role, t_in.tariff_name)
+        seen_keys.add(k)
+        row = tariffs_by_key.get(k)
+        if row is None:
+            row = EventTariff(event_id=event_obj.id)
+            session.add(row)
+
+        row.tariff_name = t_in.tariff_name
+        row.participation_role = t_in.participation_role
+        row.base_price = t_in.base_price
+        row.early_bird_price = t_in.early_bird_price
+        row.early_bird_deadline = t_in.early_bird_deadline
+        row.is_vat_included = t_in.is_vat_included
+        row.included_benefits = t_in.included_benefits
+
+    # Удаляем только те старые тарифы, которые не найдены в новом источнике И на которые нет ссылок из подборок
+    for k, row in tariffs_by_key.items():
+        if k not in seen_keys and row.id not in referenced_ids:
+            await session.delete(row)
+
+
+def _populate_faq_cache(
+    session: AsyncSession,
+    event_obj: Event,
+    schema: EventIngestionSchema,
+) -> None:
+    """Предзаполняет FAQ в llm_cache, исключая тарифозависимые вопросы из общего кэша события."""
     seen_cache_keys: set[str] = set()
     for faq in schema.faq_cache:
+        # Не кэшируем на уровне события (tariff_id=0) ответы, зависящие от рекомендованного тарифа
+        if any(kw in faq.question.lower() for kw in ("что входит", "входит в тариф", "рекомендованный тариф")):
+            continue
         cache_key = build_rag_cache_key(event_obj.id, 0, faq.question)
         if cache_key in seen_cache_keys:
             continue
@@ -648,50 +727,52 @@ def _merge_regulation_markdown(
     existing_md: str | None,
     new_md: str,
     source_url: str | None,
-    *,
-    is_update: bool,
 ) -> str:
-    """Объединяет старый и новый текст регламента при обогащении существующей карточки."""
+    """Объединяет текст регламента без бесконечного дублирования уже имеющихся параграфов."""
     clean_new = new_md.strip()
     clean_existing = (existing_md or "").strip()
-    if is_update and clean_existing and clean_new not in clean_existing:
-        src_label = source_url or "дополнительный источник"
-        return f"{clean_existing}\n\n--- Дополнение из источника ({src_label}) ---\n\n{clean_new}"
-    return new_md
+    if not clean_existing:
+        return clean_new
+    if not clean_new:
+        return clean_existing
+
+    def norm(p: str) -> str:
+        return re.sub(r"\s+", " ", p).strip().lower()
+
+    known_paragraphs = {norm(p) for p in clean_existing.split("\n\n") if len(p.strip()) > 30}
+    fresh_paragraphs = [
+        p.strip() for p in clean_new.split("\n\n")
+        if len(p.strip()) > 30 and norm(p) not in known_paragraphs
+    ]
+    if not fresh_paragraphs:
+        return clean_existing
+
+    src_label = source_url or "дополнительный источник"
+    addition = "\n\n".join(fresh_paragraphs)
+    return f"{clean_existing}\n\n--- Дополнение из источника ({src_label}) ---\n\n{addition}"
 
 
-def _apply_schema_to_event(
+def _merge_into_existing(
     target: Event,
     schema: EventIngestionSchema,
-    data_status: DataQualityStatus,
-    warnings: list[str],
     embedding_vec: list[float],
     source_url: str | None,
-    *,
-    is_update: bool = False,
 ) -> None:
-    """Копирует атрибуты EventIngestionSchema и статус Quality Gate в ORM-объект Event."""
-    target.canonical_title = schema.canonical_title
-    target.normalized_title = schema.canonical_title.strip().lower()
-    target.event_format = schema.event_format
-    target.city = schema.city
-    target.is_online = schema.is_online
-    target.venue = schema.venue
-    target.start_date = schema.start_date
-    target.end_date = schema.end_date
-    target.summary = schema.summary
-    target.full_regulation_markdown = _merge_regulation_markdown(
-        target.full_regulation_markdown,
-        schema.full_regulation_markdown,
-        source_url,
-        is_update=is_update,
-    )
+    """Обогащает карточку новыми данными без ухудшения исходных названия, дат и города."""
+    if len(schema.summary) > len(target.summary or ""):
+        target.summary = schema.summary
+        target.summary_embedding = embedding_vec
+    if schema.venue and not target.venue:
+        target.venue = schema.venue
     target.themes = list(dict.fromkeys([*(target.themes or []), *schema.themes]))
-    target.data_status = data_status
-    target.missing_data_warnings = warnings
-    target.is_active = data_status == "ready"
-    target.summary_embedding = embedding_vec
-    if source_url and source_url not in (target.source_urls or []):
+
+    is_new_source = bool(source_url) and source_url not in (target.source_urls or [])
+    if is_new_source:
+        target.full_regulation_markdown = _merge_regulation_markdown(
+            target.full_regulation_markdown,
+            schema.full_regulation_markdown,
+            source_url,
+        )
         target.source_urls = [*(target.source_urls or []), source_url]
 
 
@@ -699,59 +780,94 @@ async def ingest_event_from_text(
     session: AsyncSession,
     raw_dossier_text: str,
     source_url: str | None = None,
+    extra_warnings: Sequence[str] = (),
 ) -> Event:
     """
-    Полный цикл импорта и обогащения карточки мероприятия:
-    1. Извлекает EventIngestionSchema через LLM-3.
-    2. Проверяет Quality Gate (ready vs needs_enrichment) и дубли через RapidFuzz.
-    3. Вычисляет 1024-мерный эмбеддинг summary_embedding через Jina AI.
-    4. Сохраняет/обновляет мероприятие, его тарифы, чанки регламента и сбрасывает устаревший кэш RAG.
+    Полный цикл извлечения и обогащения карточки мероприятия.
+    Внимание: метод выполняет flush(), но не делает commit(). Управлением транзакцией владеет вызывающий код.
     """
     if not raw_dossier_text or not raw_dossier_text.strip():
         raise ValueError("Передан пустой текст досье для извлечения карточки мероприятия.")
 
-    schema = await _extract_structured_event_via_llm(raw_dossier_text)
-    data_status, warnings = evaluate_event_quality_gate(schema)
+    dossier_to_parse = raw_dossier_text.strip()
+    collected_warnings = list(extra_warnings)
+    if len(dossier_to_parse) > MAX_DOSSIER_CHARS:
+        dossier_to_parse = dossier_to_parse[:MAX_DOSSIER_CHARS]
+        collected_warnings.append("dossier_truncated_before_llm")
+
+    schema = await _extract_structured_event_via_llm(dossier_to_parse)
     emb_text = f"{schema.canonical_title}. {schema.summary}. Темы: {', '.join(schema.themes)}"
     embedding_vec = await get_embedding(emb_text)
 
     existing = await find_duplicate_event(session, schema)
     if existing is not None:
         await invalidate_rag_cache(session, existing.id)
-        await session.execute(delete(EventTariff).where(EventTariff.event_id == existing.id))
         event_obj = existing
-        _apply_schema_to_event(
-            event_obj, schema, data_status, warnings, embedding_vec, source_url, is_update=True
-        )
+        _merge_into_existing(event_obj, schema, embedding_vec, source_url)
     else:
-        event_obj = Event(source_urls=[source_url] if source_url else [])
-        _apply_schema_to_event(
-            event_obj, schema, data_status, warnings, embedding_vec, source_url, is_update=False
+        event_obj = Event(
+            canonical_title=schema.canonical_title,
+            normalized_title=schema.canonical_title.strip().lower(),
+            event_format=schema.event_format,
+            city=schema.city,
+            is_online=schema.is_online,
+            venue=schema.venue,
+            start_date=schema.start_date,
+            end_date=schema.end_date,
+            summary=schema.summary,
+            full_regulation_markdown=schema.full_regulation_markdown,
+            themes=schema.themes,
+            source_urls=[source_url] if source_url else [],
+            summary_embedding=embedding_vec,
         )
         session.add(event_obj)
         await session.flush()
 
+    await _sync_event_tariffs(session, event_obj, schema)
     await _sync_event_chunks(session, event_obj, event_obj.full_regulation_markdown or "")
-    _populate_event_tariffs_and_faq(session, event_obj, schema)
-    await session.commit()
+    _populate_faq_cache(session, event_obj, schema)
+
+    tariffs_count_res = await session.execute(
+        select(func.count(EventTariff.id)).where(EventTariff.event_id == event_obj.id)
+    )
+    tariffs_count = tariffs_count_res.scalar() or 0
+    all_warnings = [*collected_warnings, *schema.missing_data_warnings]
+
+    data_status, warnings = evaluate_event_quality(
+        summary=event_obj.summary,
+        regulation_md=event_obj.full_regulation_markdown or "",
+        has_tariffs=tariffs_count > 0,
+        is_online=event_obj.is_online,
+        city=event_obj.city,
+        extra_warnings=all_warnings,
+    )
+    event_obj.data_status = data_status
+    event_obj.missing_data_warnings = warnings
+    event_obj.is_active = data_status == "ready"
+
+    await session.flush()
     return event_obj
 
 
 async def _extract_pdf_dossier_parts(
     pdf_bytes: bytes,
     vision_ocr: VisionOCRProviderProtocol | None,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """Извлекает текстовый слой и результаты Vision OCR из PDF-документа для общего досье."""
     parts: list[str] = []
+    warnings: list[str] = []
     pdf_text, ocr_images = await extract_pdf_text_async(pdf_bytes)
     if pdf_text:
         parts.append(f"=== ТЕКСТ ИЗ PDF-РЕГЛАМЕНТА ===\n{pdf_text}")
     if ocr_images:
-        ocr_provider = vision_ocr if vision_ocr is not None else StubVisionOCRProvider()
-        ocr_text = await ocr_provider.extract_text_from_images(ocr_images)
+        ocr_text = ""
+        if vision_ocr is not None:
+            ocr_text = await vision_ocr.extract_text_from_images(ocr_images)
         if ocr_text.strip():
             parts.append(f"=== РАСПОЗНАННЫЙ OCR ТЕКСТ PDF ===\n{ocr_text.strip()}")
-    return parts
+        else:
+            warnings.append("pdf_scanned_pages_not_recognized")
+    return parts, warnings
 
 
 async def ingest_smart_event(
@@ -767,6 +883,7 @@ async def ingest_smart_event(
     объединяет данные из внешнего URL, вставленного текста и/или PDF-брошюры.
     """
     dossier_parts: list[str] = []
+    extra_warnings: list[str] = []
 
     if source_url and source_url.strip():
         clean_url = source_url.strip()
@@ -778,16 +895,21 @@ async def ingest_smart_event(
         dossier_parts.append(f"=== ТЕКСТОВОЕ ОПИСАНИЕ / ЗАМЕТКА ===\n{raw_text.strip()}")
 
     if pdf_bytes:
-        dossier_parts.extend(await _extract_pdf_dossier_parts(pdf_bytes, vision_ocr))
+        pdf_parts, pdf_warnings = await _extract_pdf_dossier_parts(pdf_bytes, vision_ocr)
+        dossier_parts.extend(pdf_parts)
+        extra_warnings.extend(pdf_warnings)
 
     if not dossier_parts:
         raise ValueError("Необходимо передать хотя бы один источник данных: source_url, raw_text или pdf_bytes.")
 
-    return await ingest_event_from_text(
+    event_obj = await ingest_event_from_text(
         session=session,
         raw_dossier_text="\n\n".join(dossier_parts),
         source_url=source_url.strip() if source_url else None,
+        extra_warnings=extra_warnings,
     )
+    await session.commit()
+    return event_obj
 
 
 @dataclass(frozen=True)
@@ -799,6 +921,8 @@ class ScrapingRunSummary:
     ingested_ready_count: int
     needs_enrichment_count: int
     needs_enrichment_titles: list[str]
+    failed_count: int = 0
+    failed_urls: list[str] = field(default_factory=list)
 
 
 async def _load_known_source_urls(session: AsyncSession) -> set[str]:
@@ -813,27 +937,43 @@ async def _load_known_source_urls(session: AsyncSession) -> set[str]:
     return known
 
 
+_INGEST_ERRORS = (
+    TimeoutError,
+    APIError,
+    httpx.HTTPError,
+    InstructorError,
+    ValidationError,
+    ValueError,
+    RuntimeError,
+    SQLAlchemyError,
+)
+
+
 async def _ingest_source_new_urls(
     session: AsyncSession,
     src: CustomerSourceConfig,
     new_urls: list[str],
     known_urls: set[str],
-) -> tuple[int, list[str]]:
-    """Обходит список новых URL одного источника и возвращает (ready_count, enrichment_titles)."""
+) -> tuple[int, list[str], list[str]]:
+    """Обходит список новых URL одного источника и возвращает (ready_count, enrichment_titles, failed_urls)."""
     ready_count = 0
     enrichment_titles: list[str] = []
+    failed_urls: list[str] = []
     for card_url in new_urls:
         try:
             dossier_text = await fetch_url_dossier_text(card_url, source_config=src)
             ev = await ingest_event_from_text(session, dossier_text, source_url=card_url)
+            await session.commit()
             known_urls.add(card_url.strip().rstrip("/"))
             if ev.data_status == "ready":
                 ready_count += 1
             else:
                 enrichment_titles.append(ev.canonical_title)
-        except (TimeoutError, APIError, httpx.HTTPError, ValueError, RuntimeError):
+        except _INGEST_ERRORS:
+            await session.rollback()
             logger.exception("Не удалось импортировать карточку %s из источника %s", card_url, src.source_key)
-    return ready_count, enrichment_titles
+            failed_urls.append(card_url)
+    return ready_count, enrichment_titles, failed_urls
 
 
 async def run_customer_sources_monitoring(
@@ -860,6 +1000,7 @@ async def run_customer_sources_monitoring(
     discovered_count = 0
     ready_count = 0
     enrichment_titles: list[str] = []
+    total_failed_urls: list[str] = []
 
     for src in sources:
         try:
@@ -870,9 +1011,10 @@ async def run_customer_sources_monitoring(
 
         new_urls = [u for u in card_urls if u.strip().rstrip("/") not in known_urls][:max_urls_per_source]
         discovered_count += len(new_urls)
-        src_ready, src_enrichment = await _ingest_source_new_urls(session, src, new_urls, known_urls)
+        src_ready, src_enrichment, src_failed = await _ingest_source_new_urls(session, src, new_urls, known_urls)
         ready_count += src_ready
         enrichment_titles.extend(src_enrichment)
+        total_failed_urls.extend(src_failed)
 
     return ScrapingRunSummary(
         checked_sources=len(sources),
@@ -880,4 +1022,6 @@ async def run_customer_sources_monitoring(
         ingested_ready_count=ready_count,
         needs_enrichment_count=len(enrichment_titles),
         needs_enrichment_titles=enrichment_titles,
+        failed_count=len(total_failed_urls),
+        failed_urls=total_failed_urls,
     )

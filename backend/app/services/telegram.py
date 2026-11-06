@@ -3,6 +3,7 @@ import logging
 from collections.abc import Sequence
 from typing import Literal, Protocol, TypeAlias
 
+# pyrefly: ignore[missing-import]
 import httpx
 
 from app.core.config import settings
@@ -159,6 +160,12 @@ def set_telegram_transport(transport: TelegramTransportProtocol | None) -> None:
     _TelegramTransportRegistry.set(transport)
 
 
+def _clip(value: str | None, limit: int) -> str:
+    """Обрезает строку до заданного лимита символов до HTML-экранирования, предотвращая превышение 4096 байт в Telegram."""
+    text = (value or "").strip()
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def escape_html(value: str | None) -> str:
     """Безопасное экранирование пользовательских строк для Telegram parse_mode='HTML'."""
     if not value:
@@ -185,13 +192,13 @@ def format_reaction_alert(
 
     reaction_label = "Интересно (👍)" if reaction == "interested" else "Заменить (👎)"
     lines = [
-        f"<b>Реакция клиента на витрине ({escape_html(company_name)})</b>",
+        f"<b>Реакция клиента на витрине ({escape_html(_clip(company_name, 120))})</b>",
         f"Статус: <b>{reaction_label}</b>",
-        f"Мероприятие: «{escape_html(event_title)}»",
+        f"Мероприятие: «{escape_html(_clip(event_title, 250))}»",
     ]
     if comment and comment.strip():
         cleaned = comment.strip()
-        lines.append(f"Комментарий: <i>{escape_html(cleaned)}</i>")
+        lines.append(f"Комментарий: <i>{escape_html(_clip(cleaned, 1000))}</i>")
         support_flag = (
             needs_agency_support
             if needs_agency_support is not None
@@ -215,9 +222,9 @@ def format_escalation_alert(
 ) -> str:
     """Форматирует HTML-сообщение менеджеру при эскалации вопроса вне регламента."""
     return (
-        f"<b>Вопрос клиента требует уточнения ({escape_html(company_name)})</b>\n"
-        f"Мероприятие: «{escape_html(event_title)}»\n"
-        f"Вопрос: <i>{escape_html(question_text.strip())}</i>\n"
+        f"<b>Вопрос клиента требует уточнения ({escape_html(_clip(company_name, 120))})</b>\n"
+        f"Мероприятие: «{escape_html(_clip(event_title, 250))}»\n"
+        f"Вопрос: <i>{escape_html(_clip(question_text.strip(), 1000))}</i>\n"
         f"Ответьте клиенту в кабинете менеджера или свяжитесь с организаторами."
     )
 

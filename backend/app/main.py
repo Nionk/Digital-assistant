@@ -1,28 +1,58 @@
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import manager_router, showcase_router
+from app.core.config import settings
 from app.core.database import engine
+from app.services.monitoring_job import run_nightly_monitoring_job
+from app.services.telegram import close_telegram_http_client
+
+logger = logging.getLogger("app.main")
 
 
 @asynccontextmanager
-# [AUDIT-STUB]: В lifespan не запущен планировщик APScheduler для фонового мониторинга 9 площадок и утренних сводок в Telegram (требование разделов 5 и 11.3 artifact.md).
 async def lifespan(app: FastAPI):
     """
     Управление жизненным циклом приложения FastAPI (lifespan).
-    Заменяет устаревшие обработчики startup/shutdown (требование rules.md).
-    На этапе P-05 сюда будет подключен планировщик регулярных задач APScheduler.
+    При ENABLE_SCHEDULER=true запускает фоновый планировщик ночного мониторинга площадок.
+    При остановке корректно закрывает соединения с БД, пулы HTTP-клиентов и фоновые задачи.
     """
+    scheduler: AsyncIOScheduler | None = None
+    if settings.ENABLE_SCHEDULER:
+        scheduler = AsyncIOScheduler(timezone=settings.APP_TIMEZONE)
+        scheduler.add_job(
+            run_nightly_monitoring_job,
+            CronTrigger(hour=3, minute=0, timezone=settings.APP_TIMEZONE),
+            max_instances=1,
+            coalesce=True,
+            id="nightly_market_monitoring",
+        )
+        scheduler.start()
+        logger.info("Фоновый планировщик APScheduler успешно запущен (03:00 %s).", settings.APP_TIMEZONE)
+
     yield
-    # Очистка ресурсов при завершении работы сервера
+
+    if scheduler is not None and scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Фоновый планировщик APScheduler остановлен.")
+
+    # Корректное освобождение внешних пулов соединений
+    await close_telegram_http_client()
     await engine.dispose()
+    logger.info("Пул соединений с БД и HTTP-клиенты закрыты.")
+
 
 app = FastAPI(
     title="Digital Assistant API",
     description=(
-        "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании "
+        "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании. "
         "Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную "
         "публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам."
     ),
@@ -30,23 +60,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Настройка CORS для взаимодействия с Frontend (React / Vite на localhost:5173)
+# Настройка CORS
 app.add_middleware(
     CORSMiddleware,
-    # [AUDIT-BACKDOOR]: Разрешение allow_origins=["*"] одновременно с allow_credentials=True нарушает спецификацию CORS и открывает API для межсайтовых запросов с любых доменов.
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Системный эндпоинт проверки здоровья сервиса (используется Docker healthcheck)
+
 @app.get("/health", tags=["System"])
-# [AUDIT-FAKE]: Фиктивный healthcheck — всегда возвращает {"status": "ok"} без реальной проверки соединения с PostgreSQL (SELECT 1).
 async def health_check():
+    """
+    Системная проверка жизнеспособности сервиса (Liveness Probe).
+    Подтверждает, что процесс FastAPI и event loop активны и принимают HTTP-запросы.
+    """
     return {"status": "ok"}
 
+
+@app.get("/ready", tags=["System"])
+async def readiness_check():
+    """
+    Честная проверка готовности сервиса к обработке бизнес-трафика (Readiness Probe).
+    Проверяет активное сетевое соединение с PostgreSQL через SELECT 1.
+    """
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except (SQLAlchemyError, OSError) as exc:
+        logger.warning("Проверка готовности сервиса не прошла (БД недоступна): %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Сервис временно не готов: отсутствует подключение к базе данных.",
+        ) from exc
+    return {"status": "ready", "database": "connected"}
+
+
 # Подключение бизнес-роутеров системы
-# [AUDIT-STUB]: Не подключен роутер авторизации auth_router (POST /api/auth/login), предусмотренный разделом 11.3 и 11.4 artifact.md.
 app.include_router(manager_router)
 app.include_router(showcase_router)
