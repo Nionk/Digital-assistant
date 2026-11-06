@@ -3,8 +3,11 @@ import logging
 import math
 from typing import Literal
 
+# pyrefly: ignore[missing-import]
 import httpx
+# pyrefly: ignore[missing-import]
 import instructor
+# pyrefly: ignore[missing-import]
 from openai import APIError, AsyncOpenAI
 
 from app.core.config import settings
@@ -71,7 +74,12 @@ async def _request_embeddings(
             dimensions=settings.EMBEDDING_DIM,
         )
     ordered_data = sorted(response.data, key=lambda item: item.index)
-    return [l2_normalize(item.embedding) for item in ordered_data]
+    vectors = [l2_normalize(item.embedding) for item in ordered_data]
+    if len(vectors) != len(texts):
+        raise RuntimeError(f"Шлюз эмбеддингов вернул {len(vectors)} векторов на {len(texts)} текстов.")
+    if any(len(v) != settings.EMBEDDING_DIM for v in vectors):
+        raise RuntimeError(f"Размерность полученного вектора не совпадает с EMBEDDING_DIM={settings.EMBEDDING_DIM}.")
+    return vectors
 
 
 async def get_embedding(text: str) -> list[float]:
@@ -80,7 +88,7 @@ async def get_embedding(text: str) -> list[float]:
     Вызов защищен семафором параллелизма (EMBEDDING_SEMAPHORE).
     """
     if not text or not text.strip():
-        return [0.0] * settings.EMBEDDING_DIM
+        raise ValueError("Пустой текст для расчета эмбеддинга (нулевой вектор приводит к NaN в cosine distance).")
     if not settings.EMBEDDING_API_KEY:
         raise RuntimeError("EMBEDDING_API_KEY не задан в конфигурации приложения.")
 

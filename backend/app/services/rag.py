@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import hashlib
 import logging
+import re
 
 import httpx
 from instructor.core import InstructorError
@@ -11,6 +12,7 @@ from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.timeutils import today_local
 from app.models.models import (
     ChatMessage,
     Client,
@@ -33,6 +35,24 @@ POLITE_FALLBACK_TEXT = (
     "согласовываются с оргкомитетом в индивидуальном порядке). "
     "Вы можете передать вопрос персональному менеджеру для уточнения у организаторов."
 )
+
+
+class RAGUnavailableError(RuntimeError):
+    """Выбрасывается при недоступности внешнего LLM-шлюза (сеть, квота, таймаут)."""
+
+
+def _normalize_text_for_grounding(s: str) -> str:
+    """Очищает строку от знаков пунктуации и спецсимволов для точного сопоставления цитаты."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s.lower())).strip()
+
+
+def _is_quote_grounded(quote: str | None, context_text: str) -> bool:
+    """Проверяет, действительно ли цитата присутствует в предоставленном тексте регламента."""
+    if not quote or len(quote.strip()) < 10:
+        return False
+    norm_quote = _normalize_text_for_grounding(quote)
+    norm_ctx = _normalize_text_for_grounding(context_text)
+    return norm_quote in norm_ctx
 
 
 class RAGResponse(BaseModel):
@@ -70,6 +90,7 @@ async def invalidate_rag_cache(session: AsyncSession, event_id: int) -> int:
     """
     Инвалидация кэша ответов RAG при обновлении мероприятия или его тарифов (Раздел 12.8 artifact.md).
     DELETE FROM llm_cache WHERE event_id = :event_id RETURNING cache_key
+    Внимание: метод не коммитит сессию — транзакцией владеет вызывающий контекст.
     """
     stmt = (
         delete(LLMCache)
@@ -78,7 +99,6 @@ async def invalidate_rag_cache(session: AsyncSession, event_id: int) -> int:
     )
     result = await session.execute(stmt)
     deleted_keys = result.scalars().all()
-    await session.commit()
     return len(deleted_keys)
 
 
@@ -318,14 +338,11 @@ async def _query_rag_llm(
     event_id: int,
     system_prompt: str,
     user_prompt: str,
+    context_text: str,
 ) -> RAGResponse:
-    """Выполняет защищенный LLM_SEMAPHORE запрос к LLM со схемой RAGResponse."""
+    """Выполняет защищенный LLM_SEMAPHORE запрос к LLM со схемой RAGResponse и проверкой заземленности."""
     if not settings.LLM_API_KEY:
-        return RAGResponse(
-            is_answer_found=False,
-            answer_text=POLITE_FALLBACK_TEXT,
-            source_quote=None,
-        )
+        raise RAGUnavailableError("LLM_API_KEY не задан в конфигурации приложения.")
 
     try:
         async with LLM_SEMAPHORE:
@@ -341,18 +358,23 @@ async def _query_rag_llm(
                 ),
                 timeout=25.0,
             )
-    except (TimeoutError, APIError, httpx.HTTPError, InstructorError, ValidationError, ValueError) as exc:
+    except (TimeoutError, APIError, httpx.HTTPError, InstructorError) as exc:
         logger.warning(
-            "Сетевой сбой или таймаут при обращении к LLM в RAG (event_id=%s): %s. Применяется штатный фолбэк.",
+            "Сетевой сбой или таймаут при обращении к LLM в RAG (event_id=%s): %s",
             event_id,
             exc,
             exc_info=True,
         )
-        return RAGResponse(
-            is_answer_found=False,
-            answer_text=POLITE_FALLBACK_TEXT,
-            source_quote=None,
+        raise RAGUnavailableError(f"Сервис ответов по регламенту временно недоступен: {exc}") from exc
+
+    if llm_res.is_answer_found and not _is_quote_grounded(llm_res.source_quote, context_text):
+        logger.warning(
+            "RAG: source_quote не подтверждена текстом регламента (event_id=%s). Ответ переведен в фолбэк.",
+            event_id,
         )
+        llm_res.is_answer_found = False
+        llm_res.source_quote = None
+        llm_res.answer_text = POLITE_FALLBACK_TEXT
 
     if not llm_res.is_answer_found:
         llm_res.source_quote = None
@@ -462,7 +484,12 @@ async def ask_regulation_question(
     primary_cache_key = build_rag_cache_key(event_id, tariff_id, question_clean)
 
     cached_rag = await _try_load_cached_rag_response(session, primary_cache_key)
-    if cached_rag is None and tariff_id != 0:
+    # Фолбэк на tariff_id=0 допустим ТОЛЬКО для вопросов, не привязанных к конкретному тарифу
+    is_tariff_dependent_q = any(
+        kw in question_clean.lower()
+        for kw in ("что входит", "входит в тариф", "рекомендованный тариф", "стоимость тарифа", "опции тарифа")
+    )
+    if cached_rag is None and tariff_id != 0 and not is_tariff_dependent_q:
         fallback_cache_key = build_rag_cache_key(event_id, 0, question_clean)
         cached_rag = await _try_load_cached_rag_response(session, fallback_cache_key)
     if cached_rag is not None:
@@ -477,14 +504,17 @@ async def ask_regulation_question(
             fallback_text=regulation_text,
         )
 
+    today = today_local()
     system_prompt, user_prompt = _build_rag_prompts(
         event=event,
         tariff=tariff,
         regulation_text=regulation_text,
         question_clean=question_clean,
-        today=datetime.date.today(),
+        today=today,
     )
-    llm_res = await _query_rag_llm(event_id, system_prompt, user_prompt)
+    tariff_text = _build_tariff_context(tariff, today)
+    grounding_context = f"{regulation_text}\n{tariff_text}"
+    llm_res = await _query_rag_llm(event_id, system_prompt, user_prompt, grounding_context)
     return await _persist_and_escalate_rag_result(
         session=session,
         selection_id=selection_id,

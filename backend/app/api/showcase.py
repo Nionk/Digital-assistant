@@ -29,7 +29,7 @@ from app.schemas.showcase import (
     ShowcaseEventItemOut,
     ShowcaseViewOut,
 )
-from app.services.rag import ask_regulation_question
+from app.services.rag import RAGUnavailableError, ask_regulation_question
 from app.services.telegram import (
     format_escalation_alert,
     format_reaction_alert,
@@ -482,6 +482,11 @@ async def ask_event_regulation_question(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RAGUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Сервис ответов по регламенту временно недоступен. Попробуйте повторить запрос позже.",
+        ) from exc
 
 @router.post(
     "/{magic_token}/events/{event_id}/escalate-question",
