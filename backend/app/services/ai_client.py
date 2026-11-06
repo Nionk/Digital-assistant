@@ -5,8 +5,10 @@ from typing import Literal
 
 # pyrefly: ignore[missing-import]
 import httpx
+
 # pyrefly: ignore[missing-import]
 import instructor
+
 # pyrefly: ignore[missing-import]
 from openai import APIError, AsyncOpenAI
 
