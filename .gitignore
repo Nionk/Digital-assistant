@@ -83,6 +83,7 @@ architecture_diagram*
 docs/
 *.md
 !README.md
+!STARTUP_GUIDE.md
 backend/tests/*.md
 backend/alembic/README
 
