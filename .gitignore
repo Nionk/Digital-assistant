@@ -54,9 +54,15 @@ dist-ssr/
 .vite/
 
 *.log
+# Cache directories
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+htmlcov/
 
 # Local specs & seed data
 artifact.md
@@ -84,6 +90,7 @@ docs/
 *.md
 !README.md
 !STARTUP_GUIDE.md
+!USAGE_GUIDE.md
 backend/tests/*.md
 backend/alembic/README
 
