@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, cast
 
 # pyrefly: ignore[missing-import]
 import httpx
@@ -590,17 +590,45 @@ def evaluate_candidate_tuple(
     if s_needed > k:
         return []
 
-    is_pure_sponsor = "sponsor" in required_roles and "delegate" not in required_roles
-    default_role: ParticipationRole = "sponsor" if is_pure_sponsor else "delegate"
+    other_roles: list[ParticipationRole] = [cast(ParticipationRole, r) for r in required_roles if r != "speaker"]
+    if not other_roles:
+        other_roles = ["delegate"]
 
     valid_evaluations: list[EvaluatedCombo] = []
     for speaker_indices in itertools.combinations(range(k), s_needed):
-        matched = _match_tariffs_for_speaker_set(combo, set(speaker_indices), default_role, allow_role_fallback)
-        if matched is not None:
-            chosen_tariffs, strict_roles_ok = matched
-            valid_evaluations.append(
-                _build_evaluated_combo(combo, chosen_tariffs, budget_max, strict_roles_ok, date_conflict)
-            )
+        spk_set = set(speaker_indices)
+        remaining_indices = [i for i in range(k) if i not in spk_set]
+
+        if not remaining_indices:
+            matched = _match_tariffs_for_speaker_set(combo, spk_set, other_roles[0], allow_role_fallback)
+            if matched is not None:
+                m_tariffs, m_strict = matched
+                valid_evaluations.append(
+                    _build_evaluated_combo(combo, m_tariffs, budget_max, m_strict, date_conflict)
+                )
+            continue
+
+        for role_assignment in itertools.product(other_roles, repeat=len(remaining_indices)):
+            # Если слотов достаточно для всех запрошенных не-спикерских ролей, требуем их полного покрытия
+            if len(remaining_indices) >= len(other_roles) and any(r not in role_assignment for r in other_roles):
+                continue
+
+            chosen_tariffs: list[TariffOptionOut] = []
+            strict_roles_ok = True
+            matched_all = True
+            role_map = dict(zip(remaining_indices, role_assignment))
+            for idx, cand in enumerate(combo):
+                desired_role: ParticipationRole = "speaker" if idx in spk_set else role_map[idx]
+                t, is_strict = pick_best_tariff_for_role(cand.priced_tariffs, desired_role, allow_role_fallback)
+                if t is None:
+                    matched_all = False
+                    break
+                strict_roles_ok = strict_roles_ok and is_strict
+                chosen_tariffs.append(t)
+            if matched_all:
+                valid_evaluations.append(
+                    _build_evaluated_combo(combo, chosen_tariffs, budget_max, strict_roles_ok, date_conflict)
+                )
     return valid_evaluations
 
 
