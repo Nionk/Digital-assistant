@@ -112,11 +112,37 @@ _RUSSIAN_STOP_WORDS: set[str] = {
 }
 
 
+_RUSSIAN_VOWELS: set[str] = set("аеёиоуыэюя")
+_LATIN_VOWELS: set[str] = set("aeiouy")
+_AMBIGUOUS_CITY_HOMONYMS: set[str] = {"чита", "шахты", "бор"}
+
+
+def _is_toponym_acronym(token: str) -> bool:
+    """Определяет, является ли токен неизменяемой аббревиатурой (МСК, СПБ, ЕКБ, РНД, МО, ЛО, MSK)."""
+    has_vowels = any(c in _RUSSIAN_VOWELS or c in _LATIN_VOWELS for c in token)
+    return not has_vowels or len(token) <= 2
+
+
 def _city_variant_pattern(var_clean: str) -> tuple[str, str]:
-    """Строит регулярное выражение для поиска города и его основы для проверки отрицания."""
-    if len(var_clean) <= 3:
+    """
+    Строит регулярное выражение для поиска города и его основы для проверки отрицания.
+    - Для аббревиатур (МСК, СПБ, РНД, ЛО) использует строгую границу слова без склонения.
+    - Для омонимов общеупотребительных слов (Чита, Шахты, Бор) требует контекстного маркера/предлога.
+    - Для склоняемых топонимов отсекает флексию и разрешает падежные окончания русского языка.
+    """
+    if " " in var_clean:
         return rf"\b{re.escape(var_clean)}\b", var_clean
+
+    if _is_toponym_acronym(var_clean):
+        return rf"\b{re.escape(var_clean)}\b", var_clean
+
+    if var_clean in _AMBIGUOUS_CITY_HOMONYMS:
+        stem = re.sub(r"[аяьеий]$", "", var_clean)
+        return rf"\b(?:в|во|из|до|по|гор\.|город[а-яё]*)\s+{re.escape(stem)}[а-яё]{{0,3}}\b", stem
+
     stem = re.sub(r"[аяьеий]$", "", var_clean)
+    if not stem:
+        stem = var_clean
     return rf"\b{re.escape(stem)}[а-яё]{{0,3}}\b", stem
 
 

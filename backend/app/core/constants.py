@@ -136,7 +136,7 @@ def is_online_format(text: str | None) -> bool:
     cleaned = _clean_key(text)
     if cleaned in ONLINE_FORMAT_MARKERS:
         return True
-    return any(marker in cleaned for marker in ONLINE_FORMAT_MARKERS)
+    return any(re.search(rf"\b{re.escape(marker)}\b", cleaned) for marker in ONLINE_FORMAT_MARKERS)
 
 
 # Предварительно скомпилированный обратный индекс: нормализованный синоним -> Каноническое название
@@ -172,10 +172,6 @@ def normalize_city(raw_city: str | None) -> str | None:
     if not cleaned:
         return None
 
-    # Онлайн-формат не является физическим городом — возвращаем None для соблюдения CHECK (city IS NOT NULL OR is_online = TRUE)
-    if is_online_format(cleaned):
-        return None
-
     lookup_key = _clean_key(cleaned)
     if not lookup_key:
         return None
@@ -188,6 +184,21 @@ def normalize_city(raw_city: str | None) -> str | None:
     lookup_no_hyphen = lookup_key.replace('-', ' ')
     if lookup_no_hyphen in _REVERSE_CITY_MAP:
         return _REVERSE_CITY_MAP[lookup_no_hyphen]
+
+    # Онлайн-формат не является физическим городом — возвращаем None для соблюдения CHECK (city IS NOT NULL OR is_online = TRUE)
+    if is_online_format(cleaned):
+        return None
+
+    # Разбор составных локаций через разделители (например: "Россия, Москва", "Москва (Сколково)", "г. Москва, очно")
+    parts = re.split(r"[,;/()]+", cleaned)
+    if len(parts) > 1:
+        for p in parts:
+            p_clean = p.strip()
+            if not p_clean or is_online_format(p_clean):
+                continue
+            p_norm = normalize_city(p_clean)
+            if p_norm and p_norm in _REVERSE_CITY_MAP.values():
+                return p_norm
 
     # Фолбэк для городов вне базы: удаляем префиксы и форматируем регистр с сохранением дефисов
     # Например: "г. Сколково" -> "Сколково", "гор. суздаль" -> "Суздаль"
