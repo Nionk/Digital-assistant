@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import FAQ_QUICK_CHIPS
 from app.core.database import get_async_session
+from app.core.timeutils import today_local
 from app.models.models import (
     ChatMessage,
     Client,
@@ -75,99 +76,6 @@ def _normalize_reaction(reaction: str | None) -> ShowcaseReaction:
         return "rejected"
     return "pending"
 
-# [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к мокам во всех 4 публичных эндпоинтах витрины.
-DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
-
-# [AUDIT-FAKE]: Функция-обманка (89 строк), возвращающая захардкоженную витрину для "ГК Пионер" в обход базы данных.
-def _build_demo_fallback_showcase() -> ShowcaseViewOut:
-    """Демонстрационный фолбэк витрины для изолированных контрактных тестов D-05."""
-    return ShowcaseViewOut(
-        selection_id=10,
-        company_name="ГК «Пионер»",
-        manager_full_name="Анна Соколова",
-        pitch_text=(
-            "Игорь, добрый день! По итогам нашего разговора подготовили для ГК «Пионер» персональную "
-            "программу участия на ноябрь–декабрь по темам КРТ и урбанистики в Москве и Санкт-Петербурге.\n\n"
-            "Общая стоимость пакета составляет 285 000 ₽. При подтверждении участия до 15 ноября вы сохраняете "
-            "скидку раннего бронирования (Early Bird) в размере 55 000 ₽."
-        ),
-        total_events_count=3,
-        total_actual_price=285000.0,
-        total_savings=55000.0,
-        min_early_bird_deadline=datetime.date(2026, 11, 15),
-        items=[
-            ShowcaseEventItemOut(
-                selection_item_id=1001,
-                event_id=101,
-                canonical_title="Круглый стол Ведомостей: Практика КРТ в мегаполисах 2026",
-                event_format="roundtable",
-                city="Москва",
-                is_online=False,
-                venue="Отель Континенталь, Тверская 22",
-                start_date=datetime.date(2026, 11, 24),
-                end_date=datetime.date(2026, 11, 24),
-                summary="Закрытая дискуссия девелоперов и представителей Минстроя по механизмам КРТ.",
-                themes=["КРТ", "девелопмент", "регулирование"],
-                tariff_name="Пакет «Спикер круглого стола»",
-                participation_role="speaker",
-                actual_price=135000.0,
-                base_price=160000.0,
-                early_bird_deadline=datetime.date(2026, 11, 15),
-                savings=25000.0,
-                included_benefits="Выступление 15 минут в основной сессии, 2 делегатских билета.",
-                ai_rationale="Позволяет презентовать экспертизу ГК «Пионер» в сфере КРТ.",
-                client_reaction="pending",
-                client_comment=None,
-            ),
-            ShowcaseEventItemOut(
-                selection_item_id=1002,
-                event_id=102,
-                canonical_title="Деловой завтрак Коммерсантъ: Урбанистика и мастер-планирование",
-                event_format="business_breakfast",
-                city="Санкт-Петербург",
-                is_online=False,
-                venue="Отель Астория, Большая Морская 39",
-                start_date=datetime.date(2026, 12, 3),
-                end_date=datetime.date(2026, 12, 3),
-                summary="Камерная встреча руководителей архитектурных бюро и застройщиков Северо-Запада.",
-                themes=["урбанистика", "мастер-планирование", "архитектура"],
-                tariff_name="Делегат VIP",
-                participation_role="delegate",
-                actual_price=75000.0,
-                base_price=90000.0,
-                early_bird_deadline=datetime.date(2026, 11, 20),
-                savings=15000.0,
-                included_benefits="Участие в закрытом завтраке, доступ к материалам спикеров.",
-                ai_rationale="Прямой выход на заказчиков мастер-планов в Санкт-Петербурге.",
-                client_reaction="pending",
-                client_comment=None,
-            ),
-            ShowcaseEventItemOut(
-                selection_item_id=1003,
-                event_id=103,
-                canonical_title="Итоговая конференция ЕРЗ.РФ: Тренды жилищного строительства",
-                event_format="conference",
-                city="Москва",
-                is_online=False,
-                venue="ЦДП (Цифровое деловое пространство)",
-                start_date=datetime.date(2026, 12, 11),
-                end_date=datetime.date(2026, 12, 11),
-                summary="Ежегодная аналитическая конференция застройщиков жилья РФ.",
-                themes=["жилая застройка", "ЕРЗ", "аналитика"],
-                tariff_name="Делегат Стандарт",
-                participation_role="delegate",
-                actual_price=75000.0,
-                base_price=90000.0,
-                early_bird_deadline=datetime.date(2026, 11, 25),
-                savings=15000.0,
-                included_benefits="Полный доступ к залам конференции, кофе-брейки.",
-                ai_rationale="Ключевая площадка девелоперов РФ для подведения итогов года.",
-                client_reaction="pending",
-                client_comment=None,
-            ),
-        ],
-        faq_quick_chips=list(FAQ_QUICK_CHIPS),
-    )
 
 @router.get(
     "/{magic_token}",
@@ -186,15 +94,20 @@ async def get_public_showcase(
     """
     Загружает опубликованную витрину клиента по magic_token из БД.
     """
-    if magic_token == DEMO_FALLBACK_TOKEN:
-        return _build_demo_fallback_showcase()
-
     stmt = select(Selection).where(
         Selection.magic_token == magic_token,
         Selection.status == "published",
     )
-    result = await db.execute(stmt)
-    selection = result.scalar_one_or_none()
+    selection = None
+    try:
+        result = await db.execute(stmt)
+        selection = result.scalar_one_or_none()
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при получении витрины %s: %s", magic_token, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     if selection is None:
         raise HTTPException(
@@ -202,7 +115,7 @@ async def get_public_showcase(
             detail="Витрина не найдена или еще не опубликована",
         )
 
-    client = await db.get(Client, selection.client_id)
+    client = selection.client or await db.get(Client, selection.client_id)
     manager = await db.get(User, client.manager_id) if (client and client.manager_id) else None
 
     items_stmt = (
@@ -216,46 +129,87 @@ async def get_public_showcase(
     items_res = await db.execute(items_stmt)
     items = items_res.scalars().all()
 
-    today = datetime.date.today()
+    today = today_local()
     showcase_items: list[ShowcaseEventItemOut] = []
     total_actual = 0.0
     total_savings = 0.0
     earliest_deadline: datetime.date | None = None
 
-    # [AUDIT-TIMEBOMB]: Проблема N+1 SQL-запросов — внутри цикла по элементам подборки выполняются отдельные db.get(Event) и db.get(EventTariff).
-    # [AUDIT-CRUTCH]: Условие if not event or not tariff: continue молча выбрасывает из витрины мероприятия, у которых recommended_tariff_id равен NULL.
-    for item in items:
-        event = item.event or await db.get(Event, item.event_id)
-        tariff = item.recommended_tariff or (
-            await db.get(EventTariff, item.recommended_tariff_id) if item.recommended_tariff_id else None
-        )
+    # Пакетная загрузка связанных Event и EventTariff для устранения N+1 запросов
+    ev_ids_to_fetch = {item.event_id for item in items if not item.event}
+    tar_ids_to_fetch = {
+        item.recommended_tariff_id
+        for item in items
+        if item.recommended_tariff_id and not item.recommended_tariff
+    }
 
-        if not event or not tariff:
+    events_map: dict[int, Event] = {}
+    if ev_ids_to_fetch:
+        ev_res = await db.execute(select(Event).where(Event.id.in_(ev_ids_to_fetch)))
+        events_map = {e.id: e for e in ev_res.scalars().all()}
+
+    tariffs_map: dict[int, EventTariff] = {}
+    if tar_ids_to_fetch:
+        tar_res = await db.execute(select(EventTariff).where(EventTariff.id.in_(tar_ids_to_fetch)))
+        tariffs_map = {t.id: t for t in tar_res.scalars().all()}
+
+    for item in items:
+        event = item.event or events_map.get(item.event_id)
+        if not event:
             continue
 
-        base = float(tariff.base_price) if tariff.base_price is not None else None
-        eb = float(tariff.early_bird_price) if tariff.early_bird_price is not None else None
+        tariff = item.recommended_tariff or (
+            tariffs_map.get(item.recommended_tariff_id) if item.recommended_tariff_id else None
+        )
 
-        actual = base
-        savings = 0.0
-        if base is not None and eb is not None and tariff.early_bird_deadline and tariff.early_bird_deadline >= today:
-            actual = eb
-            if base > eb:
-                savings = round(base - eb, 2)
+        # Фолбэк, если recommended_tariff_id сброшен в NULL (например, после обновления тарифов скрейпером)
+        if tariff is None and event.tariffs:
+            low_rationale = (item.ai_rationale or "").lower()
+            if "спикер" in low_rationale or "выступлен" in low_rationale:
+                tariff = next((t for t in event.tariffs if t.participation_role == "speaker"), None)
+            if tariff is None:
+                priced_tariffs = [t for t in event.tariffs if t.base_price is not None]
+                tariff = (
+                    min(priced_tariffs, key=lambda t: float(t.base_price or 0.0))
+                    if priced_tariffs
+                    else event.tariffs[0]
+                )
+
+        if tariff is not None:
+            base = float(tariff.base_price) if tariff.base_price is not None else None
+            eb = float(tariff.early_bird_price) if tariff.early_bird_price is not None else None
+            actual = base
+            savings = 0.0
+            if base is not None and eb is not None and tariff.early_bird_deadline and tariff.early_bird_deadline >= today:
+                actual = eb
+                if base > eb:
+                    savings = round(base - eb, 2)
+
+            if (
+                savings > 0
+                and tariff.early_bird_deadline
+                and (earliest_deadline is None or tariff.early_bird_deadline < earliest_deadline)
+            ):
+                earliest_deadline = tariff.early_bird_deadline
+
+            tariff_name = tariff.tariff_name
+            role = _normalize_role(tariff.participation_role)
+            included_benefits = tariff.included_benefits
+            eb_deadline = tariff.early_bird_deadline
+        else:
+            base = None
+            actual = None
+            savings = 0.0
+            tariff_name = "Базовый пакет участия (уточняется)"
+            role = "delegate"
+            included_benefits = "Условия участия уточняются у персонального менеджера."
+            eb_deadline = None
 
         if actual is not None:
             total_actual += actual
         total_savings += savings
 
-        if (
-            savings > 0
-            and tariff.early_bird_deadline
-            and (earliest_deadline is None or tariff.early_bird_deadline < earliest_deadline)
-        ):
-            earliest_deadline = tariff.early_bird_deadline
-
         ev_fmt = _normalize_event_format(event.event_format)
-        role = _normalize_role(tariff.participation_role)
         reaction = _normalize_reaction(item.client_reaction)
 
         showcase_items.append(
@@ -271,13 +225,13 @@ async def get_public_showcase(
                 end_date=event.end_date,
                 summary=event.summary,
                 themes=list(event.themes or []),
-                tariff_name=tariff.tariff_name,
+                tariff_name=tariff_name,
                 participation_role=role,
                 actual_price=actual,
                 base_price=base,
-                early_bird_deadline=tariff.early_bird_deadline,
+                early_bird_deadline=eb_deadline,
                 savings=savings,
-                included_benefits=tariff.included_benefits,
+                included_benefits=included_benefits,
                 ai_rationale=item.ai_rationale or "",
                 client_reaction=reaction,
                 client_comment=item.client_comment,
@@ -317,31 +271,20 @@ async def react_to_showcase_item(
     """
     Сохраняет реакцию клиента на конкретный элемент витрины и уведомляет менеджера.
     """
-    if magic_token == DEMO_FALLBACK_TOKEN:
-        if item_id not in (1001, 1002, 1003):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Элемент подборки не найден в данной витрине",
-            )
-        alert_html = format_reaction_alert(
-            company_name="ГК «Пионер»",
-            event_title=f"Демо-мероприятие #{item_id}",
-            reaction=payload.reaction,
-            comment=payload.comment,
-        )
-        notified = await send_manager_alert(alert_html, chat_id=None)
-        return ClientReactionOut(
-            selection_item_id=item_id,
-            new_reaction=payload.reaction,
-            manager_notified=notified,
-        )
-
     stmt = select(Selection).where(
         Selection.magic_token == magic_token,
         Selection.status == "published",
     )
-    res = await db.execute(stmt)
-    selection = res.scalar_one_or_none()
+    selection = None
+    try:
+        res = await db.execute(stmt)
+        selection = res.scalar_one_or_none()
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при реакции на витрину %s: %s", magic_token, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     if selection is None:
         raise HTTPException(
@@ -411,48 +354,26 @@ async def ask_event_regulation_question(
     """
     Вызывает изолированный RAG-сервис (D-09) для ответа на вопрос клиента по регламенту.
     """
-    if magic_token == DEMO_FALLBACK_TOKEN:
-        if event_id not in (101, 102, 103):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Данное мероприятие не входит в указанную витрину",
-            )
-        q_lower = payload.question_text.lower()
-        # [AUDIT-FAKE]: Хардкод ключевых слов из бенчмарка ("вертолет", "трансфер", "проживание", "отель", "перелет") для имитации работы Zero-Hallucination RAG на демо-токене.
-        if any(k in q_lower for k in ["вертолет", "трансфер", "проживание", "отель", "перелет"]):
-            return AskRegulationQuestionOut(
-                event_id=event_id,
-                question_text=payload.question_text,
-                is_answer_found=False,
-                answer_text=(
-                    "Точных данных по этому вопросу нет в открытом регламенте мероприятия (как правило, такие детали "
-                    "согласовываются с оргкомитетом в индивидуальном порядке)."
-                ),
-                source_quote=None,
-                from_cache=False,
-                escalated_to_telegram=False,
-            )
-        return AskRegulationQuestionOut(
-            event_id=event_id,
-            question_text=payload.question_text,
-            is_answer_found=True,
-            answer_text=(
-                "В предложенный вам тариф «Пакет Спикер круглого стола» (135 000 ₽ с НДС при оплате до 15.11.2026) "
-                "входит: 15-минутное выступление с презентацией в основной сессии, аккредитация 2 делегатов от компании "
-                "и включение комментария спикера в итоговый аналитический обзор «Ведомостей»."
-            ),
-            source_quote="Раздел 3.2 Регламента: Пакет 'Спикер' включает слот выступления до 15 мин, 2 квоты делегатов и цитирование в пост-релизе.",
-            from_cache=True,
-            escalated_to_telegram=False,
-        )
-
-    # [AUDIT-BACKDOOR]: Отсутствует проверка Selection.status == "published", что позволяет задавать вопросы в RAG по еще не опубликованным черновым подборкам (status == "draft").
-    stmt = select(Selection).where(Selection.magic_token == magic_token)
-    res = await db.execute(stmt)
-    selection = res.scalar_one_or_none()
+    stmt = select(Selection).where(
+        Selection.magic_token == magic_token,
+        Selection.status == "published",
+    )
+    selection = None
+    try:
+        res = await db.execute(stmt)
+        selection = res.scalar_one_or_none()
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при вопросе по витрине %s: %s", magic_token, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     if selection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Витрина не найдена или еще не опубликована",
+        )
 
     # Проверяем принадлежность мероприятия данной подборке
     item_stmt = (
@@ -498,39 +419,55 @@ async def ask_event_regulation_question(
         "и возвращает статус успешной отправки."
     ),
 )
-# [AUDIT-BACKDOOR]: Уязвимость IDOR и отсутствие проверки статуса публикации — не проверяется Selection.status == "published" и не проверяется, входит ли event_id в selection_items данной подборки.
 async def escalate_question_to_manager(
     magic_token: UUID,
     event_id: int,
     payload: EscalateQuestionIn,
     db: AsyncSessionDep,
 ) -> EscalateQuestionOut:
-    if magic_token == DEMO_FALLBACK_TOKEN:
-        alert_html = format_escalation_alert(
-            company_name="ГК «Пионер» (Демо-клиент)",
-            event_title=f"Мероприятие #{event_id}",
-            question_text=payload.question_text,
-        )
-        await send_manager_alert(alert_html, chat_id=None)
-        return EscalateQuestionOut(
-            event_id=event_id,
-            question_text=payload.question_text,
-            success=True,
-            message="Вопрос успешно передан персональному куратору.",
-        )
-
     stmt = (
         select(Selection, Client, User)
         .join(Client, Selection.client_id == Client.id)
         .outerjoin(User, Client.manager_id == User.id)
-        .where(Selection.magic_token == magic_token)
+        .where(
+            Selection.magic_token == magic_token,
+            Selection.status == "published",
+        )
     )
-    res = await db.execute(stmt)
-    row = res.first()
+    row = None
+    try:
+        res = await db.execute(stmt)
+        row = res.first()
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при эскалации вопроса по витрине %s: %s", magic_token, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Витрина не найдена или еще не опубликована",
+        )
 
     selection, client, manager = row
+
+    # Проверяем принадлежность мероприятия данной подборке (защита от IDOR)
+    item_stmt = (
+        select(SelectionItem)
+        .where(
+            SelectionItem.selection_id == selection.id,
+            SelectionItem.event_id == event_id,
+        )
+        .limit(1)
+    )
+    item_res = await db.execute(item_stmt)
+    if item_res.scalars().first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Данное мероприятие не входит в указанную витрину",
+        )
 
     event = await db.get(Event, event_id)
     if event is None:
@@ -542,8 +479,7 @@ async def escalate_question_to_manager(
         event_title=event.canonical_title,
         question_text=payload.question_text,
     )
-    # [AUDIT-TODO]: Отслеживание статуса доставки Telegram-пуша send_manager_alert и повторная отправка в фоновом воркере.
-    await send_manager_alert(alert_html, chat_id=manager_chat_id)
+    notified = await send_manager_alert(alert_html, chat_id=manager_chat_id)
 
     try:
         msg_stmt = (
@@ -551,6 +487,7 @@ async def escalate_question_to_manager(
             .where(
                 ChatMessage.selection_id == selection.id,
                 ChatMessage.event_id == event_id,
+                ChatMessage.sender_role == "client",
                 ChatMessage.message_text == payload.question_text.strip(),
             )
             .order_by(ChatMessage.id.desc())
@@ -560,14 +497,23 @@ async def escalate_question_to_manager(
         chat_msg = msg_res.scalar_one_or_none()
         if chat_msg is not None:
             chat_msg.needs_manager_attention = True
-            await db.commit()
+        else:
+            chat_msg = ChatMessage(
+                selection_id=selection.id,
+                event_id=event_id,
+                message_text=payload.question_text.strip(),
+                sender_role="client",
+                needs_manager_attention=True,
+            )
+            db.add(chat_msg)
+        await db.commit()
     except (SQLAlchemyError, OSError) as exc:
-        logger.warning(f"Не удалось обновить статус сообщения в chat_messages: {exc}")
+        logger.warning("Не удалось обновить статус сообщения в chat_messages: %s", exc)
 
     return EscalateQuestionOut(
         event_id=event_id,
         question_text=payload.question_text,
-        success=True,
+        success=notified,
         message="Вопрос успешно передан персональному куратору.",
     )
 

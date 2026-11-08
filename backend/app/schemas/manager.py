@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.constants import is_online_format, normalize_city
+
 
 class BurningDeadlineOut(BaseModel):
     """Информация о горящем дедлайне со скидкой Early Bird (< 72 часов)."""
@@ -76,10 +78,22 @@ class ClientQueryExtracted(BaseModel):
 
     @model_validator(mode="after")
     def validate_query_invariants(self) -> Self:
-        """Синхронизирует границы дат, слоты спикера и непустой семантический запрос."""
+        """Синхронизирует границы дат, слоты спикера, канонические города и непустой семантический запрос."""
         if self.date_from and self.date_to and self.date_to < self.date_from:
             raise ValueError(f"date_to ({self.date_to}) не может быть раньше date_from ({self.date_from})")
         self.min_speaker_events = min(self.min_speaker_events, self.target_events_count)
+        if self.cities:
+            cleaned_cities: list[str] = []
+            for c in self.cities:
+                if not c:
+                    continue
+                if is_online_format(c):
+                    self.include_online = True
+                    continue
+                norm = normalize_city(c)
+                if norm and norm not in cleaned_cities:
+                    cleaned_cities.append(norm)
+            self.cities = cleaned_cities
         if not self.semantic_search_query or not self.semantic_search_query.strip():
             fallback_parts = [*self.themes_keywords, *self.cities]
             self.semantic_search_query = " ".join(fallback_parts).strip() or "деловые мероприятия форумы конференции"
@@ -251,3 +265,66 @@ class ManagerEventsCatalogOut(BaseModel):
     """Список всех активных мероприятий, отслеживаемых агентством."""
     total_count: int = Field(..., description="Общее количество активных площадок в базе")
     events: list[CatalogEventItemOut] = Field(default_factory=list, description="Список мероприятий с тарифами")
+
+
+class EventUploadOut(BaseModel):
+    """Результат ручной загрузки/обогащения мероприятия через PDF, URL или сырой текст."""
+    event_id: int = Field(..., description="ID созданного или обогащенного мероприятия")
+    canonical_title: str = Field(..., description="Каноническое название")
+    data_status: str = Field(..., description="Статус полноты карточки (ready / needs_enrichment)")
+    tariffs_count: int = Field(..., description="Количество извлеченных тарифов")
+    message: str = Field(..., description="Результат обработки")
+
+
+class ScraperRunIn(BaseModel):
+    """Запрос на ручной запуск фонового парсера по конкретной площадке."""
+    source_key: str = Field(
+        ...,
+        description="Ключ площадки (vedomosti, rbc, kommersant, architime, erz, bfm, tdaily, tadviser, events_spb)",
+    )
+
+
+class ScraperRunOut(BaseModel):
+    """Статус постановки задачи скрейпера в фоновый воркер."""
+    source_key: str = Field(..., description="Ключ площадки")
+    status: Literal["queued", "completed", "failed"] = Field("queued", description="Статус запуска")
+    message: str = Field(..., description="Информационное сообщение")
+
+
+class SelectionItemReactionActivity(BaseModel):
+    """Активность клиента: реакция на мероприятие из подборки."""
+    item_id: int
+    event_id: int
+    event_title: str
+    reaction: str
+    comment: str | None = None
+
+
+class SelectionQuestionActivity(BaseModel):
+    """Вопрос клиента, требующий внимания персонального менеджера."""
+    message_id: int
+    event_id: int | None = None
+    event_title: str | None = None
+    question_text: str
+    created_at: str | None = None
+
+
+class SelectionActivityOut(BaseModel):
+    """Сводка активности клиента по витрине для регулярного опроса (Polling) менеджером."""
+    selection_id: int
+    reactions: list[SelectionItemReactionActivity] = Field(default_factory=list)
+    pending_questions: list[SelectionQuestionActivity] = Field(default_factory=list)
+
+
+class ManagerReplyIn(BaseModel):
+    """Ответ менеджера на вопрос клиента в чате витрины."""
+    message_id: int = Field(..., description="ID сообщения клиента с needs_manager_attention = True")
+    reply_text: str = Field(..., min_length=1, description="Текст ответа менеджера")
+
+
+class ManagerReplyOut(BaseModel):
+    """Результат отправки ответа менеджера в чат витрины."""
+    message_id: int = Field(..., description="ID исходного вопроса клиента")
+    reply_message_id: int = Field(..., description="ID созданного сообщения менеджера в чате")
+    success: bool = True
+    message: str = Field(..., description="Статус обработки")

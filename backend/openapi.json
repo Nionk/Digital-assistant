@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Digital Assistant API",
-    "description": "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам.",
+    "description": "Двухконтурный сервис мониторинга деловых мероприятий и пакетного подбора под бюджет компании. Включает закрытый кабинет менеджера (/api/manager/*) и интерактивную публичную витрину клиента (/api/public/s/*) с изолированным RAG-чатом по регламентам.",
     "version": "0.1.0-demo"
   },
   "paths": {
@@ -12,6 +12,7 @@
           "System"
         ],
         "summary": "Health Check",
+        "description": "Системная проверка жизнеспособности сервиса (Liveness Probe).\nПодтверждает, что процесс FastAPI и event loop активны и принимают HTTP-запросы.",
         "operationId": "health_check_health_get",
         "responses": {
           "200": {
@@ -19,6 +20,68 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Readiness Check",
+        "description": "Честная проверка готовности сервиса к обработке бизнес-трафика (Readiness Probe).\nПроверяет активное сетевое соединение с PostgreSQL через SELECT 1.",
+        "operationId": "readiness_check_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Авторизация менеджера отдела сопровождения и получение JWT-токена",
+        "description": "Проверяет email и пароль менеджера по таблице users и возвращает JWT-токен доступа.",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -176,6 +239,107 @@
         "summary": "Каталог отслеживаемых отраслевых мероприятий и тарифов для кабинета менеджера",
         "description": "Возвращает полный список активных площадок в базе знаний агентства (форумы, закрытые встречи, конференции, круглые столы) с доступными тарифами и актуальными условиями Early Bird.",
         "operationId": "get_manager_events_catalog_api_manager_events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "City"
+            }
+          },
+          {
+            "name": "event_format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "roundtable",
+                    "business_breakfast",
+                    "forum",
+                    "conference",
+                    "session"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Format"
+            }
+          },
+          {
+            "name": "data_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ready",
+                    "needs_enrichment",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Data Status"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -186,6 +350,57 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/events/upload-pdf": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Ручной импорт и обогащение события через PDF-файл, текст или URL",
+        "description": "Принимает PDF-брошюру (multipart), сырой текст или внешний URL. Выполняет извлечение структуры через Instructor, сохраняет мероприятие и тарифы в БД.",
+        "operationId": "upload_event_material_api_manager_events_upload_pdf_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_event_material_api_manager_events_upload_pdf_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventUploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -193,6 +408,159 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/manager/scraper/run": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Ручной запуск парсера по одной из утвержденных площадок",
+        "description": "Ставит в очередь фоновую задачу скрейпинга для выбранного источника.",
+        "operationId": "run_scraper_endpoint_api_manager_scraper_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScraperRunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScraperRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/selections/{selection_id}/activity": {
+      "get": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Получение реакций клиента и вопросов, требующих внимания менеджера (Polling)",
+        "description": "Возвращает реакции клиента по элементам витрины и вопросы в чате со статусом needs_manager_attention = True. Защищен проверкой принадлежности подборки текущему менеджеру (IDOR).",
+        "operationId": "get_selection_activity_api_manager_selections__selection_id__activity_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "selection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Selection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectionActivityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/selections/{selection_id}/reply": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Отправка ответа менеджера на вопрос клиента в чат витрины",
+        "description": "Сбрасывает флаг needs_manager_attention у исходного вопроса и публикует ответное сообщение менеджера (sender_role = 'manager') в чат витрины.",
+        "operationId": "reply_to_client_question_api_manager_selections__selection_id__reply_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "selection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Selection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerReplyIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReplyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/public/s/{magic_token}": {
@@ -508,6 +876,46 @@
         "title": "AskRegulationQuestionOut",
         "description": "Ответ ИИ-ассистента по регламенту события (изолированный RAG)."
       },
+      "Body_upload_event_material_api_manager_events_upload_pdf_post": {
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "title": "Body_upload_event_material_api_manager_events_upload_pdf_post"
+      },
       "BundleEventItemOut": {
         "properties": {
           "event_id": {
@@ -613,8 +1021,13 @@
           },
           "data_status": {
             "type": "string",
+            "enum": [
+              "ready",
+              "needs_enrichment",
+              "archived"
+            ],
             "title": "Data Status",
-            "description": "Статус карточки: ready или needs_enrichment",
+            "description": "Статус полноты карточки: ready, needs_enrichment или archived",
             "default": "ready"
           },
           "missing_data_warnings": {
@@ -841,8 +1254,13 @@
           },
           "data_status": {
             "type": "string",
+            "enum": [
+              "ready",
+              "needs_enrichment",
+              "archived"
+            ],
             "title": "Data Status",
-            "description": "Статус карточки: ready или needs_enrichment",
+            "description": "Статус полноты карточки: ready, needs_enrichment или archived",
             "default": "ready"
           },
           "missing_data_warnings": {
@@ -970,6 +1388,23 @@
             "type": "string",
             "title": "Semantic Search Query",
             "description": "Развернутый поисковый запрос для векторного поиска (pgvector cosine ops)"
+          },
+          "budget_is_assumed": {
+            "type": "boolean",
+            "title": "Budget Is Assumed",
+            "description": "True, если бюджет не был явно назван клиентом и применен дефолтный ориентир",
+            "default": false
+          },
+          "profile_source": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "heuristic",
+              "manual"
+            ],
+            "title": "Profile Source",
+            "description": "Способ формирования профиля: llm (нейросеть), heuristic (детерминированный парсер) или manual (правка менеджера)",
+            "default": "llm"
           }
         },
         "type": "object",
@@ -994,14 +1429,15 @@
           "comment": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 1000
               },
               {
                 "type": "null"
               }
             ],
             "title": "Comment",
-            "description": "Опциональный комментарий клиента (например: 'В эти даты командировка, подберите замену')"
+            "description": "Опциональный комментарий клиента (до 1000 символов)"
           }
         },
         "type": "object",
@@ -1175,6 +1611,45 @@
         "title": "EscalateQuestionOut",
         "description": "Результат передачи вопроса персональному куратору в Telegram."
       },
+      "EventUploadOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID созданного или обогащенного мероприятия"
+          },
+          "canonical_title": {
+            "type": "string",
+            "title": "Canonical Title",
+            "description": "Каноническое название"
+          },
+          "data_status": {
+            "type": "string",
+            "title": "Data Status",
+            "description": "Статус полноты карточки (ready / needs_enrichment)"
+          },
+          "tariffs_count": {
+            "type": "integer",
+            "title": "Tariffs Count",
+            "description": "Количество извлеченных тарифов"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Результат обработки"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "canonical_title",
+          "data_status",
+          "tariffs_count",
+          "message"
+        ],
+        "title": "EventUploadOut",
+        "description": "Результат ручной загрузки/обогащения мероприятия через PDF, URL или сырой текст."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1187,6 +1662,30 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LoginRequestIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Email менеджера сопровождения",
+            "examples": [
+              "manager@skart.ru"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Пароль учетной записи"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequestIn",
+        "description": "Схема входных данных для авторизации менеджера."
       },
       "ManagerDashboardOut": {
         "properties": {
@@ -1236,6 +1735,95 @@
         ],
         "title": "ManagerEventsCatalogOut",
         "description": "Список всех активных мероприятий, отслеживаемых агентством."
+      },
+      "ManagerReplyIn": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id",
+            "description": "ID сообщения клиента с needs_manager_attention = True"
+          },
+          "reply_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reply Text",
+            "description": "Текст ответа менеджера"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "reply_text"
+        ],
+        "title": "ManagerReplyIn",
+        "description": "Ответ менеджера на вопрос клиента в чате витрины."
+      },
+      "ManagerReplyOut": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id",
+            "description": "ID исходного вопроса клиента"
+          },
+          "reply_message_id": {
+            "type": "integer",
+            "title": "Reply Message Id",
+            "description": "ID созданного сообщения менеджера в чате"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Статус обработки"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "reply_message_id",
+          "message"
+        ],
+        "title": "ManagerReplyOut",
+        "description": "Результат отправки ответа менеджера в чат витрины."
+      },
+      "ManagerUser": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "full_name"
+        ],
+        "title": "ManagerUser",
+        "description": "Модель авторизованного пользователя-менеджера.\nПолностью совместима по полям с ORM-моделью User (SQLAlchemy)."
       },
       "MatchRequestIn": {
         "properties": {
@@ -1400,6 +1988,53 @@
         "title": "PublishSelectionOut",
         "description": "Результат публикации: ссылка Magic Link и параметры опубликованной витрины."
       },
+      "ScraperRunIn": {
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "Ключ площадки (vedomosti, rbc, kommersant, architime, erz, bfm, tdaily, tadviser, events_spb)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_key"
+        ],
+        "title": "ScraperRunIn",
+        "description": "Запрос на ручной запуск фонового парсера по конкретной площадке."
+      },
+      "ScraperRunOut": {
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "Ключ площадки"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "Статус запуска",
+            "default": "queued"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Информационное сообщение"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_key",
+          "message"
+        ],
+        "title": "ScraperRunOut",
+        "description": "Статус постановки задачи скрейпера в фоновый воркер."
+      },
       "SelectedEventTariffPairIn": {
         "properties": {
           "event_id": {
@@ -1432,6 +2067,126 @@
         ],
         "title": "SelectedEventTariffPairIn",
         "description": "Пара (мероприятие, выбранный тариф), утвержденная менеджером для публикации."
+      },
+      "SelectionActivityOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id"
+          },
+          "reactions": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionItemReactionActivity"
+            },
+            "type": "array",
+            "title": "Reactions"
+          },
+          "pending_questions": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionQuestionActivity"
+            },
+            "type": "array",
+            "title": "Pending Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id"
+        ],
+        "title": "SelectionActivityOut",
+        "description": "Сводка активности клиента по витрине для регулярного опроса (Polling) менеджером."
+      },
+      "SelectionItemReactionActivity": {
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "title": "Item Id"
+          },
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id"
+          },
+          "event_title": {
+            "type": "string",
+            "title": "Event Title"
+          },
+          "reaction": {
+            "type": "string",
+            "title": "Reaction"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "event_id",
+          "event_title",
+          "reaction"
+        ],
+        "title": "SelectionItemReactionActivity",
+        "description": "Активность клиента: реакция на мероприятие из подборки."
+      },
+      "SelectionQuestionActivity": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "event_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Title"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "question_text"
+        ],
+        "title": "SelectionQuestionActivity",
+        "description": "Вопрос клиента, требующий внимания персонального менеджера."
       },
       "ShowcaseEventItemOut": {
         "properties": {
@@ -1811,6 +2566,32 @@
         ],
         "title": "TariffOptionOut",
         "description": "Тариф участия в мероприятии."
+      },
+      "TokenOut": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "Подписанный JWT-токен доступа (HS256)"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "description": "Тип авторизационного токена",
+            "default": "bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ManagerUser",
+            "description": "Профиль авторизованного менеджера"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "user"
+        ],
+        "title": "TokenOut",
+        "description": "Схема ответа успешной авторизации с JWT-токеном."
       },
       "ValidationError": {
         "properties": {

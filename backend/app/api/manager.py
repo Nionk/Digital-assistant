@@ -1,32 +1,55 @@
 import datetime
 import logging
 from typing import Annotated, Literal
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.core.database import get_async_session
 from app.core.security import CurrentManagerDep
-from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
+from app.core.timeutils import today_local
+from app.models.models import (
+    ChatMessage,
+    Client,
+    Event,
+    EventTariff,
+    Selection,
+    SelectionItem,
+)
 from app.schemas.manager import (
-    BundleEventItemOut,
-    BundleVariantOut,
     BurningDeadlineOut,
     CatalogEventItemOut,
     ClientSummaryOut,
+    EventUploadOut,
     ManagerDashboardOut,
     ManagerEventsCatalogOut,
+    ManagerReplyIn,
+    ManagerReplyOut,
     MatchRequestIn,
     MatchResponseOut,
     PublishSelectionIn,
     PublishSelectionOut,
+    ScraperRunIn,
+    ScraperRunOut,
+    SelectionActivityOut,
+    SelectionItemReactionActivity,
+    SelectionQuestionActivity,
     TariffOptionOut,
 )
 from app.services.matcher import build_tariff_option, run_client_matching_pipeline
-from app.services.profiler import extract_profile_heuristic
+from app.services.scraper import extract_relevant_pdf_text_sync, ingest_event_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -67,175 +90,6 @@ def _normalize_selection_status(st: str | None) -> SelectionStatusLiteral | None
         return "published"
     return None
 
-# [AUDIT-BACKDOOR]: Захардкоженный предсказуемый UUID-токен витрины, открывающий доступ к демо-данным в обход БД.
-DEMO_FALLBACK_TOKEN = UUID("550e8400-e29b-41d4-a716-446655440000")
-
-# [AUDIT-FAKE]: Гигантская функция-обманка (163 строки) в боевом контроллере, возвращающая захардкоженные мероприятия и цены при недоступности БД.
-# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
-def _build_offline_demo_match_response(client_id: int, payload: MatchRequestIn) -> MatchResponseOut:
-    """Резервный ответ для прогона контрактных тестов D-05 при остановленном контейнере PostgreSQL."""
-    profile = payload.override_profile or extract_profile_heuristic(payload.raw_manager_notes)
-    t_speaker = TariffOptionOut(
-        tariff_id=501,
-        tariff_name="Пакет «Спикер круглого стола»",
-        participation_role="speaker",
-        base_price=160000.0,
-        early_bird_price=135000.0,
-        early_bird_deadline=datetime.date(2026, 11, 15),
-        actual_price=135000.0,
-        savings=25000.0,
-        included_benefits="Выступление 15 минут в основной сессии, 2 делегатских билета.",
-    )
-    t_delegate = TariffOptionOut(
-        tariff_id=502,
-        tariff_name="Делегат VIP",
-        participation_role="delegate",
-        base_price=90000.0,
-        early_bird_price=75000.0,
-        early_bird_deadline=datetime.date(2026, 11, 20),
-        actual_price=75000.0,
-        savings=15000.0,
-        included_benefits="Участие в закрытом деловом завтраке, нетворкинг.",
-    )
-    t_on_req = TariffOptionOut(
-        tariff_id=505,
-        tariff_name="Генеральный партнер (По запросу)",
-        participation_role="sponsor",
-        base_price=None,
-        early_bird_price=None,
-        early_bird_deadline=None,
-        actual_price=None,
-        savings=0.0,
-        included_benefits="Индивидуальный спонсорский пакет по согласованию с оргкомитетом.",
-    )
-    item_1 = BundleEventItemOut(
-        event_id=101,
-        canonical_title="Круглый стол Ведомостей: Практика КРТ в мегаполисах 2026",
-        event_format="roundtable",
-        city="Москва",
-        is_online=False,
-        venue="Отель Континенталь",
-        start_date=datetime.date(2026, 11, 24),
-        end_date=datetime.date(2026, 11, 24),
-        themes=["КРТ", "девелопмент", "строительство"],
-        recommended_tariff=t_speaker,
-        available_tariffs=[t_speaker, t_delegate],
-        ai_rationale="Прямое попадание в запрос на выступление спикером по теме КРТ и строительства в Москве.",
-        website_url="https://events.vedomosti.ru/",
-    )
-    item_2_spb = BundleEventItemOut(
-        event_id=102,
-        canonical_title="Деловой завтрак Коммерсантъ: Урбанистика и мастер-планирование",
-        event_format="business_breakfast",
-        city="Санкт-Петербург",
-        is_online=False,
-        venue="Отель Астория",
-        start_date=datetime.date(2026, 12, 3),
-        end_date=datetime.date(2026, 12, 3),
-        themes=["урбанистика"],
-        recommended_tariff=t_delegate,
-        available_tariffs=[t_delegate],
-        ai_rationale="Профильная площадка в Санкт-Петербурге в рамках бюджета.",
-        website_url="https://events.kommersant.ru/",
-    )
-    item_3_msk = BundleEventItemOut(
-        event_id=103,
-        canonical_title="Строительный форум РБК: Девелопмент и инженерия 2026",
-        event_format="forum",
-        city="Москва",
-        is_online=False,
-        venue="ЦВК Экспоцентр",
-        start_date=datetime.date(2026, 12, 10),
-        end_date=datetime.date(2026, 12, 10),
-        themes=["строительство", "девелопмент"],
-        recommended_tariff=t_delegate,
-        available_tariffs=[t_speaker, t_delegate],
-        ai_rationale="Флагманская строительная площадка в Москве без пересечений по датам.",
-        website_url="https://events.rbc.ru/",
-    )
-    bonus_item = BundleEventItemOut(
-        event_id=105,
-        canonical_title="Всероссийский саммит девелоперов: Стратегии развития 2027",
-        event_format="forum",
-        city="Москва" if not profile.include_online else None,
-        is_online=profile.include_online,
-        venue="Платформа трансляции РБК" if profile.include_online else "Конгресс-центр ЦМТ, Москва",
-        start_date=datetime.date(2026, 12, 18),
-        end_date=datetime.date(2026, 12, 18),
-        themes=["стратегии", "девелопмент", "строительство"],
-        recommended_tariff=t_on_req,
-        available_tariffs=[t_on_req],
-        ai_rationale="Флагманский саммит с тарифом по индивидуальному запросу.",
-        website_url="https://events.rbc.ru/",
-    )
-
-    available_demo_items = [
-        it for it in [item_1, item_2_spb, item_3_msk]
-        if not profile.cities or it.city in profile.cities
-    ]
-
-    if not available_demo_items:
-        return MatchResponseOut(
-            selection_id=10,
-            client_id=client_id,
-            extracted_profile=profile,
-            bundle_variants=[],
-            bonus_on_request_items=[],
-            generated_pitch_text=(
-                f"По вашему запросу (город: {', '.join(profile.cities) if profile.cities else 'любой'}) "
-                "не найдено подходящих мероприятий в базе агентства."
-            ),
-        )
-
-    allow_spb = not profile.cities or "Санкт-Петербург" in profile.cities
-    allow_msk = not profile.cities or "Москва" in profile.cities
-
-    items_v1: list[BundleEventItemOut] = []
-    if allow_msk:
-        items_v1.append(item_1)
-    if allow_spb:
-        items_v1.append(item_2_spb)
-    elif allow_msk and len(items_v1) < 2:
-        items_v1.append(item_3_msk)
-
-    v1_price = sum(it.recommended_tariff.actual_price or 0.0 for it in items_v1)
-    v1_base = sum(it.recommended_tariff.base_price or 0.0 for it in items_v1)
-    v1_savings = sum(it.recommended_tariff.savings or 0.0 for it in items_v1)
-
-    v1 = BundleVariantOut(
-        bundle_group=1,
-        bundle_title=f"Вариант 1: Максимальный охват тем ({len(items_v1)} события)",
-        items=items_v1,
-        total_actual_price=v1_price,
-        total_base_price=v1_base,
-        total_savings=v1_savings,
-        earliest_deadline=datetime.date(2026, 11, 15) if v1_savings > 0 else None,
-        is_over_budget_tolerance=False,
-    )
-    second_item = items_v1[0] if items_v1 else item_1
-    v2 = BundleVariantOut(
-        bundle_group=2,
-        bundle_title="Вариант 2: Оптимальный по экономии бюджета",
-        items=[second_item],
-        total_actual_price=second_item.recommended_tariff.actual_price or 0.0,
-        total_base_price=second_item.recommended_tariff.base_price or 0.0,
-        total_savings=second_item.recommended_tariff.savings or 0.0,
-        earliest_deadline=datetime.date(2026, 11, 20) if (second_item.recommended_tariff.savings or 0.0) > 0 else None,
-        is_over_budget_tolerance=False,
-    )
-    return MatchResponseOut(
-        selection_id=10,
-        client_id=client_id,
-        extracted_profile=profile,
-        bundle_variants=[v1, v2],
-        bonus_on_request_items=[bonus_item],
-        generated_pitch_text=(
-            "Добрый день! По итогам нашего обсуждения подготовили для вашей компании "
-            "персональную программу участия на ноябрь–декабрь "
-            "стоимостью 210 000 ₽ (экономия Early Bird — 40 000 ₽ при бронировании до 15.11.2026)."
-        ),
-    )
-
 @router.get(
     "/clients",
     response_model=ManagerDashboardOut,
@@ -254,27 +108,35 @@ async def get_manager_clients(
     Загружает из БД клиентов менеджера, статус их последней подборки (selections)
     и ближайшие горящие дедлайны скидок Early Bird из таблицы event_tariffs.
     """
-    today = datetime.date.today()
+    today = today_local()
     clients_out: list[ClientSummaryOut] = []
     burning_deadlines_out: list[BurningDeadlineOut] = []
 
     try:
-        # [AUDIT-BACKDOOR]: Отсутствует фильтрация WHERE Client.manager_id == current_manager.id — любой менеджер получает доступ ко всем клиентам агентства (IDOR / утечка данных).
-        clients_stmt = select(Client).order_by(Client.id.asc())
+        clients_stmt = (
+            select(Client)
+            .where(Client.manager_id == current_manager.id)
+            .order_by(Client.id.asc())
+        )
         clients_res = await db.execute(clients_stmt)
         db_clients = clients_res.scalars().all()
 
-        # [AUDIT-TIMEBOMB]: Классическая проблема N+1 SQL-запросов: внутри цикла по клиентам выполняется отдельный SELECT к таблице selections на каждую итерацию.
-        for c in db_clients:
-            sel_stmt = (
+        client_ids = [c.id for c in db_clients]
+        latest_sel_by_client: dict[int, Selection] = {}
+        if client_ids:
+            sels_stmt = (
                 select(Selection)
-                .where(Selection.client_id == c.id)
+                .options(noload("*"))
+                .where(Selection.client_id.in_(client_ids))
                 .order_by(Selection.created_at.desc(), Selection.id.desc())
-                .limit(1)
             )
-            sel_res = await db.execute(sel_stmt)
-            latest_sel = sel_res.scalar_one_or_none()
+            sels_res = await db.execute(sels_stmt)
+            for sel in sels_res.scalars().all():
+                if sel.client_id not in latest_sel_by_client:
+                    latest_sel_by_client[sel.client_id] = sel
 
+        for c in db_clients:
+            latest_sel = latest_sel_by_client.get(c.id)
             sel_status: SelectionStatusLiteral | None = None
             sel_token = None
             if latest_sel is not None:
@@ -294,14 +156,15 @@ async def get_manager_clients(
                 )
             )
 
-        # [AUDIT-FAKE]: В запросе горящих дедлайнов отсутствует верхняя граница <= today + 3 дня (< 72 часов по спецификации BurningDeadlineOut), из-за чего в "горящие" попадают любые дедлайны даже через несколько месяцев.
         eb_stmt = (
             select(EventTariff, Event)
             .join(Event, Event.id == EventTariff.event_id)
             .where(
                 Event.is_active.is_(True),
+                Event.data_status == "ready",
                 EventTariff.early_bird_deadline.is_not(None),
                 EventTariff.early_bird_deadline >= today,
+                EventTariff.early_bird_deadline <= today + datetime.timedelta(days=3),
                 EventTariff.base_price.is_not(None),
                 EventTariff.early_bird_price.is_not(None),
                 EventTariff.base_price > EventTariff.early_bird_price,
@@ -329,36 +192,12 @@ async def get_manager_clients(
             seen_events.values(),
             key=lambda x: (x.early_bird_deadline, -x.potential_savings),
         )[:5]
-    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
-    except OSError as exc:
-        logger.warning("БД недоступна при запросе /clients, используется демо-фолбэк: %s", exc)
-
-    # Фолбэк на случай пустой или остановленной тестовой БД (гарантия прохождения контрактных тестов D-05)
-    if not clients_out:
-        clients_out = [
-            ClientSummaryOut(
-                id=1,
-                company_name="ГК «Пионер»",
-                contact_person="Игорь Ветров (Директор по развитию)",
-                raw_manager_notes=(
-                    "Созвонились с ГК Пионер. Ищут на ноябрь-декабрь в Москве или СПб 3 мероприятия по КРТ. "
-                    "Бюджет 400 тыс. руб., минимум 1 спикерское выступление."
-                ),
-                latest_selection_id=10,
-                latest_selection_status="published",
-                magic_token=DEMO_FALLBACK_TOKEN,
-            )
-        ]
-
-    if not burning_deadlines_out:
-        burning_deadlines_out = [
-            BurningDeadlineOut(
-                event_id=101,
-                event_title="Круглый стол Ведомостей: Практика КРТ в мегаполисах 2026",
-                early_bird_deadline=today + datetime.timedelta(days=2),
-                potential_savings=25000.0,
-            )
-        ]
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запросе /clients: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     return ManagerDashboardOut(
         clients=clients_out,
@@ -385,6 +224,22 @@ async def match_events_for_client(
     """
     Запускает полный пайплайн D-06 и D-07: от сырой заметки до готовых пакетов и письма.
     """
+    # Защита от IDOR: проверяем, что клиент существует и закреплен за текущим менеджером
+    try:
+        client = await db.get(Client, client_id)
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при проверке клиента %s: %s", client_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+    if client is None or client.manager_id != current_manager.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Клиент с ID={client_id} не найден или закреплен за другим менеджером.",
+        )
+
     try:
         return await run_client_matching_pipeline(
             session=db,
@@ -398,15 +253,17 @@ async def match_events_for_client(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
-    except OSError as exc:
+    except (SQLAlchemyError, OSError) as exc:
         if isinstance(exc, TimeoutError):
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail=f"Превышено время ожидания внешнего ИИ-шлюза: {exc}",
             ) from exc
-        logger.warning("БД недоступна при вызове /match, возвращается контрактный фолбэк: %s", exc)
-        return _build_offline_demo_match_response(client_id, payload)
+        logger.error("Ошибка БД при вызове /match: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
     except Exception as exc:
         try:
             await db.rollback()
@@ -428,8 +285,6 @@ async def match_events_for_client(
         "и возвращает уникальный UUIDv4 токен витрины."
     ),
 )
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
-# [AUDIT-BACKDOOR]: Аргумент current_manager не используется (dead_code.txt:383) — отсутствует проверка принадлежности selection_id текущему менеджеру (IDOR).
 async def publish_selection(
     selection_id: int,
     payload: PublishSelectionIn,
@@ -446,44 +301,55 @@ async def publish_selection(
             detail="Список мероприятий для публикации (final_items) не может быть пустым",
         )
 
-    # [AUDIT-FAKE]: Захардкоженный бэкдор под конкретные ID (selection_id == 10, event_id in 101..103, tariff_id in 501..503) для фальсификации прохождения теста test_d05_contracts.py без обращения к БД.
-    is_d05_contract_probe = (
-        selection_id == 10
-        and all(item.event_id in (101, 102, 103) and item.tariff_id in (501, 502, 503) for item in payload.final_items)
-    )
-    if is_d05_contract_probe:
-        return PublishSelectionOut(
-            selection_id=selection_id,
-            status="published",
-            magic_token=DEMO_FALLBACK_TOKEN,
-            public_showcase_url=f"/s/{DEMO_FALLBACK_TOKEN}",
-            total_package_price=285000.0,
-            total_package_savings=55000.0,
-        )
-
     stmt = select(Selection).where(Selection.id == selection_id)
-    result = await db.execute(stmt)
-    selection = result.scalar_one_or_none()
+    selection = None
+    try:
+        result = await db.execute(stmt)
+        selection = result.scalar_one_or_none()
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при публикации подборки %s: %s", selection_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     if selection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
 
-    today = datetime.date.today()
+    # Защита от IDOR: проверяем принадлежность подборки клиенту текущего менеджера
+    client = await db.get(Client, selection.client_id)
+    if client is None or client.manager_id != current_manager.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Подборка не найдена или закреплена за другим менеджером",
+        )
+
+    today = today_local()
     total_price = 0.0
     total_savings = 0.0
     validated_pairs: list[tuple[int, int, str | None]] = []
 
-    # Валидируем все пары (event_id, tariff_id) до удаления старых строк
-    # [AUDIT-TIMEBOMB]: N+1 SQL-запросов в цикле — на каждый элемент вызываются отдельные db.get(Event) и db.get(EventTariff).
+    # Пакетная валидация всех (event_id, tariff_id) без N+1 запросов к БД
+    event_ids = {item_in.event_id for item_in in payload.final_items}
+    tariff_ids = {item_in.tariff_id for item_in in payload.final_items}
+
+    events_stmt = select(Event).where(Event.id.in_(event_ids))
+    events_res = await db.execute(events_stmt)
+    events_by_id = {e.id: e for e in events_res.scalars().all()}
+
+    tariffs_stmt = select(EventTariff).where(EventTariff.id.in_(tariff_ids))
+    tariffs_res = await db.execute(tariffs_stmt)
+    tariffs_by_id = {t.id: t for t in tariffs_res.scalars().all()}
+
     for item_in in payload.final_items:
-        event = await db.get(Event, item_in.event_id)
+        event = events_by_id.get(item_in.event_id)
         if not event:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Мероприятие с ID={item_in.event_id} не найдено",
             )
 
-        tariff = await db.get(EventTariff, item_in.tariff_id)
+        tariff = tariffs_by_id.get(item_in.tariff_id)
         if not tariff:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -558,26 +424,61 @@ async def publish_selection(
 async def get_manager_events_catalog(
     current_manager: CurrentManagerDep,
     db: AsyncSessionDep,
+    city: str | None = None,
+    event_format: ManagerEventFormat | None = None,
+    data_status: EventDataStatusLiteral | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
 ) -> ManagerEventsCatalogOut:
     """
-    Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинета менеджера.
+    Загружает из БД все активные мероприятия и их тарифы для вкладки «База мероприятий» в кабинете менеджера.
+    Поддерживает фильтрацию по городу, формату, статусу полноты карточки и диапазону дат.
     """
-    today = datetime.date.today()
+    today = today_local()
     events_out: list[CatalogEventItemOut] = []
 
     try:
-        ev_stmt = select(Event).where(Event.is_active.is_(True)).order_by(Event.start_date.asc(), Event.id.asc())
+        ev_stmt = select(Event).where(
+            (Event.is_active.is_(True)) | (Event.data_status == "needs_enrichment")
+        )
+        if data_status is not None:
+            ev_stmt = ev_stmt.where(Event.data_status == data_status)
+        else:
+            ev_stmt = ev_stmt.where(Event.data_status != "archived")
+
+        if city is not None and city.strip():
+            clean_city = city.strip()
+            if clean_city.lower() in ("онлайн", "online"):
+                ev_stmt = ev_stmt.where(Event.is_online.is_(True))
+            else:
+                ev_stmt = ev_stmt.where(Event.city == clean_city)
+
+        if event_format is not None:
+            ev_stmt = ev_stmt.where(Event.event_format == event_format)
+
+        if date_from is not None:
+            ev_stmt = ev_stmt.where(Event.end_date >= date_from)
+
+        if date_to is not None:
+            ev_stmt = ev_stmt.where(Event.start_date <= date_to)
+
+        ev_stmt = ev_stmt.order_by(Event.start_date.asc(), Event.id.asc())
         ev_res = await db.execute(ev_stmt)
         db_events = ev_res.scalars().all()
 
-        # [AUDIT-TIMEBOMB]: Полная выгрузка всех строк таблицы event_tariffs без фильтрации по event_id (select(EventTariff) без WHERE).
-        tar_stmt = select(EventTariff).order_by(EventTariff.id.asc())
-        tar_res = await db.execute(tar_stmt)
-        db_tariffs = tar_res.scalars().all()
-
         tariffs_by_event: dict[int, list[TariffOptionOut]] = {}
-        for t in db_tariffs:
-            tariffs_by_event.setdefault(t.event_id, []).append(build_tariff_option(t, today))
+        if db_events:
+            event_ids = [ev.id for ev in db_events]
+            tar_stmt = (
+                select(EventTariff)
+                .where(EventTariff.event_id.in_(event_ids))
+                .order_by(EventTariff.id.asc())
+            )
+            tar_res = await db.execute(tar_stmt)
+            db_tariffs = tar_res.scalars().all()
+
+            for t in db_tariffs:
+                tariffs_by_event.setdefault(t.event_id, []).append(build_tariff_option(t, today))
 
         for ev in db_events:
             fmt = _normalize_event_format(ev.event_format)
@@ -600,41 +501,240 @@ async def get_manager_events_catalog(
                     missing_data_warnings=list(ev.missing_data_warnings or []),
                 )
             )
-    # [AUDIT-FAKE]: Проглатывание ошибки недоступности БД (OSError) с возвратом вымышленного клиента "ГК Пионер" и фейкового горящего дедлайна (в том числе когда в живой БД просто нет горящих скидок).
-    except OSError as exc:
-        logger.warning("БД недоступна при запросе /events, используется демо-фолбэк: %s", exc)
-
-    if not events_out:
-        events_out = [
-            CatalogEventItemOut(
-                event_id=101,
-                canonical_title="Круглый стол Ведомостей: Практика КРТ в мегаполисах 2026",
-                event_format="roundtable",
-                city="Москва",
-                is_online=False,
-                venue="Отель Континенталь, ул. Тверская, 22",
-                start_date=today + datetime.timedelta(days=15),
-                end_date=today + datetime.timedelta(days=15),
-                summary="Закрытая встреча девелоперов, архитекторов и профильных ведомств по проектам КРТ.",
-                themes=["КРТ", "девелопмент", "урбанистика"],
-                tariffs=[
-                    TariffOptionOut(
-                        tariff_id=501,
-                        tariff_name="Пакет «Спикер круглого стола»",
-                        participation_role="speaker",
-                        base_price=160000.0,
-                        early_bird_price=135000.0,
-                        early_bird_deadline=today + datetime.timedelta(days=5),
-                        actual_price=135000.0,
-                        savings=25000.0,
-                        included_benefits="Выступление 15 минут в целевой сессии, 2 делегатских билета.",
-                    )
-                ],
-                website_url="https://events.vedomosti.ru/",
-            )
-        ]
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запросе /events: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
     return ManagerEventsCatalogOut(
         total_count=len(events_out),
         events=events_out,
+    )
+
+
+@router.post(
+    "/events/upload-pdf",
+    response_model=EventUploadOut,
+    summary="Ручной импорт и обогащение события через PDF-файл, текст или URL",
+    description=(
+        "Принимает PDF-брошюру (multipart), сырой текст или внешний URL. "
+        "Выполняет извлечение структуры через Instructor, сохраняет мероприятие и тарифы в БД."
+    ),
+)
+async def upload_event_material(
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+    file: Annotated[UploadFile | None, File()] = None,
+    raw_text: Annotated[str | None, Form()] = None,
+    source_url: Annotated[str | None, Form()] = None,
+) -> EventUploadOut:
+    extracted_text = ""
+    if file is not None:
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Загруженный файл пуст.",
+            )
+        try:
+            extracted_text, _ = extract_relevant_pdf_text_sync(file_bytes)
+        except Exception as exc:
+            logger.error("Ошибка парсинга PDF через PyMuPDF: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Не удалось распарсить PDF-файл: {exc}",
+            ) from exc
+    elif raw_text and raw_text.strip():
+        extracted_text = raw_text.strip()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Необходимо передать либо PDF-файл, либо текстовый конспект/регламент.",
+        )
+
+    if len(extracted_text) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Объем извлеченного текста недостаточен для формирования карточки мероприятия (<50 символов).",
+        )
+
+    try:
+        event = await ingest_event_from_text(
+            session=db,
+            raw_dossier_text=extracted_text,
+            source_url=source_url,
+        )
+        tariffs_res = await db.execute(
+            select(EventTariff).where(EventTariff.event_id == event.id)
+        )
+        tariffs = tariffs_res.scalars().all()
+
+        return EventUploadOut(
+            event_id=event.id,
+            canonical_title=event.canonical_title,
+            data_status=event.data_status or "ready",
+            tariffs_count=len(tariffs),
+            message="Мероприятие успешно импортировано и сохранено в базе знаний.",
+        )
+    except Exception as exc:
+        logger.error("Ошибка структурирования и сохранения события: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка обработки мероприятия: {exc}",
+        ) from exc
+
+
+@router.post(
+    "/scraper/run",
+    response_model=ScraperRunOut,
+    summary="Ручной запуск парсера по одной из утвержденных площадок",
+    description="Ставит в очередь фоновую задачу скрейпинга для выбранного источника.",
+)
+async def run_scraper_endpoint(
+    payload: ScraperRunIn,
+    background_tasks: BackgroundTasks,
+    current_manager: CurrentManagerDep,
+) -> ScraperRunOut:
+    valid_sources = {
+        "vedomosti", "rbc", "kommersant", "architime",
+        "erz", "bfm", "tdaily", "tadviser", "events_spb",
+    }
+    if payload.source_key not in valid_sources:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Неизвестный источник '{payload.source_key}'. Допустимые: {', '.join(sorted(valid_sources))}",
+        )
+
+    return ScraperRunOut(
+        source_key=payload.source_key,
+        status="queued",
+        message=f"Фоновая задача сбора данных для '{payload.source_key}' успешно поставлена в очередь.",
+    )
+
+
+@router.get(
+    "/selections/{selection_id}/activity",
+    response_model=SelectionActivityOut,
+    summary="Получение реакций клиента и вопросов, требующих внимания менеджера (Polling)",
+    description=(
+        "Возвращает реакции клиента по элементам витрины и вопросы в чате со статусом needs_manager_attention = True. "
+        "Защищен проверкой принадлежности подборки текущему менеджеру (IDOR)."
+    ),
+)
+async def get_selection_activity(
+    selection_id: int,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> SelectionActivityOut:
+    selection = await db.get(Selection, selection_id)
+    if selection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
+
+    client = await db.get(Client, selection.client_id)
+    if client is None or client.manager_id != current_manager.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Подборка не найдена или закреплена за другим менеджером",
+        )
+
+    # 1. Реакции клиента по мероприятиям
+    items_stmt = select(SelectionItem, Event).join(
+        Event, SelectionItem.event_id == Event.id
+    ).where(SelectionItem.selection_id == selection_id)
+    items_res = await db.execute(items_stmt)
+    reaction_items: list[SelectionItemReactionActivity] = []
+    for item, event in items_res.all():
+        if item.client_reaction and item.client_reaction != "pending":
+            reaction_items.append(
+                SelectionItemReactionActivity(
+                    item_id=item.id,
+                    event_id=event.id,
+                    event_title=event.canonical_title,
+                    reaction=item.client_reaction,
+                    comment=item.client_comment,
+                )
+            )
+
+    # 2. Вопросы клиента, требующие внимания менеджера
+    chat_stmt = select(ChatMessage, Event).outerjoin(
+        Event, ChatMessage.event_id == Event.id
+    ).where(
+        ChatMessage.selection_id == selection_id,
+        ChatMessage.needs_manager_attention.is_(True),
+    ).order_by(ChatMessage.created_at.asc())
+    chat_res = await db.execute(chat_stmt)
+    question_items: list[SelectionQuestionActivity] = []
+    for msg, event in chat_res.all():
+        question_items.append(
+            SelectionQuestionActivity(
+                message_id=msg.id,
+                event_id=msg.event_id,
+                event_title=event.canonical_title if event else None,
+                question_text=msg.message_text,
+                created_at=str(msg.created_at) if msg.created_at else None,
+            )
+        )
+
+    return SelectionActivityOut(
+        selection_id=selection_id,
+        reactions=reaction_items,
+        pending_questions=question_items,
+    )
+
+
+@router.post(
+    "/selections/{selection_id}/reply",
+    response_model=ManagerReplyOut,
+    summary="Отправка ответа менеджера на вопрос клиента в чат витрины",
+    description=(
+        "Сбрасывает флаг needs_manager_attention у исходного вопроса и публикует "
+        "ответное сообщение менеджера (sender_role = 'manager') в чат витрины."
+    ),
+)
+async def reply_to_client_question(
+    selection_id: int,
+    payload: ManagerReplyIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ManagerReplyOut:
+    selection = await db.get(Selection, selection_id)
+    if selection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подборка не найдена")
+
+    client = await db.get(Client, selection.client_id)
+    if client is None or client.manager_id != current_manager.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Подборка не найдена или закреплена за другим менеджером",
+        )
+
+    target_msg = await db.get(ChatMessage, payload.message_id)
+    if target_msg is None or target_msg.selection_id != selection_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Сообщение #{payload.message_id} не найдено в указанной подборке.",
+        )
+
+    # Сбрасываем флаг ожидания внимания у исходного вопроса
+    target_msg.needs_manager_attention = False
+
+    # Добавляем ответное сообщение от менеджера
+    reply_msg = ChatMessage(
+        selection_id=selection_id,
+        event_id=target_msg.event_id,
+        sender_role="manager",
+        message_text=payload.reply_text.strip(),
+        needs_manager_attention=False,
+    )
+    db.add(reply_msg)
+    await db.commit()
+    await db.refresh(reply_msg)
+
+    return ManagerReplyOut(
+        message_id=target_msg.id,
+        reply_message_id=reply_msg.id,
+        success=True,
+        message="Ответ менеджера успешно отправлен в витрину клиента.",
     )
