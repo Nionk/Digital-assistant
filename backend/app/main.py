@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api import manager_router, showcase_router
+from app.api import auth_router, manager_router, showcase_router
 from app.core.config import settings
 from app.core.database import engine
+from app.services.ai_client import embedding_client, raw_openai_client
 from app.services.monitoring_job import run_nightly_monitoring_job
 from app.services.telegram import close_telegram_http_client
 
@@ -45,6 +46,14 @@ async def lifespan(app: FastAPI):
 
     # Корректное освобождение внешних пулов соединений
     await close_telegram_http_client()
+    try:
+        await raw_openai_client.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Ошибка при закрытии raw_openai_client: %s", exc)
+    try:
+        await embedding_client.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Ошибка при закрытии embedding_client: %s", exc)
     await engine.dispose()
     logger.info("Пул соединений с БД и HTTP-клиенты закрыты.")
 
@@ -60,10 +69,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Настройка CORS
+# Настройка CORS (безопасное соответствие спецификации W3C с поддержкой credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,5 +108,6 @@ async def readiness_check():
 
 
 # Подключение бизнес-роутеров системы
+app.include_router(auth_router)
 app.include_router(manager_router)
 app.include_router(showcase_router)

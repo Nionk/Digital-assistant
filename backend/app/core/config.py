@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     # При False (Production / По умолчанию): любой запрос без валидного JWT немедленно возвращает HTTP 401 Unauthorized.
     ALLOW_DEMO_AUTH_BYPASS: bool = False
 
+    # CORS Configuration
+    CORS_ORIGINS: list[str] = [
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1",
+        "http://127.0.0.1:80",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+    CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
