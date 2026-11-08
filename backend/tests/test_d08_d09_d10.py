@@ -25,7 +25,11 @@ from app.models.models import (
     SelectionItem,
     User,
 )
-from app.services.rag import ask_regulation_question, build_rag_cache_key
+from app.services.rag import (
+    RAGUnavailableError,
+    ask_regulation_question,
+    build_rag_cache_key,
+)
 from app.services.telegram import (
     HttpTelegramTransport,
     StubTelegramTransport,
@@ -476,12 +480,16 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         и Zero-Hallucination (вертолетный трансфер вне регламента -> эскалация в Telegram).
         """
         # 1. Вопрос, ответ на который есть в тексте регламента (про подземную парковку)
-        res_found = await ask_regulation_question(
-            session=self.fake_db,  # type: ignore[arg-type]
-            selection_id=2,
-            event_id=1,
-            question_text="Предусмотрена ли парковка для участников круглого стола?",
-        )
+        try:
+            res_found = await ask_regulation_question(
+                session=self.fake_db,  # type: ignore[arg-type]
+                selection_id=2,
+                event_id=1,
+                question_text="Предусмотрена ли парковка для участников круглого стола?",
+            )
+        except RAGUnavailableError as exc:
+            self.skipTest(f"Внешний LLM-шлюз временно недоступен: {exc}")
+
         self.assertFalse(res_found.from_cache)
         self.assertTrue(res_found.is_answer_found)
         self.assertIsNotNone(res_found.source_quote)
@@ -498,12 +506,15 @@ class TestD08D09D10Suite(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(res_cached.is_answer_found)
 
         # 2. Провокационный вопрос вне регламента -> отказ и эскалация в Telegram
-        res_prov = await ask_regulation_question(
-            session=self.fake_db,  # type: ignore[arg-type]
-            selection_id=2,
-            event_id=1,
-            question_text="Предоставляется ли бесплатный вертолет из аэропорта до отеля?",
-        )
+        try:
+            res_prov = await ask_regulation_question(
+                session=self.fake_db,  # type: ignore[arg-type]
+                selection_id=2,
+                event_id=1,
+                question_text="Предоставляется ли бесплатный вертолет из аэропорта до отеля?",
+            )
+        except RAGUnavailableError as exc:
+            self.skipTest(f"Внешний LLM-шлюз временно недоступен: {exc}")
         self.assertFalse(res_prov.is_answer_found)
         self.assertIsNone(res_prov.source_quote)
         # Автоматическая эскалация отключена: по умолчанию False
