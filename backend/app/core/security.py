@@ -124,8 +124,15 @@ async def get_current_manager(
         sub_str = str(sub)
         user_id_val = int(sub_str) if sub_str.isdigit() else -1
         stmt = select(User).where((User.email == sub_str) | (User.id == user_id_val))
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
+        try:
+            res = await session.execute(stmt)
+            user = res.scalar_one_or_none()
+        except (SQLAlchemyError, OSError) as exc:
+            logger.error("БД недоступна для проверки пользователя из токена: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="База данных временно недоступна для проверки пользователя.",
+            ) from exc
 
         if user is None:
             raise HTTPException(
@@ -145,24 +152,25 @@ async def get_current_manager(
         )
 
     logger.warning(
-        "[SECURITY-DEMO-BYPASS] Запрос без Bearer-токена обработан от имени менеджера id=1. "
-        "Переходный мост будет отключен после внедрения экрана входа (Шаг 6 / Задача P-01)."
+        "[SECURITY-DEMO-BYPASS] Запрос без Bearer-токена: поиск активного менеджера по умолчанию в БД."
     )
 
     try:
-        stmt = select(User).where(User.id == 1)
+        stmt = select(User).order_by(User.id.asc()).limit(1)
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
         if user is not None:
             return ManagerUser.model_validate(user)
     except (SQLAlchemyError, OSError) as exc:
-        logger.warning("БД недоступна для аутентификации демо-менеджера в dev-режиме: %s", exc)
+        logger.error("БД недоступна для аутентификации демо-менеджера: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
-    return ManagerUser(
-        id=1,
-        email="manager@skart.ru",
-        full_name="Анна Соколова (Демо)",
-        role="senior_consultant",
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="В системе отсутствуют зарегистрированные менеджеры для демо-режима.",
     )
 
 
