@@ -43,15 +43,23 @@ class RAGUnavailableError(RuntimeError):
 
 def _normalize_text_for_grounding(s: str) -> str:
     """Очищает строку от знаков пунктуации и спецсимволов для точного сопоставления цитаты."""
-    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s.lower())).strip()
+    cleaned = s.lower().replace("ё", "е")
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", cleaned)).strip()
 
 
 def _is_quote_grounded(quote: str | None, context_text: str) -> bool:
     """Проверяет, действительно ли цитата присутствует в предоставленном тексте регламента."""
     if not quote or len(quote.strip()) < 10:
         return False
-    norm_quote = _normalize_text_for_grounding(quote)
     norm_ctx = _normalize_text_for_grounding(context_text)
+
+    # Поддерживаем цитаты с многоточием / эллипсисом (LLM может соединять разделенные фрагменты через ... или …)
+    parts = re.split(r"\.{3,}|…", quote)
+    valid_parts = [p.strip() for p in parts if len(p.strip()) >= 10]
+    if valid_parts:
+        return all(_normalize_text_for_grounding(part) in norm_ctx for part in valid_parts)
+
+    norm_quote = _normalize_text_for_grounding(quote)
     return norm_quote in norm_ctx
 
 
@@ -513,7 +521,14 @@ async def ask_regulation_question(
         today=today,
     )
     tariff_text = _build_tariff_context(tariff, today)
-    grounding_context = f"{regulation_text}\n{tariff_text}"
+    location_desc = "Онлайн" if event.is_online else (event.city or "Локация не указана")
+    event_header = (
+        f"Мероприятие: {event.canonical_title}\n"
+        f"Локация: {location_desc}\n"
+        f"Площадка: {event.venue or 'Площадка уточняется'}\n"
+        f"Даты проведения: с {event.start_date} по {event.end_date}"
+    )
+    grounding_context = f"{event_header}\n{regulation_text}\n{tariff_text}"
     llm_res = await _query_rag_llm(event_id, system_prompt, user_prompt, grounding_context)
     return await _persist_and_escalate_rag_result(
         session=session,
