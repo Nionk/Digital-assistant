@@ -30,7 +30,11 @@ from app.services.ai_client import (
     get_embeddings_batch,
     structured_llm_client,
 )
-from app.services.rag import build_rag_cache_key, invalidate_rag_cache
+from app.services.rag import (
+    _is_quote_grounded,
+    build_rag_cache_key,
+    invalidate_rag_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -502,8 +506,13 @@ async def _sync_event_chunks(
     if not chunks:
         return
 
-    vectors = await get_embeddings_batch(chunks)
-    for idx, (chunk_text, vec) in enumerate(zip(chunks, vectors)):
+    location_desc = "Онлайн" if event_obj.is_online else (event_obj.city or "Локация не указана")
+    date_desc = f"{event_obj.start_date} — {event_obj.end_date}"
+    header = f"[Мероприятие: {event_obj.canonical_title} | Локация: {location_desc} | Даты: {date_desc}]\n"
+    contextualized_chunks = [f"{header}{ch}" for ch in chunks]
+
+    vectors = await get_embeddings_batch(contextualized_chunks)
+    for idx, (chunk_text, vec) in enumerate(zip(contextualized_chunks, vectors)):
         session.add(
             EventChunk(
                 event_id=event_obj.id,
@@ -692,22 +701,30 @@ async def _sync_event_tariffs(
             await session.delete(row)
 
 
-def _populate_faq_cache(
+async def _populate_faq_cache(
     session: AsyncSession,
     event_obj: Event,
     schema: EventIngestionSchema,
 ) -> None:
-    """Предзаполняет FAQ в llm_cache, исключая тарифозависимые вопросы из общего кэша события."""
+    """Предзаполняет FAQ в llm_cache, исключая тарифозависимые вопросы и неподтвержденные ответы."""
     seen_cache_keys: set[str] = set()
+    reg_text = (event_obj.full_regulation_markdown or "").lower()
     for faq in schema.faq_cache:
         # Не кэшируем на уровне события (tariff_id=0) ответы, зависящие от рекомендованного тарифа
         if any(kw in faq.question.lower() for kw in ("что входит", "входит в тариф", "рекомендованный тариф")):
             continue
+        ans_lower = (faq.answer or "").strip().lower()
+        if not ans_lower or any(stub in ans_lower for stub in ("уточняется", "нет информаци", "не указан")):
+            continue
+        quote = (faq.source_quote or "").strip()
+        if not quote or (quote.lower() not in reg_text and not _is_quote_grounded(quote, reg_text)):
+            continue
+
         cache_key = build_rag_cache_key(event_obj.id, 0, faq.question)
         if cache_key in seen_cache_keys:
             continue
         seen_cache_keys.add(cache_key)
-        session.add(
+        await session.merge(
             LLMCache(
                 cache_key=cache_key,
                 event_id=event_obj.id,
@@ -767,7 +784,7 @@ def _merge_into_existing(
     target.themes = list(dict.fromkeys([*(target.themes or []), *schema.themes]))
 
     is_new_source = bool(source_url) and source_url not in (target.source_urls or [])
-    if is_new_source:
+    if is_new_source and source_url:
         target.full_regulation_markdown = _merge_regulation_markdown(
             target.full_regulation_markdown,
             schema.full_regulation_markdown,
@@ -825,7 +842,7 @@ async def ingest_event_from_text(
 
     await _sync_event_tariffs(session, event_obj, schema)
     await _sync_event_chunks(session, event_obj, event_obj.full_regulation_markdown or "")
-    _populate_faq_cache(session, event_obj, schema)
+    await _populate_faq_cache(session, event_obj, schema)
 
     tariffs_count_res = await session.execute(
         select(func.count(EventTariff.id)).where(EventTariff.event_id == event_obj.id)
