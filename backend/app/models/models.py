@@ -52,7 +52,7 @@ class Client(Base):
 
     manager: Mapped["User | None"] = relationship(back_populates="clients")
     selections: Mapped[list["Selection"]] = relationship(
-        back_populates="client", cascade="all, delete-orphan"
+        back_populates="client", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -114,13 +114,13 @@ class Event(Base):
     )
 
     tariffs: Mapped[list["EventTariff"]] = relationship(
-        back_populates="event", cascade="all, delete-orphan", lazy="selectin"
+        back_populates="event", cascade="all, delete-orphan", passive_deletes=True, lazy="selectin"
     )
     chunks: Mapped[list["EventChunk"]] = relationship(
-        back_populates="event", cascade="all, delete-orphan"
+        back_populates="event", cascade="all, delete-orphan", passive_deletes=True
     )
     selection_items: Mapped[list["SelectionItem"]] = relationship(
-        back_populates="event", cascade="all, delete-orphan"
+        back_populates="event", cascade="all, delete-orphan", passive_deletes=True
     )
 
 

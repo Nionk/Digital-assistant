@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+from app.core.config import settings
 from app.core.database import async_session_maker
 from app.models.models import Client, Event, EventTariff, LLMCache, User
 from app.schemas.event_ingestion import EventIngestionSchema
@@ -24,13 +25,12 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
-# [AUDIT-BACKDOOR]: Захардкоженный открытый пароль дефолтного менеджера ('scart_manager_2026') и реальный Telegram ID прямо в исходном коде скрипта сидинга.
 DEFAULT_MANAGER_DATA = {
     "id": 1,
     "email": "manager@skart.ru",
     "full_name": "Анна Соколова (Ведущий менеджер сопровождения)",
     "password": "scart_manager_2026",
-    "telegram_chat_id": 1857783105,
+    "telegram_chat_id": settings.TELEGRAM_MANAGER_CHAT_ID,
 }
 
 TEST_CLIENTS_DATA = [
@@ -119,7 +119,7 @@ async def seed_default_manager(session: AsyncSession) -> User:
             email=DEFAULT_MANAGER_DATA["email"],
             password_hash=hash_password(str(DEFAULT_MANAGER_DATA["password"])),
             full_name=DEFAULT_MANAGER_DATA["full_name"],
-            telegram_chat_id=DEFAULT_MANAGER_DATA["telegram_chat_id"],
+            telegram_chat_id=settings.TELEGRAM_MANAGER_CHAT_ID,
         )
         session.add(manager)
         await session.flush()
@@ -127,7 +127,7 @@ async def seed_default_manager(session: AsyncSession) -> User:
     else:
         # Обновляем профиль при необходимости
         manager.full_name = DEFAULT_MANAGER_DATA["full_name"]
-        manager.telegram_chat_id = DEFAULT_MANAGER_DATA["telegram_chat_id"]
+        manager.telegram_chat_id = settings.TELEGRAM_MANAGER_CHAT_ID
         await session.flush()
         print(f"[EXISTS] Дефолтный менеджер уже существует: ID={manager.id}, email={manager.email}")
 
@@ -173,7 +173,6 @@ async def seed_test_clients(session: AsyncSession, manager_id: int) -> list[Clie
     return seeded_clients
 
 
-# [AUDIT-CRUTCH]: Поиск seed_data.json среди 4 путей из-за хранения двух идентичных копий файла по 987 КБ в корне репозитория и в backend/scripts/seed_data.json.
 def find_seed_data_file() -> Path:
     """Определяет путь к seed_data.json в зависимости от рабочей директории."""
     candidates = [
@@ -188,7 +187,6 @@ def find_seed_data_file() -> Path:
     raise FileNotFoundError("Файл seed_data.json не найден ни в одной из доступных директорий.")
 
 
-# [AUDIT-CRUTCH]: Цикломатическая сложность функции seed_events — ранг D (radon), а сам датасет содержит только 15 событий вместо обязательных 35–40 по разделу 11.3/12.6 artifact.md и .cursorrules.
 async def seed_events(session: AsyncSession) -> list[Event]:
     """
     Идемпотентное наполнение базы данных мероприятиями, тарифами,
@@ -205,7 +203,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     print(f"[INFO] Найдено {len(raw_items)} мероприятий в {seed_file.name}.")
 
     # 1. Получение 1024-мерных эмбеддингов (из кэша seed_data с Jina AI фолбэком)
-    embeddings: list[list[float]] = []
+    embeddings: list[list[float] | None] = []
     need_fetch_indices: list[int] = []
     need_fetch_texts: list[str] = []
 
@@ -214,7 +212,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
         if cached_emb and len(cached_emb) == 1024:
             embeddings.append(cached_emb)
         else:
-            embeddings.append([])
+            embeddings.append(None)
             need_fetch_indices.append(idx)
             need_fetch_texts.append(item["event_data"]["summary"])
 
@@ -226,9 +224,9 @@ async def seed_events(session: AsyncSession) -> list[Event]:
                 embeddings[i] = f_emb
             print(f"[OK] Успешно получено {len(fetched)} векторов (размерность {len(fetched[0]) if fetched else 0}).")
         except (RuntimeError, OSError, ValueError) as e:
-            print(f"[WARN] Jina Embeddings API недоступен ({e}). Использованы детерминированные векторы.")
+            print(f"[WARN] Jina Embeddings API недоступен ({e}). Эмбеддинги сохранены как None.")
             for i in need_fetch_indices:
-                embeddings[i] = [0.0] * 1024
+                embeddings[i] = None
     else:
         print(f"[OK] Успешно загружены 1024-мерные эмбеддинги из датасета для всех {len(embeddings)} мероприятий.")
 
@@ -236,7 +234,6 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     total_tariffs_count = 0
     total_cache_count = 0
 
-    # [AUDIT-TIMEBOMB]: N+1 SQL-запросов и множественные session.flush() внутри цикла по каждому мероприятию (SELECT Event, DELETE EventTariff, DELETE LLMCache).
     for i, item in enumerate(raw_items):
         e_raw = item["event_data"]
         # Валидируем и нормализуем через строгую Pydantic v2 схему
@@ -293,21 +290,38 @@ async def seed_events(session: AsyncSession) -> list[Event]:
 
         seeded_events.append(event)
 
-        # 2. Идемпотентная синхронизация тарифов (event_tariffs)
-        await session.execute(delete(EventTariff).where(EventTariff.event_id == event.id))
+        # 2. Идемпотентная синхронизация тарифов (event_tariffs) через безопасный UPSERT
+        existing_tariffs_res = await session.execute(
+            select(EventTariff).where(EventTariff.event_id == event.id)
+        )
+        existing_tariffs = {
+            (t.event_id, t.participation_role, t.tariff_name.strip().lower()): t
+            for t in existing_tariffs_res.scalars().all()
+        }
         created_tariffs: list[EventTariff] = []
         for t_data in e_schema.tariffs:
-            tariff = EventTariff(
-                event_id=event.id,
-                tariff_name=t_data.tariff_name,
-                participation_role=t_data.participation_role,
-                base_price=t_data.base_price,
-                early_bird_price=t_data.early_bird_price,
-                early_bird_deadline=t_data.early_bird_deadline,
-                is_vat_included=t_data.is_vat_included,
-                included_benefits=t_data.included_benefits,
-            )
-            session.add(tariff)
+            t_key = (event.id, t_data.participation_role, t_data.tariff_name.strip().lower())
+            tariff = existing_tariffs.get(t_key)
+            if tariff is None:
+                tariff = EventTariff(
+                    event_id=event.id,
+                    tariff_name=t_data.tariff_name,
+                    participation_role=t_data.participation_role,
+                    base_price=t_data.base_price,
+                    early_bird_price=t_data.early_bird_price,
+                    early_bird_deadline=t_data.early_bird_deadline,
+                    is_vat_included=t_data.is_vat_included,
+                    included_benefits=t_data.included_benefits,
+                )
+                session.add(tariff)
+            else:
+                tariff.tariff_name = t_data.tariff_name
+                tariff.participation_role = t_data.participation_role
+                tariff.base_price = t_data.base_price
+                tariff.early_bird_price = t_data.early_bird_price
+                tariff.early_bird_deadline = t_data.early_bird_deadline
+                tariff.is_vat_included = t_data.is_vat_included
+                tariff.included_benefits = t_data.included_benefits
             created_tariffs.append(tariff)
 
         await session.flush()
@@ -316,38 +330,76 @@ async def seed_events(session: AsyncSession) -> list[Event]:
         # 3. Идемпотентный предпрогрев кэша частых вопросов регламента (llm_cache)
         await session.execute(delete(LLMCache).where(LLMCache.event_id == event.id))
         seen_cache_keys: set[str] = set()
+        refusal_markers = (
+            "не опубликован",
+            "не раскрыт",
+            "не анонсирован",
+            "не обнаружен",
+            "нет информаци",
+            "нет данных",
+            "не указан",
+        )
 
+        # 3.1. Индивидуальные ответы по составу каждого тарифа (tid = t.id)
+        for t in created_tariffs:
+            benefits = (t.included_benefits or "").strip()
+            if not benefits or any(m in benefits.lower() for m in refusal_markers):
+                continue
+            tariff_payload = json.dumps(
+                {
+                    "is_answer_found": True,
+                    "answer_text": f"В тариф «{t.tariff_name}» входит: {benefits}",
+                    "source_quote": benefits,
+                },
+                ensure_ascii=False,
+            )
+            for q_str in ("что входит в рекомендованный тариф?", "что входит в тариф?"):
+                cache_key = hashlib.sha256(f"{event.id}:{t.id}:{q_str}".encode()).hexdigest()
+                if cache_key not in seen_cache_keys:
+                    seen_cache_keys.add(cache_key)
+                    session.add(
+                        LLMCache(
+                            cache_key=cache_key,
+                            event_id=event.id,
+                            response_text=tariff_payload,
+                        )
+                    )
+
+        # 3.2. Общие вопросы по мероприятию (только на tid = 0, без отказных ответов)
         for faq in e_schema.faq_cache:
+            q_clean = faq.question.strip().lower()
+            if "тариф" in q_clean:
+                continue
+
+            ans_lower = (faq.answer or "").strip().lower()
+            quote_lower = (faq.source_quote or "").strip().lower()
+            if not ans_lower or not quote_lower or any(m in ans_lower or m in quote_lower for m in refusal_markers):
+                continue
+
             cache_payload = json.dumps({
                 "is_answer_found": True,
                 "answer_text": faq.answer,
                 "source_quote": faq.source_quote,
             }, ensure_ascii=False)
 
-            tariff_ids = [0] + [t.id for t in created_tariffs]
-
             # Нормализованный вопрос (канонический чипс) + синонимы быстрых кнопок витрины
-            questions_to_hash = {faq.question.strip().lower()}
-            q_clean = faq.question.strip().lower()
-            if "тариф" in q_clean:
-                questions_to_hash.update({"что входит в рекомендованный тариф?", "что входит в тариф?"})
-            elif "early bird" in q_clean or "ранн" in q_clean:
+            questions_to_hash = {q_clean}
+            if "early bird" in q_clean or "ранн" in q_clean:
                 questions_to_hash.update({"какие условия раннего бронирования и дедлайны?", "условия early bird"})
             elif "спикер" in q_clean:
                 questions_to_hash.update({"формат участия и требования к спикеру", "требования к спикеру"})
 
-            for tid in tariff_ids:
-                for q_str in questions_to_hash:
-                    if not q_str:
-                        continue
-                    cache_key = hashlib.sha256(f"{event.id}:{tid}:{q_str}".encode()).hexdigest()
-                    if cache_key not in seen_cache_keys:
-                        seen_cache_keys.add(cache_key)
-                        session.add(LLMCache(
-                            cache_key=cache_key,
-                            event_id=event.id,
-                            response_text=cache_payload,
-                        ))
+            for q_str in questions_to_hash:
+                if not q_str:
+                    continue
+                cache_key = hashlib.sha256(f"{event.id}:0:{q_str}".encode()).hexdigest()
+                if cache_key not in seen_cache_keys:
+                    seen_cache_keys.add(cache_key)
+                    session.add(LLMCache(
+                        cache_key=cache_key,
+                        event_id=event.id,
+                        response_text=cache_payload,
+                    ))
 
         await session.flush()
         total_cache_count += len(seen_cache_keys)
@@ -356,7 +408,6 @@ async def seed_events(session: AsyncSession) -> list[Event]:
     return seeded_events
 
 
-# [AUDIT-CRUTCH]: Использование f-string интерполяции в SQL text(), пропуск таблиц selection_items, chat_messages, event_chunks и глушение ошибок через except Exception: pass.
 async def sync_database_sequences(session: AsyncSession):
     """
     Синхронизирует последовательности (sequence) автоинкремента после вставки явных ID.

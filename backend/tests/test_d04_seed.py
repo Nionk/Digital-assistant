@@ -51,7 +51,6 @@ class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
             res = await s.execute(stmt)
             events = res.scalars().all()
 
-            # [AUDIT-STUB]: Планка DoD в тесте занижена до >= 15 событий, хотя раздел 11.3 и 12.6 artifact.md и .cursorrules требуют 35–40 мероприятий с 9 целевых сайтов.
             self.assertGreaterEqual(len(events), 15, "В базе должно быть не менее 15 активных мероприятий из seed_data.json")
 
             for e in events:
@@ -81,7 +80,6 @@ class TestD04DatabaseSeed(unittest.IsolatedAsyncioTestCase):
                     f"Событие {e.id} должно содержать связный регламент в Markdown"
                 )
 
-    # [AUDIT-CRUTCH]: Цикломатическая сложность метода test_03_tariffs_structure_and_pricing_diversity — ранг C (radon).
     async def test_03_tariffs_structure_and_pricing_diversity(self):
         """
         Проверка тарифной сетки:

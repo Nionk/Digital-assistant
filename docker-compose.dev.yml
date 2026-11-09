@@ -2,6 +2,7 @@ services:
   backend:
     environment:
       ENVIRONMENT: dev
+      ALLOW_DEMO_AUTH_BYPASS: "true"
     volumes:
       - ./backend:/app
     ports:

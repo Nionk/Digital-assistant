@@ -147,6 +147,7 @@ class Settings(BaseSettings):
             str(ROOT_DIR / ".env"),
             ".env",
         ),
+        env_file_encoding="utf-8",
         extra="ignore",
     )
 

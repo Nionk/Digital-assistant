@@ -7,6 +7,18 @@ from app.core.constants import FAQ_QUICK_CHIPS
 
 # СХЕМЫ ПУБЛИЧНОЙ ИНТЕРАКТИВНОЙ ВИТРИНЫ КЛИЕНТА (/api/public/s/{magic_token})
 
+class ShowcaseChatMessageOut(BaseModel):
+    """Сообщение в истории чата по мероприятию на витрине клиента."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="ID сообщения")
+    sender_role: Literal["client", "ai_assistant", "manager"] = Field(
+        ..., description="Роль отправителя: client, ai_assistant или manager"
+    )
+    message_text: str = Field(..., description="Текст сообщения")
+    created_at: str | None = Field(None, description="Время создания сообщения (ISO-строка)")
+
+
 class ShowcaseEventItemOut(BaseModel):
     """Карточка мероприятия на интерактивной витрине клиента."""
     model_config = ConfigDict(from_attributes=True)
@@ -47,6 +59,10 @@ class ShowcaseEventItemOut(BaseModel):
         description="Статус реакции клиента: ожидает ответа, интересно, или отклонено"
     )
     client_comment: str | None = Field(None, description="Текстовый комментарий клиента к реакции")
+    chat_messages: list[ShowcaseChatMessageOut] = Field(
+        default_factory=list,
+        description="История сообщений чата по данному мероприятию",
+    )
 
 class ShowcaseViewOut(BaseModel):
     """

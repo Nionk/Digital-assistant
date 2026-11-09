@@ -1992,8 +1992,20 @@
         "properties": {
           "source_key": {
             "type": "string",
+            "enum": [
+              "expomap_construction",
+              "expomap_design",
+              "architime",
+              "archi_ru",
+              "helpinver",
+              "archdialog",
+              "design_mate",
+              "votkuda",
+              "archdaily",
+              "all"
+            ],
             "title": "Source Key",
-            "description": "Ключ площадки (vedomosti, rbc, kommersant, architime, erz, bfm, tdaily, tadviser, events_spb)"
+            "description": "Ключ площадки (expomap_construction, expomap_design, architime, archi_ru, helpinver, archdialog, design_mate, votkuda, archdaily, all)"
           }
         },
         "type": "object",
@@ -2188,6 +2200,50 @@
         "title": "SelectionQuestionActivity",
         "description": "Вопрос клиента, требующий внимания персонального менеджера."
       },
+      "ShowcaseChatMessageOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "ID сообщения"
+          },
+          "sender_role": {
+            "type": "string",
+            "enum": [
+              "client",
+              "ai_assistant",
+              "manager"
+            ],
+            "title": "Sender Role",
+            "description": "Роль отправителя: client, ai_assistant или manager"
+          },
+          "message_text": {
+            "type": "string",
+            "title": "Message Text",
+            "description": "Текст сообщения"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "Время создания сообщения (ISO-строка)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sender_role",
+          "message_text"
+        ],
+        "title": "ShowcaseChatMessageOut",
+        "description": "Сообщение в истории чата по мероприятию на витрине клиента."
+      },
       "ShowcaseEventItemOut": {
         "properties": {
           "selection_item_id": {
@@ -2369,6 +2425,14 @@
             ],
             "title": "Client Comment",
             "description": "Текстовый комментарий клиента к реакции"
+          },
+          "chat_messages": {
+            "items": {
+              "$ref": "#/components/schemas/ShowcaseChatMessageOut"
+            },
+            "type": "array",
+            "title": "Chat Messages",
+            "description": "История сообщений чата по данному мероприятию"
           }
         },
         "type": "object",

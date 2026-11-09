@@ -4,7 +4,7 @@ from typing import Annotated
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -94,6 +94,7 @@ class ManagerUser(BaseModel):
 async def get_current_manager(
     auth: HTTPAuthorizationCredentials | None = Depends(security_scheme),  # noqa: B008
     session: AsyncSession = Depends(get_async_session),  # noqa: B008
+    request: Request = None,  # type: ignore[assignment]
 ) -> ManagerUser:
     """
     Зависимость аутентификации менеджера.
@@ -109,20 +110,43 @@ async def get_current_manager(
          из базы данных с логированием предупреждения.
        [TODO-PHASE-P01]: Удалить обход после реализации страницы входа во фронтенде (Шаг 6).
     """
+    raw_auth_header = request.headers.get("Authorization") if request is not None else None
+    if raw_auth_header is not None and (
+        auth is None
+        or auth.scheme.lower() != "bearer"
+        or not auth.credentials
+        or not auth.credentials.strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Некорректный заголовок Authorization. Ожидается 'Bearer <token>'.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # 1. Если заголовок с Bearer-токеном предоставлен — строгая криптографическая проверка
-    if auth is not None and auth.credentials:
-        payload = decode_access_token(auth.credentials)
+    if auth is not None and auth.credentials and auth.credentials.strip():
+        if auth.scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Некорректная схема авторизации. Ожидается 'Bearer'.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        payload = decode_access_token(auth.credentials.strip())
         sub = payload.get("sub")
-        if not sub:
+        sub_str = str(sub).strip().lower() if sub is not None else ""
+        if not sub_str:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="В токене авторизации отсутствует субъект (sub).",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Поиск пользователя в БД по email или целочисленному id
-        sub_str = str(sub)
-        user_id_val = int(sub_str) if sub_str.isdigit() else -1
+        # Поиск пользователя в БД по email или целочисленному id (в пределах PostgreSQL INT4)
+        user_id_val = -1
+        if sub_str.isdigit():
+            parsed_id = int(sub_str)
+            if 1 <= parsed_id <= 2_147_483_647:
+                user_id_val = parsed_id
         stmt = select(User).where((User.email == sub_str) | (User.id == user_id_val))
         try:
             res = await session.execute(stmt)

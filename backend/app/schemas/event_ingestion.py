@@ -33,10 +33,14 @@ class TariffExtracted(BaseModel):
     )
     base_price: float | None = Field(
         None,
+        ge=0,
+        lt=10_000_000_000,
         description="Базовая цена в рублях. Если цена 'По запросу' — строго null. Если участие бесплатное — 0.0.",
     )
     early_bird_price: float | None = Field(
         None,
+        ge=0,
+        lt=10_000_000_000,
         description="Льготная цена раннего бронирования. Если скидки нет — null.",
     )
     early_bird_deadline: date | None = Field(
@@ -60,6 +64,12 @@ class TariffExtracted(BaseModel):
             if self.early_bird_price is not None:
                 self.early_bird_price = round(self.early_bird_price * VAT_RATE, 2)
             self.is_vat_included = True
+        if (
+            self.base_price is not None
+            and self.early_bird_price is not None
+            and self.early_bird_price > self.base_price
+        ):
+            self.early_bird_price, self.base_price = self.base_price, self.early_bird_price
         return self
 
 

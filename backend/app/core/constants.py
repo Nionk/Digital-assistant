@@ -185,10 +185,6 @@ def normalize_city(raw_city: str | None) -> str | None:
     if lookup_no_hyphen in _REVERSE_CITY_MAP:
         return _REVERSE_CITY_MAP[lookup_no_hyphen]
 
-    # Онлайн-формат не является физическим городом — возвращаем None для соблюдения CHECK (city IS NOT NULL OR is_online = TRUE)
-    if is_online_format(cleaned):
-        return None
-
     # Разбор составных локаций через разделители (например: "Россия, Москва", "Москва (Сколково)", "г. Москва, очно")
     parts = re.split(r"[,;/()]+", cleaned)
     if len(parts) > 1:
@@ -199,6 +195,10 @@ def normalize_city(raw_city: str | None) -> str | None:
             p_norm = normalize_city(p_clean)
             if p_norm and p_norm in _REVERSE_CITY_MAP.values():
                 return p_norm
+
+    # Онлайн-формат не является физическим городом — возвращаем None для соблюдения CHECK (city IS NOT NULL OR is_online = TRUE)
+    if is_online_format(cleaned):
+        return None
 
     # Фолбэк для городов вне базы: удаляем префиксы и форматируем регистр с сохранением дефисов
     # Например: "г. Сколково" -> "Сколково", "гор. суздаль" -> "Суздаль"

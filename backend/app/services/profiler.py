@@ -210,15 +210,18 @@ _NUMERAL_VALUES: dict[str, float] = {
     **_NUMERAL_CASES,
     "полтора": 1.5,
     "полторы": 1.5,
+    "полутора": 1.5,
     "полмиллиона": 500_000.0,
+    "полумиллиона": 500_000.0,
     "полмиллиарда": 500_000_000.0,
+    "полумиллиарда": 500_000_000.0,
 }
 
 
 def _get_scale_multiplier(w: str) -> float | None:
     """Возвращает числовой множитель разряда (тысячи, миллионы, миллиарды, сленг)."""
-    clean = w.rstrip(".,").strip().lower()
-    if clean.startswith(("тысяч", "косар", "тыс")) or clean in ("к", "k", "тр", "т.р"):
+    clean = re.sub(r"[\s.,]+", "", w.strip().lower())
+    if clean.startswith(("тысяч", "косар", "тыс")) or clean in ("к", "k", "тр"):
         return 1_000.0
     if clean.startswith(("миллион", "млн")):
         return 1_000_000.0
@@ -228,7 +231,7 @@ def _get_scale_multiplier(w: str) -> float | None:
 
 
 _NUMERAL_FILLER_WORDS: frozenset[str] = frozenset(
-    {"и", "с", "рублей", "рубля", "руб", "потолок", "до", "бюджет", "максимум", "лимит", "край"}
+    {"и", "с", "рублей", "рубля", "руб", "до", "край"}
 )
 
 
@@ -239,15 +242,17 @@ def _apply_numeral_word(
     has_numeral: bool,
 ) -> tuple[float, float, bool, bool]:
     """Обрабатывает одно слово при разборе числительного прописью."""
-    scale = _get_scale_multiplier(w)
+    scale = _get_scale_multiplier(w) if w not in ("к", "k") else None
     if scale is not None:
         if not has_numeral and current == 0.0:
+            if w.startswith(("миллион", "млн", "миллиард", "млрд", "тысяч", "косар")):
+                return total + scale, 0.0, True, False
             return total, current, has_numeral, False
-        return total + max(current, 1.0) * scale, 0.0, has_numeral, False
+        return total + max(current, 1.0) * scale, 0.0, True, False
 
     if w in _NUMERAL_VALUES:
         val = _NUMERAL_VALUES[w]
-        if w in ("полмиллиона", "полмиллиарда"):
+        if w in ("полмиллиона", "полумиллиона", "полмиллиарда", "полумиллиарда"):
             return total + val, current, True, False
         return total, current + val, True, False
 
@@ -281,14 +286,14 @@ def _extract_budget_heuristic(low: str) -> float | None:
     """
     # 1. Диапазоны ("от 300 до 500 тыс", "1-2 млн") -> берется верхний потолок
     m_range = re.search(
-        r"(\d+(?:[.,]\d+)?)\s*(?:[-–—]|до)\s*(\d+(?:[.,]\d+)?)\s*(млн|миллион[а-яё]*|тыс[а-яё.]*|к\b|косар[а-яё]*)",
+        r"(\d+(?:[.,]\d+)?)\s*(?:[-–—]|до)\s*(\d+(?:[.,]\d+)?)\s*(млн|миллион[а-яё]*|тыс[а-яё.]*|т\.?\s*р\.?|к\b|косар[а-яё]*)",
         low,
     )
     if m_range:
         scale = _get_scale_multiplier(m_range.group(3)) or 1.0
         return float(m_range.group(2).replace(",", ".")) * scale
 
-    # 2. Суммы с множителями разряда ("1.5 млн", "350к", "6 млн рублей", "800 тыс", "400 к")
+    # 2. Суммы с множителями разряда ("1.5 млн", "350к", "6 млн рублей", "800 тыс", "400 к", "250 т. р.")
     for m_scale in re.finditer(
         r"(\d+(?:[.,]\d+)?)\s*(млн|миллион[а-яё]*|тыс[а-яё.]*|т\.?\s*р\.?|к\b|косар[а-яё]*)",
         low,
@@ -299,7 +304,7 @@ def _extract_budget_heuristic(low: str) -> float | None:
         scale = _get_scale_multiplier(m_scale.group(2)) or 1.0
         return float(m_scale.group(1).replace(",", ".")) * scale
 
-    # 3. Числительные прописью ("до пяти миллионов", "три с половиной миллиона руб")
+    # 3. Числительные прописью ("до пяти миллионов", "три с половиной миллиона руб", "миллион двести тысяч")
     parsed_phrase = _parse_numeral_phrase(low)
     if parsed_phrase is not None:
         return parsed_phrase
@@ -353,7 +358,9 @@ def _detect_target_year(low: str, today: datetime.date) -> tuple[int, bool]:
     ]
     if year_candidates:
         return year_candidates[0], True
-    if re.search(r"в\s+след(?:ующ[а-яё]+)?\s+год|на\s+след(?:ующ[а-яё]+)?\s+год|в\s+следующем\s+месяце", low):
+    if re.search(r"(?:в|на)\s+след(?:ующ[а-яё]+)?\s+год", low):
+        return today.year + 1, True
+    if re.search(r"(?:в|на)\s+след(?:ующ[а-яё]+)?\s+месяц", low):
         return today.year + (1 if today.month == 12 else 0), True
     return today.year, False
 
@@ -375,27 +382,48 @@ def _extract_dates_heuristic(low: str, today: datetime.date) -> tuple[datetime.d
         ("ма[йяе]", 5), ("июн", 6), ("июл", 7), ("август", 8),
         ("сентябр", 9), ("октябр", 10), ("ноябр", 11), ("декабр", 12),
     )
-    detected_months = [m_num for kw, m_num in month_keywords if re.search(rf"\b{kw}[а-яё]*\b", low)]
+    month_matches: list[tuple[int, int]] = []
+    for kw, m_num in month_keywords:
+        m_obj = re.search(rf"\b{kw}[а-яё]*\b", low)
+        if m_obj:
+            month_matches.append((m_obj.start(), m_num))
+    month_matches.sort(key=lambda pair: pair[0])
+    detected_months = [m_num for _, m_num in month_matches]
     detected_months.extend(_detect_seasons_and_quarters(low))
 
     if detected_months:
-        # Обработка сезона "зима" (12, 1, 2) на стыке годов
-        if 12 in detected_months and any(m in (1, 2) for m in detected_months):
-            if today.month in (1, 2):
+        late_months = [m for m in detected_months if m in (10, 11, 12)]
+        early_months = [m for m in detected_months if m in (1, 2, 3, 4)]
+        # Обработка интервалов на стыке годов ("ноябрь-февраль", сезон "зима")
+        if (
+            late_months
+            and early_months
+            and detected_months.index(late_months[0]) < detected_months.index(early_months[-1])
+        ):
+            start_m = min(late_months)
+            end_m = max(early_months)
+            if not year_found and today.month in (1, 2, 3, 4) and today.month <= end_m:
                 start_year = target_year - 1
                 end_year = target_year
             else:
                 start_year = target_year
                 end_year = target_year + 1
-            date_from = max(today, datetime.date(start_year, 12, 1))
-            end_m = max(m for m in detected_months if m in (1, 2))
+            date_from = max(date_from, datetime.date(start_year, start_m, 1))
             date_to = datetime.date(end_year, end_m, calendar.monthrange(end_year, end_m)[1])
         else:
             min_m, max_m = min(detected_months), max(detected_months)
             if not year_found and max_m < today.month:
                 target_year = today.year + 1
-            date_from = max(today, datetime.date(target_year, min_m, 1))
+            date_from = max(date_from, datetime.date(target_year, min_m, 1))
             date_to = datetime.date(target_year, max_m, calendar.monthrange(target_year, max_m)[1])
+    elif re.search(r"(?:в|на)\s+след(?:ующ[а-яё]+)?\s+месяц", low):
+        next_m = (today.month % 12) + 1
+        next_y = today.year + (1 if today.month == 12 else 0)
+        date_from = max(date_from, datetime.date(next_y, next_m, 1))
+        date_to = datetime.date(next_y, next_m, calendar.monthrange(next_y, next_m)[1])
+    elif re.search(r"(?:в|на)\s+след(?:ующ[а-яё]+)?\s+год", low):
+        date_from = max(date_from, datetime.date(target_year, 1, 1))
+        date_to = datetime.date(target_year, 12, 31)
 
     if re.search(r"начал[оеу]\s*(?:след|20\d{2})", low):
         ny = target_year + 1 if not year_found else target_year

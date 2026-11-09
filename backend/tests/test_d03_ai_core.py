@@ -27,7 +27,6 @@ class CityExtractionSchema(BaseModel):
     budget: int
 
 
-# [AUDIT-CRUTCH]: Дублирование тестового набора из backend/scripts/test_ai_core.py; при отсутствии API-ключей интеграционные тесты молча пропускаются через skipTest.
 class TestCityNormalizationUnit(unittest.TestCase):
     """Юнит-тесты на канонизацию названий городов (DoD: >= 10 вариаций)."""
 
@@ -96,6 +95,64 @@ class TestCityNormalizationUnit(unittest.TestCase):
         zero_vec = [0.0, 0.0, 0.0]
         self.assertEqual(l2_normalize(zero_vec), zero_vec)
 
+        # NaN / Inf должны вызывать ValueError
+        with self.assertRaises(ValueError):
+            l2_normalize([float("nan"), 1.0])
+        with self.assertRaises(ValueError):
+            l2_normalize([float("inf"), 1.0])
+
+
+class TestEmbeddingClientUnit(unittest.IsolatedAsyncioTestCase):
+    """Детерминированные юнит-тесты L2-нормализации и ретраев get_embedding / get_embeddings_batch с честным моком."""
+
+    async def test_get_embedding_and_batch_l2_and_retries_unit(self):
+        import httpx
+
+        raw_unnormalized = [3.0, 4.0] + [0.0] * (settings.EMBEDDING_DIM - 2)
+        call_counter = {"count": 0}
+
+        async def _flaky_create(**kwargs: object) -> SimpleNamespace:
+            call_counter["count"] += 1
+            if call_counter["count"] == 1:
+                raise httpx.ConnectError("Temporary network glitch")
+            inp = kwargs.get("input", [])
+            items = inp if isinstance(inp, list) else [inp]
+            return SimpleNamespace(
+                data=[
+                    SimpleNamespace(embedding=list(raw_unnormalized), index=idx)
+                    for idx, _ in enumerate(items)
+                ]
+            )
+
+        with (
+            patch.object(settings, "EMBEDDING_API_KEY", "test-key"),
+            patch.object(
+                embedding_client.embeddings,
+                "create",
+                new=AsyncMock(side_effect=_flaky_create),
+            ),
+            patch("app.services.ai_client.asyncio.sleep", new=AsyncMock()),
+        ):
+            single_vec = await get_embedding("Проверка строительного форума")
+            self.assertEqual(call_counter["count"], 2)
+            self.assertEqual(len(single_vec), settings.EMBEDDING_DIM)
+            self.assertAlmostEqual(single_vec[0], 0.6, places=5)
+            self.assertAlmostEqual(single_vec[1], 0.8, places=5)
+            self.assertAlmostEqual(math.sqrt(sum(x * x for x in single_vec)), 1.0, places=5)
+
+            texts = [
+                "Девелопмент жилой недвижимости",
+                "Управление коммерческими объектами",
+                "Зеленое строительство и стандарты энергоэффективности",
+            ]
+            batch_vecs = await get_embeddings_batch(texts, batch_size=2)
+            self.assertEqual(len(batch_vecs), 3)
+            for v in batch_vecs:
+                self.assertEqual(len(v), settings.EMBEDDING_DIM)
+                self.assertAlmostEqual(v[0], 0.6, places=5)
+                self.assertAlmostEqual(v[1], 0.8, places=5)
+                self.assertAlmostEqual(math.sqrt(sum(x * x for x in v)), 1.0, places=5)
+
 
 class TestAICoreIntegration(unittest.IsolatedAsyncioTestCase):
     """Интеграционные тесты ИИ-клиентов (Instructor LLM и Jina AI)."""
@@ -105,59 +162,41 @@ class TestAICoreIntegration(unittest.IsolatedAsyncioTestCase):
         if not settings.LLM_API_KEY:
             self.skipTest("LLM_API_KEY is not configured")
 
-        result = await structured_llm_client.chat.completions.create(
-            model=settings.LLM_MODEL,
-            response_model=CityExtractionSchema,
-            max_tokens=300,
-            messages=[
-                {"role": "user", "content": "Бюджет 150000 руб, мероприятие в городе Екатеринбург"}
-            ],
-        )
+        try:
+            result = await structured_llm_client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                response_model=CityExtractionSchema,
+                max_tokens=300,
+                messages=[
+                    {"role": "user", "content": "Бюджет 150000 руб, мероприятие в городе Екатеринбург"}
+                ],
+            )
+        except APIStatusError as exc:
+            if exc.status_code in (401, 402, 403, 429):
+                self.skipTest(f"LLM API недоступен (статус {exc.status_code}): {exc}")
+            raise
 
         self.assertIsInstance(result, CityExtractionSchema)
         self.assertEqual(result.budget, 150000)
         self.assertEqual(normalize_city(result.city), "Екатеринбург")
 
     async def test_single_and_batch_embeddings(self):
-        """Проверка одиночных и батчевых эмбеддингов с L2-нормализацией."""
+        """Реальная интеграционная проверка одиночных и батчевых эмбеддингов через API."""
         if not settings.EMBEDDING_API_KEY:
             self.skipTest("EMBEDDING_API_KEY is not configured")
 
+        texts = [
+            "Девелопмент жилой недвижимости",
+            "Управление коммерческими объектами",
+            "Зеленое строительство и стандарты энергоэффективности",
+        ]
         try:
             single_vec = await get_embedding("Проверка строительного форума")
-            texts = [
-                "Девелопмент жилой недвижимости",
-                "Управление коммерческими объектами",
-                "Зеленое строительство и стандарты энергоэффективности",
-            ]
             batch_vecs = await get_embeddings_batch(texts, batch_size=2)
         except APIStatusError as exc:
-            if exc.status_code not in (402, 403, 429):
-                raise
-            raw_unnormalized = [3.0, 4.0] + [0.0] * (settings.EMBEDDING_DIM - 2)
-
-            async def _fake_create(**kwargs: object) -> SimpleNamespace:
-                inp = kwargs.get("input", [])
-                items = inp if isinstance(inp, list) else [inp]
-                return SimpleNamespace(
-                    data=[
-                        SimpleNamespace(embedding=list(raw_unnormalized), index=idx)
-                        for idx, _ in enumerate(items)
-                    ]
-                )
-
-            with patch.object(
-                embedding_client.embeddings,
-                "create",
-                new=AsyncMock(side_effect=_fake_create),
-            ):
-                single_vec = await get_embedding("Проверка строительного форума")
-                texts = [
-                    "Девелопмент жилой недвижимости",
-                    "Управление коммерческими объектами",
-                    "Зеленое строительство и стандарты энергоэффективности",
-                ]
-                batch_vecs = await get_embeddings_batch(texts, batch_size=2)
+            if exc.status_code in (401, 402, 403, 429):
+                self.skipTest(f"Jina Embeddings API квота/ключ недоступны (статус {exc.status_code}): {exc}")
+            raise
 
         self.assertEqual(len(single_vec), settings.EMBEDDING_DIM)
         norm = math.sqrt(sum(x * x for x in single_vec))

@@ -199,16 +199,17 @@ def format_reaction_alert(
     if comment and comment.strip():
         cleaned = comment.strip()
         lines.append(f"Комментарий: <i>{escape_html(_clip(cleaned, 1000))}</i>")
-        support_flag = (
-            needs_agency_support
-            if needs_agency_support is not None
-            else _detect_agency_support_request(cleaned)
-        )
-        if support_flag:
-            lines.append(
-                "<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>"
+        if reaction == "interested":
+            support_flag = (
+                needs_agency_support
+                if needs_agency_support is not None
+                else _detect_agency_support_request(cleaned)
             )
-    elif needs_agency_support:
+            if support_flag:
+                lines.append(
+                    "<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>"
+                )
+    elif reaction == "interested" and needs_agency_support:
         lines.append(
             "<b>Задача агентства (Этап 09):</b> <i>Запрошена подготовка / сопровождение участия</i>"
         )

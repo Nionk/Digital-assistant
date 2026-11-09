@@ -221,6 +221,21 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(v1.total_actual_price, 170000.0)
 
         # 3. Проверка допуска +10% бюджета (170 000 ₽ при бюджете 160 000 ₽ укладывается в 160k * 1.10 = 176k)
+        e4_alt = Event(
+            id=4,
+            canonical_title="Форум Урбанистика 4",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 11, 25),
+            end_date=date(2026, 11, 26),
+        )
+        c4_with_spk = ScoredEventCandidate(
+            event=e4_alt,
+            rrf_score=0.022,
+            all_tariffs=[t_spk],
+            priced_tariffs=[t_spk],
+            on_request_tariffs=[],
+        )
         prof_tight_budget = ClientQueryExtracted(
             cities=["Москва"],
             include_online=True,
@@ -231,11 +246,15 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
             themes_keywords=["КРТ"],
             semantic_search_query="КРТ",
         )
-        variants_tol, _ = build_bundles([c1_with_spk, c3_del_only], prof_tight_budget)
-        # При бюджете 160к строгий пакет размера K=1 (c1_with_spk за 120к) укладывается строго (<=160к),
-        # а пакет размера K=2 (170к) попадает в +10% допуск (<=176к) как второй вариант
+        variants_tol, _ = build_bundles([c1_with_spk, c3_del_only, c4_with_spk], prof_tight_budget)
+        # Полноразмерный пакет K=2 (170к) выбирается из +10% допуска (<=176к) как Вариант 1,
+        # а Вариант 2 не является строгим подмножеством событий Варианта 1
         self.assertEqual(len(variants_tol), 2)
-        self.assertTrue(any(v.is_over_budget_tolerance for v in variants_tol))
+        self.assertTrue(variants_tol[0].is_over_budget_tolerance)
+        self.assertEqual(len(variants_tol[0].candidates), 2)
+        v1_tol_ids = {c.event.id for c in variants_tol[0].candidates}
+        v2_tol_ids = {c.event.id for c in variants_tol[1].candidates}
+        self.assertFalse(v2_tol_ids < v1_tol_ids)
 
     @unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
     async def test_03_build_bundles_performance_and_diversification(self) -> None:
@@ -262,8 +281,6 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
             variants, bonus_pairs = build_bundles(candidates, profile)
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
-            # SLA check: < 15 ms
-            # [AUDIT-TIMEBOMB]: Жесткий тайминг-ассерт < 15.0 мс на выполнение build_bundles делает тест нестабильным (flaky) при запуске на нагруженном CI-раннере (в BENCHMARK_RESULTS.md p95 уже составляет 15.13 мс, max 15.90 мс).
             self.assertLess(elapsed_ms, 15.0, f"build_bundles exceeded 15ms SLA: {elapsed_ms:.3f} ms")
             self.assertGreaterEqual(len(variants), 1)
 

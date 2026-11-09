@@ -604,6 +604,7 @@ async def find_duplicate_event(
         score = max(
             float(fuzz.token_sort_ratio(norm_new, norm_existing)),
             float(fuzz.ratio(norm_new, norm_existing)),
+            float(fuzz.token_set_ratio(norm_new, norm_existing)),
         )
         if score >= similarity_threshold:
             return existing
@@ -783,13 +784,15 @@ def _merge_into_existing(
         target.venue = schema.venue
     target.themes = list(dict.fromkeys([*(target.themes or []), *schema.themes]))
 
-    is_new_source = bool(source_url) and source_url not in (target.source_urls or [])
-    if is_new_source and source_url:
+    if schema.full_regulation_markdown and schema.full_regulation_markdown.strip():
         target.full_regulation_markdown = _merge_regulation_markdown(
             target.full_regulation_markdown,
             schema.full_regulation_markdown,
             source_url,
         )
+
+    is_new_source = bool(source_url) and source_url not in (target.source_urls or [])
+    if is_new_source and source_url:
         target.source_urls = [*(target.source_urls or []), source_url]
 
 
