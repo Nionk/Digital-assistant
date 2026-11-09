@@ -220,6 +220,16 @@ class PublishSelectionIn(BaseModel):
         description="Финальный текст сопроводительного письма, отредактированный менеджером"
     )
 
+    @model_validator(mode="after")
+    def validate_unique_events(self) -> Self:
+        """Гарантирует отсутствие дублей одного и того же мероприятия в публикуемом пакете."""
+        seen_events: set[int] = set()
+        for item in self.final_items:
+            if item.event_id in seen_events:
+                raise ValueError(f"Дублирование мероприятия event_id={item.event_id} в final_items не допускается.")
+            seen_events.add(item.event_id)
+        return self
+
 class PublishSelectionOut(BaseModel):
     """Результат публикации: ссылка Magic Link и параметры опубликованной витрины."""
     selection_id: int = Field(..., description="ID опубликованной подборки")
@@ -278,9 +288,20 @@ class EventUploadOut(BaseModel):
 
 class ScraperRunIn(BaseModel):
     """Запрос на ручной запуск фонового парсера по конкретной площадке."""
-    source_key: str = Field(
+    source_key: Literal[
+        "expomap_construction",
+        "expomap_design",
+        "architime",
+        "archi_ru",
+        "helpinver",
+        "archdialog",
+        "design_mate",
+        "votkuda",
+        "archdaily",
+        "all",
+    ] = Field(
         ...,
-        description="Ключ площадки (vedomosti, rbc, kommersant, architime, erz, bfm, tdaily, tadviser, events_spb)",
+        description="Ключ площадки (expomap_construction, expomap_design, architime, archi_ru, helpinver, archdialog, design_mate, votkuda, archdaily, all)",
     )
 
 

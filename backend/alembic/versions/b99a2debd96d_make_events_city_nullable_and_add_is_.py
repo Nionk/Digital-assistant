@@ -45,6 +45,7 @@ def downgrade() -> None:
         postgresql_where=sa.text('is_active = TRUE AND is_online = TRUE')
     )
     op.drop_constraint('chk_events_city_or_online', 'events', type_='check')
+    op.execute("UPDATE events SET city = 'Онлайн' WHERE city IS NULL")
     op.alter_column('events', 'city',
                existing_type=sa.VARCHAR(length=100),
                nullable=False)

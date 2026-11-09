@@ -71,7 +71,8 @@ curl http://localhost:8000/ready
    curl -X POST http://localhost:8000/api/manager/scraper/run \
      -H "Authorization: Bearer <ACCESS_TOKEN>" \
      -H "Content-Type: application/json" \
-     -d '{"source_key": "vedomosti"}'
+     -d '{"source_key": "architime"}'
+   # Допустимые ключи источников: expomap_construction, expomap_design, architime, archi_ru, helpinver, archdialog, design_mate, votkuda, archdaily, all
    ```
 5. **Мониторинг реакций и вопросов клиентов (Polling):**
    ```bash

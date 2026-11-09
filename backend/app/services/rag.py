@@ -146,7 +146,7 @@ async def _save_chat_message(
             event_id=event_id,
             sender_role="client",
             message_text=question,
-            needs_manager_attention=False,
+            needs_manager_attention=needs_attention,
         )
     )
     session.add(
@@ -155,7 +155,7 @@ async def _save_chat_message(
             event_id=event_id,
             sender_role="ai_assistant",
             message_text=answer,
-            needs_manager_attention=needs_attention,
+            needs_manager_attention=False,
         )
     )
 
@@ -175,7 +175,7 @@ async def _retrieve_regulation_chunks(
     if settings.EMBEDDING_API_KEY:
         try:
             q_vec = await get_embedding(question)
-        except (RuntimeError, APIError, httpx.HTTPError) as exc:
+        except (Exception,) as exc:
             logger.warning(
                 "Не удалось получить вектор вопроса для поиска по чанкам: %s",
                 exc,
@@ -278,6 +278,21 @@ async def _find_recommended_tariff(
         else 0
     )
     tariff = await session.get(EventTariff, tariff_id) if tariff_id else None
+    if tariff is None:
+        event = await session.get(Event, event_id)
+        if event and event.tariffs:
+            low_rationale = (selection_item.ai_rationale or "").lower() if selection_item else ""
+            if "спикер" in low_rationale or "выступлен" in low_rationale:
+                tariff = next((t for t in event.tariffs if t.participation_role == "speaker"), None)
+            if tariff is None:
+                priced_tariffs = [t for t in event.tariffs if t.base_price is not None]
+                tariff = (
+                    min(priced_tariffs, key=lambda t: float(t.base_price or 0.0))
+                    if priced_tariffs
+                    else event.tariffs[0]
+                )
+            if tariff is not None and tariff.id:
+                tariff_id = tariff.id
     return tariff_id, tariff
 
 
@@ -495,7 +510,21 @@ async def ask_regulation_question(
     # Фолбэк на tariff_id=0 допустим ТОЛЬКО для вопросов, не привязанных к конкретному тарифу
     is_tariff_dependent_q = any(
         kw in question_clean.lower()
-        for kw in ("что входит", "входит в тариф", "рекомендованный тариф", "стоимость тарифа", "опции тарифа")
+        for kw in (
+            "что входит",
+            "входит в тариф",
+            "рекомендованный тариф",
+            "стоимость тарифа",
+            "опции тарифа",
+            "цена",
+            "стоимость",
+            "сколько стоит",
+            "тариф",
+            "пакет",
+            "скидк",
+            "early bird",
+            "раннего бронирования",
+        )
     )
     if cached_rag is None and tariff_id != 0 and not is_tariff_dependent_q:
         fallback_cache_key = build_rag_cache_key(event_id, 0, question_clean)

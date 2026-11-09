@@ -47,6 +47,8 @@ def l2_normalize(vec: list[float]) -> list[float]:
     Выполняет L2-нормализацию вектора для корректной работы оператора
     косинусного расстояния (<=>) в pgvector (vector_cosine_ops).
     """
+    if any(math.isnan(x) or math.isinf(x) for x in vec):
+        raise ValueError("Вектор эмбеддинга содержит некорректные числовые значения (NaN или Inf).")
     norm = math.sqrt(sum(x * x for x in vec))
     if norm == 0.0:
         return vec
@@ -75,6 +77,8 @@ async def _request_embeddings(
             encoding_format=encoding_format,
             dimensions=settings.EMBEDDING_DIM,
         )
+    if not response or not response.data:
+        raise RuntimeError("Пустой ответ от шлюза эмбеддингов.")
     ordered_data = sorted(response.data, key=lambda item: item.index)
     vectors = [l2_normalize(item.embedding) for item in ordered_data]
     if len(vectors) != len(texts):
@@ -94,16 +98,31 @@ async def get_embedding(text: str) -> list[float]:
     if not settings.EMBEDDING_API_KEY:
         raise RuntimeError("EMBEDDING_API_KEY не задан в конфигурации приложения.")
 
-    async with EMBEDDING_SEMAPHORE:
+    max_retries = 2
+    for attempt in range(max_retries + 1):
         try:
-            vectors = await _request_embeddings([text], encoding_format="float")
-            return vectors[0]
-        except (APIError, httpx.HTTPError):
-            logger.exception(
-                "Ошибка при получении эмбеддинга (model=%s)",
-                settings.EMBEDDING_MODEL,
-            )
-            raise
+            async with EMBEDDING_SEMAPHORE:
+                vectors = await _request_embeddings([text], encoding_format="float")
+                return vectors[0]
+        except (APIError, httpx.HTTPError) as exc:
+            if attempt < max_retries:
+                delay = 1.0 * (attempt + 1)
+                logger.warning(
+                    "Сетевой сбой при получении эмбеддинга (попытка %d/%d). Повтор через %.1f сек: %s",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    exc,
+                    exc_info=True,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.exception(
+                    "Ошибка при получении эмбеддинга (model=%s)",
+                    settings.EMBEDDING_MODEL,
+                )
+                raise
+    raise RuntimeError("Не удалось получить эмбеддинг.")
 
 
 async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[list[float]]:
@@ -122,29 +141,29 @@ async def get_embeddings_batch(texts: list[str], batch_size: int = 16) -> list[l
 
     for i in range(0, len(texts), batch_size):
         chunk = texts[i : i + batch_size]
-        async with EMBEDDING_SEMAPHORE:
-            for attempt in range(max_retries + 1):
-                try:
+        for attempt in range(max_retries + 1):
+            try:
+                async with EMBEDDING_SEMAPHORE:
                     batch_vectors = await _request_embeddings(chunk, encoding_format="float")
-                    results.extend(batch_vectors)
-                    break
-                except (APIError, httpx.HTTPError) as exc:
-                    if attempt < max_retries:
-                        delay = 1.0 * (attempt + 1)
-                        logger.warning(
-                            "Сетевой сбой при получении батча эмбеддингов (попытка %d/%d). Повтор через %.1f сек: %s",
-                            attempt + 1,
-                            max_retries,
-                            delay,
-                            exc,
-                            exc_info=True,
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.exception(
-                            "Не удалось получить батч эмбеддингов после %d попыток",
-                            max_retries + 1,
-                        )
-                        raise
+                results.extend(batch_vectors)
+                break
+            except (APIError, httpx.HTTPError) as exc:
+                if attempt < max_retries:
+                    delay = 1.0 * (attempt + 1)
+                    logger.warning(
+                        "Сетевой сбой при получении батча эмбеддингов (попытка %d/%d). Повтор через %.1f сек: %s",
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                        exc,
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.exception(
+                        "Не удалось получить батч эмбеддингов после %d попыток",
+                        max_retries + 1,
+                    )
+                    raise
 
     return results

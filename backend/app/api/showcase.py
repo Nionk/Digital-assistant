@@ -1,5 +1,6 @@
 import datetime
 import logging
+from collections import defaultdict
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -27,6 +28,7 @@ from app.schemas.showcase import (
     ClientReactionOut,
     EscalateQuestionIn,
     EscalateQuestionOut,
+    ShowcaseChatMessageOut,
     ShowcaseEventItemOut,
     ShowcaseViewOut,
 )
@@ -153,6 +155,36 @@ async def get_public_showcase(
         tar_res = await db.execute(select(EventTariff).where(EventTariff.id.in_(tar_ids_to_fetch)))
         tariffs_map = {t.id: t for t in tar_res.scalars().all()}
 
+    chat_stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.selection_id == selection.id)
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+    )
+    chat_res = await db.execute(chat_stmt)
+    chat_by_event: dict[int, list[ShowcaseChatMessageOut]] = defaultdict(list)
+    for idx_msg, msg in enumerate(chat_res.scalars().all(), start=1):
+        if msg.event_id is None:
+            continue
+        sender_role: Literal["client", "ai_assistant", "manager"] = (
+            "manager"
+            if msg.sender_role == "manager"
+            else ("ai_assistant" if msg.sender_role == "ai_assistant" else "client")
+        )
+        created_str = (
+            msg.created_at.isoformat()
+            if isinstance(msg.created_at, datetime.datetime)
+            else (str(msg.created_at) if msg.created_at else None)
+        )
+        chat_by_event[msg.event_id].append(
+            ShowcaseChatMessageOut(
+                id=msg.id or idx_msg,
+                sender_role=sender_role,
+                message_text=msg.message_text,
+                needs_manager_attention=bool(msg.needs_manager_attention),
+                created_at=created_str,
+            )
+        )
+
     for item in items:
         event = item.event or events_map.get(item.event_id)
         if not event:
@@ -235,6 +267,7 @@ async def get_public_showcase(
                 ai_rationale=item.ai_rationale or "",
                 client_reaction=reaction,
                 client_comment=item.client_comment,
+                chat_messages=chat_by_event.get(event.id, []),
             )
         )
 
@@ -473,6 +506,32 @@ async def escalate_question_to_manager(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Мероприятие не найдено")
 
+    msg_stmt = (
+        select(ChatMessage)
+        .where(
+            ChatMessage.selection_id == selection.id,
+            ChatMessage.event_id == event_id,
+            ChatMessage.sender_role == "client",
+            ChatMessage.message_text == payload.question_text.strip(),
+        )
+        .order_by(ChatMessage.id.desc())
+        .limit(1)
+    )
+    msg_res = await db.execute(msg_stmt)
+    chat_msg = msg_res.scalar_one_or_none()
+    if chat_msg is not None:
+        chat_msg.needs_manager_attention = True
+    else:
+        chat_msg = ChatMessage(
+            selection_id=selection.id,
+            event_id=event_id,
+            message_text=payload.question_text.strip(),
+            sender_role="client",
+            needs_manager_attention=True,
+        )
+        db.add(chat_msg)
+    await db.commit()
+
     manager_chat_id = manager.telegram_chat_id if manager else None
     alert_html = format_escalation_alert(
         company_name=client.company_name,
@@ -480,35 +539,6 @@ async def escalate_question_to_manager(
         question_text=payload.question_text,
     )
     notified = await send_manager_alert(alert_html, chat_id=manager_chat_id)
-
-    try:
-        msg_stmt = (
-            select(ChatMessage)
-            .where(
-                ChatMessage.selection_id == selection.id,
-                ChatMessage.event_id == event_id,
-                ChatMessage.sender_role == "client",
-                ChatMessage.message_text == payload.question_text.strip(),
-            )
-            .order_by(ChatMessage.id.desc())
-            .limit(1)
-        )
-        msg_res = await db.execute(msg_stmt)
-        chat_msg = msg_res.scalar_one_or_none()
-        if chat_msg is not None:
-            chat_msg.needs_manager_attention = True
-        else:
-            chat_msg = ChatMessage(
-                selection_id=selection.id,
-                event_id=event_id,
-                message_text=payload.question_text.strip(),
-                sender_role="client",
-                needs_manager_attention=True,
-            )
-            db.add(chat_msg)
-        await db.commit()
-    except (SQLAlchemyError, OSError) as exc:
-        logger.warning("Не удалось обновить статус сообщения в chat_messages: %s", exc)
 
     return EscalateQuestionOut(
         event_id=event_id,

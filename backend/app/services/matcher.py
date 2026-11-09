@@ -213,6 +213,7 @@ def _build_sql_filter_conditions(
     *,
     enforce_dates: bool = True,
     budget_ceiling: float | None = None,
+    has_query_vec: bool = True,
 ) -> list[ColumnElement[bool]]:
     """
     Формирует список предикатов SQL WHERE для гибридного RRF-поиска (artifact.md раздел 10.3).
@@ -220,10 +221,11 @@ def _build_sql_filter_conditions(
     """
     conditions: list[ColumnElement[bool]] = [
         Event.is_active.is_(True),
-        Event.summary_embedding.is_not(None),
         Event.data_status == "ready",
         Event.end_date >= today,
     ]
+    if has_query_vec:
+        conditions.append(Event.summary_embedding.is_not(None))
 
     if enforce_dates:
         if profile.date_from is not None:
@@ -269,7 +271,7 @@ def _build_sql_filter_conditions(
 async def fetch_hybrid_rrf_candidates(
     session: AsyncSession,
     profile: ClientQueryExtracted,
-    query_vec: list[float],
+    query_vec: list[float] | None,
     fts_query_str: str,
     today: datetime.date,
     *,
@@ -280,13 +282,27 @@ async def fetch_hybrid_rrf_candidates(
     """
     Выполняет гибридный поиск (векторная близость pgvector + полнотекстовый поиск FTS)
     с объединением рангов по формуле Reciprocal Rank Fusion (k=60).
+    При отсутствии векторного эмбеддинга (query_vec is None) выполняет надежный откат на FTS-ранжирование.
     """
     conditions = _build_sql_filter_conditions(
         profile,
         today,
         enforce_dates=enforce_dates,
         budget_ceiling=budget_ceiling,
+        has_query_vec=query_vec is not None,
     )
+
+    if query_vec is None:
+        ts_query_expr = func.websearch_to_tsquery("russian", fts_query_str)
+        fts_rank_expr = func.ts_rank_cd(Event.search_vector, ts_query_expr)
+        fts_stmt = (
+            select(Event, fts_rank_expr.label("score"))
+            .where(*conditions)
+            .order_by(fts_rank_expr.desc(), Event.start_date.asc())
+            .limit(limit)
+        )
+        result = await session.execute(fts_stmt)
+        return [(row[0], float(row[1] or 0.0)) for row in result.all()]
 
     vec_dist_expr = Event.summary_embedding.cosine_distance(query_vec)
     ts_query_expr = func.websearch_to_tsquery("russian", fts_query_str)
@@ -307,8 +323,17 @@ async def fetch_hybrid_rrf_candidates(
         order_by=[candidates_cte.c.fts_rank.desc(), candidates_cte.c.vec_distance.asc()]
     ).label("r_fts")
 
-    ranked_cte = select(candidates_cte.c.event_id, r_vec_col, r_fts_col).cte("ranked")
-    rrf_score_expr = ((1.0 / (60.0 + ranked_cte.c.r_vec)) + (1.0 / (60.0 + ranked_cte.c.r_fts))).label("rrf_score")
+    ranked_cte = select(
+        candidates_cte.c.event_id,
+        candidates_cte.c.fts_rank,
+        r_vec_col,
+        r_fts_col,
+    ).cte("ranked")
+    fts_rrf_term = case(
+        (ranked_cte.c.fts_rank > 0.0, 1.0 / (60.0 + ranked_cte.c.r_fts)),
+        else_=0.0,
+    )
+    rrf_score_expr = ((1.0 / (60.0 + ranked_cte.c.r_vec)) + fts_rrf_term).label("rrf_score")
 
     final_stmt = (
         select(Event, rrf_score_expr)
@@ -317,7 +342,7 @@ async def fetch_hybrid_rrf_candidates(
         .limit(limit)
     )
     result = await session.execute(final_stmt)
-    return [(row[0], float(row[1])) for row in result.all()]
+    return [(row[0], float(row[1] or 0.0)) for row in result.all()]
 
 
 def _theme_matches_keywords(theme: str, keywords: Sequence[str]) -> bool:
@@ -360,7 +385,7 @@ async def _load_tariffs_by_event(
 async def _fetch_filtered_events_map(
     session: AsyncSession,
     profile: ClientQueryExtracted,
-    query_vec: list[float],
+    query_vec: list[float] | None,
     fts_query_str: str,
     today: datetime.date,
 ) -> dict[int, tuple[Event, float]]:
@@ -380,7 +405,9 @@ async def _fetch_filtered_events_map(
         enforce_dates=True,
         budget_ceiling=profile.total_budget_max,
     )
-    events_map: dict[int, tuple[Event, float]] = {ev.id: (ev, score) for ev, score in strict_rows}
+    events_map: dict[int, tuple[Event, float]] = {
+        ev.id: (ev, score + _calculate_domain_bonus(ev, profile)) for ev, score in strict_rows
+    }
     if len(events_map) >= profile.target_events_count:
         return events_map
 
@@ -397,7 +424,7 @@ async def _fetch_filtered_events_map(
     )
     for ev, score in tolerance_rows:
         if ev.id not in events_map and len(events_map) < 15:
-            events_map[ev.id] = (ev, score)
+            events_map[ev.id] = (ev, score + _calculate_domain_bonus(ev, profile))
     if len(events_map) >= profile.target_events_count:
         return events_map
 
@@ -413,7 +440,7 @@ async def _fetch_filtered_events_map(
     )
     for ev, score in relaxed_rows:
         if ev.id not in events_map and len(events_map) < 15:
-            events_map[ev.id] = (ev, score * 0.85)
+            events_map[ev.id] = (ev, (score + _calculate_domain_bonus(ev, profile)) * 0.85)
     return events_map
 
 
@@ -425,12 +452,18 @@ async def get_scored_candidates(
     """
     Собирает ранжированных кандидатов с тарифами через гибридный поиск RRF.
     Строго соблюдает географический фильтр и Quality Gate на уровне SQL.
+    При сбое сервиса эмбеддингов выполняет плавный переход (graceful fallback) на FTS-ранжирование.
     """
+    query_vec: list[float] | None = None
     try:
         query_vec = await get_embedding(profile.semantic_search_query)
-    except (RuntimeError, APIError, httpx.HTTPError):
-        logger.exception("Ошибка получения эмбеддинга поискового запроса в matcher")
-        raise
+    except (RuntimeError, APIError, httpx.HTTPError, TimeoutError, ValueError):
+        logger.warning(
+            "Не удалось получить эмбеддинг для запроса %r, переключаемся на FTS-only поиск",
+            profile.semantic_search_query,
+            exc_info=True,
+        )
+        query_vec = None
 
     events_map = await _fetch_filtered_events_map(
         session, profile, query_vec, build_fts_or_query(profile), today
@@ -440,14 +473,14 @@ async def get_scored_candidates(
 
     tariffs_by_event = await _load_tariffs_by_event(session, list(events_map.keys()), today)
     candidates: list[ScoredEventCandidate] = []
-    for ev_id, (ev, base_rrf) in events_map.items():
+    for ev_id, (ev, total_rrf) in events_map.items():
         all_t = tariffs_by_event.get(ev_id, [])
         if not all_t:
             continue
         candidates.append(
             ScoredEventCandidate(
                 event=ev,
-                rrf_score=base_rrf + _calculate_domain_bonus(ev, profile),
+                rrf_score=total_rrf,
                 all_tariffs=all_t,
                 priced_tariffs=[t for t in all_t if t.actual_price is not None],
                 on_request_tariffs=[t for t in all_t if t.actual_price is None],
@@ -586,7 +619,7 @@ def evaluate_candidate_tuple(
         return []
 
     k = len(combo)
-    s_needed = max(0, min_speaker_events)
+    s_needed = 1 if list(required_roles) == ["speaker"] and min_speaker_events == 0 else max(0, min_speaker_events)
     if s_needed > k:
         return []
 
@@ -697,7 +730,12 @@ def _select_second_variant(
 ) -> EvaluatedCombo | None:
     """Подбирает диверсифицированный Вариант №2 (оптимальный по экономии бюджета или альтернативный состав)."""
     v1_ids = {c.event.id for c in variant_1.candidates}
-    distinct_pool = [c for c in candidate_pool if {x.event.id for x in c.candidates} != v1_ids]
+    distinct_pool = [
+        c
+        for c in candidate_pool
+        if {x.event.id for x in c.candidates} != v1_ids
+        and not ({x.event.id for x in c.candidates} < v1_ids)
+    ]
     if not distinct_pool:
         return None
 
@@ -786,14 +824,20 @@ def build_bundles(
     target_k = min(profile.target_events_count, len(priced_pool))
     strict_by_k, tolerance_by_k = _collect_valid_combos(priced_pool, profile, target_k)
 
-    variant_1 = _pick_best_combo_from_buckets(strict_by_k, target_k) or _pick_best_combo_from_buckets(
-        tolerance_by_k, target_k
-    )
+    if strict_by_k[target_k]:
+        strict_by_k[target_k].sort(key=_v1_priority_key, reverse=True)
+        variant_1: EvaluatedCombo | None = strict_by_k[target_k][0]
+    elif tolerance_by_k[target_k]:
+        tolerance_by_k[target_k].sort(key=_v1_priority_key, reverse=True)
+        variant_1 = tolerance_by_k[target_k][0]
+    else:
+        variant_1 = _pick_best_combo_from_buckets(strict_by_k, target_k) or _pick_best_combo_from_buckets(
+            tolerance_by_k, target_k
+        )
     if variant_1 is None:
         return [], _select_bonus_on_request_pairs(candidates, profile, set(), limit=2)
 
     selected_variants: list[EvaluatedCombo] = [variant_1]
-    v1_event_ids = {c.event.id for c in variant_1.candidates}
     v2_pool = _build_v2_candidate_pool(strict_by_k, tolerance_by_k, target_k)
 
     v1_k = len(variant_1.candidates)
@@ -802,7 +846,8 @@ def build_bundles(
     if variant_2 is not None:
         selected_variants.append(variant_2)
 
-    return selected_variants, _select_bonus_on_request_pairs(candidates, profile, v1_event_ids, limit=2)
+    selected_event_ids = {c.event.id for var in selected_variants for c in var.candidates}
+    return selected_variants, _select_bonus_on_request_pairs(candidates, profile, selected_event_ids, limit=2)
 
 
 def build_fallback_pitch(

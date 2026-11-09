@@ -12,12 +12,13 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
-from app.core.database import get_async_session
+from app.core.constants import normalize_city
+from app.core.database import async_session_maker, get_async_session
 from app.core.security import CurrentManagerDep
 from app.core.timeutils import today_local
 from app.models.models import (
@@ -49,7 +50,12 @@ from app.schemas.manager import (
     TariffOptionOut,
 )
 from app.services.matcher import build_tariff_option, run_client_matching_pipeline
-from app.services.scraper import extract_relevant_pdf_text_sync, ingest_event_from_text
+from app.services.scraper import (
+    CUSTOMER_SOURCES_REGISTRY,
+    ingest_smart_event,
+    run_customer_sources_monitoring,
+)
+from app.services.telegram import format_monitoring_summary_alert, send_manager_alert
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +95,28 @@ def _normalize_selection_status(st: str | None) -> SelectionStatusLiteral | None
     if st == "published":
         return "published"
     return None
+
+
+_is_scraper_running: bool = False
+
+
+async def _execute_background_monitoring(source_key: str | None) -> None:
+    """Фоновый воркер выполнения скрейпинга площадок с атомарным сбросом флага в finally."""
+    global _is_scraper_running
+    try:
+        async with async_session_maker() as session:
+            effective_key = None if source_key == "all" else source_key
+            summary = await run_customer_sources_monitoring(session, source_key=effective_key)
+            logger.info("Мониторинг площадок (%s) успешно завершен: %s", source_key, summary)
+            alert_text = format_monitoring_summary_alert(
+                ready_count=summary.ingested_ready_count,
+                needs_enrichment_titles=summary.needs_enrichment_titles,
+            )
+            await send_manager_alert(alert_text)
+    except Exception:
+        logger.exception("Ошибка при выполнении фонового скрейпинга для источника '%s'", source_key)
+    finally:
+        _is_scraper_running = False
 
 @router.get(
     "/clients",
@@ -451,7 +479,9 @@ async def get_manager_events_catalog(
             if clean_city.lower() in ("онлайн", "online"):
                 ev_stmt = ev_stmt.where(Event.is_online.is_(True))
             else:
-                ev_stmt = ev_stmt.where(Event.city == clean_city)
+                norm_city = normalize_city(clean_city)
+                target_city = norm_city if norm_city else clean_city
+                ev_stmt = ev_stmt.where(Event.city.ilike(target_city))
 
         if event_format is not None:
             ev_stmt = ev_stmt.where(Event.event_format == event_format)
@@ -530,54 +560,48 @@ async def upload_event_material(
     raw_text: Annotated[str | None, Form()] = None,
     source_url: Annotated[str | None, Form()] = None,
 ) -> EventUploadOut:
-    extracted_text = ""
+    pdf_bytes: bytes | None = None
     if file is not None:
-        file_bytes = await file.read()
-        if not file_bytes:
+        pdf_bytes = await file.read()
+        if not pdf_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Загруженный файл пуст.",
             )
-        try:
-            extracted_text, _ = extract_relevant_pdf_text_sync(file_bytes)
-        except Exception as exc:
-            logger.error("Ошибка парсинга PDF через PyMuPDF: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Не удалось распарсить PDF-файл: {exc}",
-            ) from exc
-    elif raw_text and raw_text.strip():
-        extracted_text = raw_text.strip()
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Необходимо передать либо PDF-файл, либо текстовый конспект/регламент.",
-        )
 
-    if len(extracted_text) < 50:
+    has_raw = bool(raw_text and raw_text.strip())
+    has_url = bool(source_url and source_url.strip())
+    if not pdf_bytes and not has_raw and not has_url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Объем извлеченного текста недостаточен для формирования карточки мероприятия (<50 символов).",
+            detail="Необходимо передать либо PDF-файл, либо текстовый конспект/регламент, либо ссылку на карточку мероприятия.",
         )
 
     try:
-        event = await ingest_event_from_text(
+        event = await ingest_smart_event(
             session=db,
-            raw_dossier_text=extracted_text,
-            source_url=source_url,
+            source_url=source_url.strip() if source_url and source_url.strip() else None,
+            raw_text=raw_text.strip() if raw_text and raw_text.strip() else None,
+            pdf_bytes=pdf_bytes,
         )
-        tariffs_res = await db.execute(
-            select(EventTariff).where(EventTariff.event_id == event.id)
-        )
-        tariffs = tariffs_res.scalars().all()
+        tariffs_count = await db.scalar(
+            select(func.count(EventTariff.id)).where(EventTariff.event_id == event.id)
+        ) or 0
 
         return EventUploadOut(
             event_id=event.id,
             canonical_title=event.canonical_title,
             data_status=event.data_status or "ready",
-            tariffs_count=len(tariffs),
+            tariffs_count=tariffs_count,
             message="Мероприятие успешно импортировано и сохранено в базе знаний.",
         )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
         logger.error("Ошибка структурирования и сохранения события: %s", exc)
         raise HTTPException(
@@ -597,15 +621,24 @@ async def run_scraper_endpoint(
     background_tasks: BackgroundTasks,
     current_manager: CurrentManagerDep,
 ) -> ScraperRunOut:
-    valid_sources = {
-        "vedomosti", "rbc", "kommersant", "architime",
-        "erz", "bfm", "tdaily", "tadviser", "events_spb",
-    }
+    global _is_scraper_running
+
+    valid_sources = {s.source_key for s in CUSTOMER_SOURCES_REGISTRY} | {"all"}
     if payload.source_key not in valid_sources:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Неизвестный источник '{payload.source_key}'. Допустимые: {', '.join(sorted(valid_sources))}",
         )
+
+    if _is_scraper_running:
+        return ScraperRunOut(
+            source_key=payload.source_key,
+            status="queued",
+            message="Задача мониторинга уже выполняется или поставлена в очередь. Повторный запуск отклонен.",
+        )
+
+    _is_scraper_running = True
+    background_tasks.add_task(_execute_background_monitoring, payload.source_key)
 
     return ScraperRunOut(
         source_key=payload.source_key,

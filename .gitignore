@@ -89,7 +89,6 @@ architecture_diagram*
 docs/
 *.md
 !README.md
-!STARTUP_GUIDE.md
 !USAGE_GUIDE.md
 backend/tests/*.md
 backend/alembic/README
@@ -101,6 +100,4 @@ backend/alembic/README
 /logo.png
 
 # Audit & diagnostic dumps
-complexity_report.txt
-dead_code.txt
 repo_structure.txt
