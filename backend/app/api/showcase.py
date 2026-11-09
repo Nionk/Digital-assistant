@@ -88,7 +88,7 @@ def _normalize_reaction(reaction: str | None) -> ShowcaseReaction:
         "Возвращает сопроводительное письмо, сводную плашку бюджета, карточки мероприятий и чипсы быстрых вопросов FAQ."
     ),
 )
-# [AUDIT-CRUTCH]: Высокая цикломатическая сложность (ранг D в complexity_report.txt).
+
 async def get_public_showcase(
     magic_token: UUID,
     db: AsyncSessionDep,
@@ -294,7 +294,7 @@ async def get_public_showcase(
         "и отправляет уведомление персональному менеджеру в Telegram."
     ),
 )
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt).
+
 async def react_to_showcase_item(
     magic_token: UUID,
     item_id: int,
