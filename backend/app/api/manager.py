@@ -127,7 +127,7 @@ async def _execute_background_monitoring(source_key: str | None) -> None:
         "и панель срочных алертов по мероприятиям с активными скидками раннего бронирования (Early Bird)."
     ),
 )
-# [AUDIT-CRUTCH]: Повышенная цикломатическая сложность (ранг C в complexity_report.txt) и неиспользуемый аргумент current_manager (dead_code.txt:209).
+
 async def get_manager_clients(
     current_manager: CurrentManagerDep,
     db: AsyncSessionDep,
@@ -242,7 +242,7 @@ async def get_manager_clients(
         "и бонусный слот 'Цена по запросу', генерирует текст КП и сохраняет черновик в БД."
     ),
 )
-# [AUDIT-BACKDOOR]: Аргумент current_manager не используется (dead_code.txt:337) — не проверяется принадлежность client_id текущему менеджеру (IDOR).
+
 async def match_events_for_client(
     client_id: int,
     payload: MatchRequestIn,
@@ -447,8 +447,6 @@ async def publish_selection(
         "конференции, круглые столы) с доступными тарифами и актуальными условиями Early Bird."
     ),
 )
-# [AUDIT-STUB]: В роутере manager.py отсутствуют 4 обязательных эндпоинта из раздела 11.4 artifact.md (POST /events/upload-pdf, POST /scraper/run, GET /selections/{id}/activity, POST /selections/{id}/reply), а в GET /events нет параметров фильтрации по городу, датам, форматам и data_status.
-# [AUDIT-CRUTCH]: Неиспользуемый аргумент current_manager (dead_code.txt:502).
 async def get_manager_events_catalog(
     current_manager: CurrentManagerDep,
     db: AsyncSessionDep,
