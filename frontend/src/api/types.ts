@@ -1,220 +1,165 @@
+import type { components } from "./schema";
+
+type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
+
 /**
- * Строгие TypeScript-контракты, на 100% синхронизированные с openapi.json (Pydantic v2).
+ * Доменные TypeScript-контракты поверх автосгенерированной OpenAPI-схемы (src/api/schema.d.ts).
+ * Источник правды: backend/openapi.json -> npm run gen:api.
+ *
+ * Примечание: FastAPI/Pydantic v2 при сериализации ответов всегда включает все поля
+ * (включая значения `null` и пустые списки), поэтому для *Out-схем используется Required<...>,
+ * тогда как *In-схемы сохраняют точные необязательные поля из OpenAPI.
  */
 
-// [AUDIT-CRUTCH]: Типы написаны и поддерживаются вручную вместо автогенерации через openapi-typescript (нарушение раздела 11.4 artifact.md и .cursorrules); часть полей (website_url, EscalateQuestion*) расходится с корневым openapi.json.
-export type EventFormat =
-  | "roundtable"
-  | "business_breakfast"
-  | "forum"
-  | "conference"
-  | "session";
+export type EventFormat = Schema<"CatalogEventItemOut">["event_format"];
 
-export type ParticipationRole = "delegate" | "speaker" | "sponsor";
+export type ParticipationRole = Schema<"TariffOptionOut">["participation_role"];
 
-export type SelectionStatus = "draft" | "published";
+export type EventDataStatus = Schema<"CatalogEventItemOut">["data_status"];
 
-export type ClientReactionStatus = "pending" | "interested" | "rejected";
+export type SelectionStatus = NonNullable<
+  Schema<"ClientSummaryOut">["latest_selection_status"]
+>;
 
-export interface BurningDeadlineOut {
-  event_id: number;
-  event_title: string;
-  early_bird_deadline: string; // YYYY-MM-DD
-  potential_savings: number;
-}
+export type ClientReactionStatus =
+  Schema<"ShowcaseEventItemOut">["client_reaction"];
 
-export interface ClientSummaryOut {
-  id: number;
-  company_name: string;
-  contact_person: string | null;
-  raw_manager_notes: string;
-  latest_selection_id: number | null;
-  latest_selection_status: SelectionStatus | null;
-  magic_token: string | null; // UUIDv4
-}
+export type ProfileSource = Schema<"ClientQueryExtracted">["profile_source"];
 
-export interface ManagerDashboardOut {
+export type ScraperSourceKey = Schema<"ScraperRunIn">["source_key"];
+
+export type ScraperRunStatus = Schema<"ScraperRunOut">["status"];
+
+export type ChatSenderRole = Schema<"ShowcaseChatMessageOut">["sender_role"];
+
+// ---- Авторизация (/api/auth/*) ----
+export type LoginRequestIn = Schema<"LoginRequestIn">;
+export type ManagerUser = Required<Schema<"ManagerUser">>;
+export type TokenOut = Omit<Required<Schema<"TokenOut">>, "user"> & {
+  user: ManagerUser;
+};
+
+// ---- Кабинет менеджера (/api/manager/*) ----
+export type BurningDeadlineOut = Required<Schema<"BurningDeadlineOut">>;
+export type ClientSummaryOut = Required<Schema<"ClientSummaryOut">>;
+export type ManagerDashboardOut = {
   clients: ClientSummaryOut[];
   burning_deadlines: BurningDeadlineOut[];
-}
+};
 
-export interface TariffOptionOut {
-  tariff_id: number;
-  tariff_name: string;
-  participation_role: ParticipationRole;
-  base_price: number | null; // null = По запросу
-  early_bird_price: number | null;
-  early_bird_deadline: string | null; // YYYY-MM-DD
-  actual_price: number | null;
-  savings: number;
-  included_benefits: string | null;
-}
+export type TariffOptionOut = Required<Schema<"TariffOptionOut">>;
 
-export interface CatalogEventItemOut {
-  event_id: number;
-  canonical_title: string;
-  event_format: EventFormat;
-  city: string | null;
-  is_online: boolean;
-  venue: string | null;
-  start_date: string;
-  end_date: string;
-  summary: string;
-  themes: string[];
+export type CatalogEventItemOut = Omit<
+  Required<Schema<"CatalogEventItemOut">>,
+  "tariffs"
+> & {
   tariffs: TariffOptionOut[];
-  website_url?: string | null;
-}
+};
 
-export interface ManagerEventsCatalogOut {
+export type ManagerEventsCatalogOut = {
   total_count: number;
   events: CatalogEventItemOut[];
+};
+
+export interface CatalogEventsFilterParams {
+  city?: string | null;
+  event_format?: EventFormat | null;
+  data_status?: EventDataStatus | null;
+  date_from?: string | null;
+  date_to?: string | null;
 }
 
-export interface ClientQueryExtracted {
-  cities: string[];
-  include_online: boolean;
-  date_from: string | null;
-  date_to: string | null;
-  total_budget_max: number;
-  target_events_count: number;
-  preferred_formats: EventFormat[];
-  required_roles: ParticipationRole[];
-  min_speaker_events: number;
-  themes_keywords: string[];
-  semantic_search_query: string;
+export interface EventUploadIn {
+  file?: File | null;
+  raw_text?: string | null;
+  source_url?: string | null;
 }
 
-export interface MatchRequestIn {
+export type EventUploadOut = Required<Schema<"EventUploadOut">>;
+
+export type ScraperRunIn = Schema<"ScraperRunIn">;
+export type ScraperRunOut = Required<Schema<"ScraperRunOut">>;
+
+export type ClientQueryExtracted = Required<Schema<"ClientQueryExtracted">>;
+
+export type MatchRequestIn = {
   raw_manager_notes: string;
   override_profile?: ClientQueryExtracted | null;
-}
+};
 
-export interface BundleEventItemOut {
-  event_id: number;
-  canonical_title: string;
-  event_format: EventFormat;
-  city: string | null;
-  is_online: boolean;
-  venue: string | null;
-  start_date: string;
-  end_date: string;
-  themes: string[];
+export type BundleEventItemOut = Omit<
+  Required<Schema<"BundleEventItemOut">>,
+  "recommended_tariff" | "available_tariffs"
+> & {
   recommended_tariff: TariffOptionOut;
   available_tariffs: TariffOptionOut[];
-  ai_rationale: string;
-  website_url?: string | null;
-}
+};
 
-export interface BundleVariantOut {
-  bundle_group: number; // 1 или 2
-  bundle_title: string;
+export type BundleVariantOut = Omit<
+  Required<Schema<"BundleVariantOut">>,
+  "items"
+> & {
   items: BundleEventItemOut[];
-  total_actual_price: number;
-  total_base_price: number;
-  total_savings: number;
-  earliest_deadline: string | null;
-  is_over_budget_tolerance: boolean;
-}
+};
 
-export interface MatchResponseOut {
-  selection_id: number;
-  client_id: number;
+export type MatchResponseOut = Omit<
+  Required<Schema<"MatchResponseOut">>,
+  "extracted_profile" | "bundle_variants" | "bonus_on_request_items"
+> & {
   extracted_profile: ClientQueryExtracted;
   bundle_variants: BundleVariantOut[];
   bonus_on_request_items: BundleEventItemOut[];
-  generated_pitch_text: string;
-}
+};
 
-export interface SelectedEventTariffPairIn {
-  event_id: number;
-  tariff_id: number;
-  ai_rationale?: string | null;
-}
-
-export interface PublishSelectionIn {
+export type SelectedEventTariffPairIn = Schema<"SelectedEventTariffPairIn">;
+// TODO(Этап 2): после сужения selectedVariantGroupByClient в useManagerStore до 1 | 2 заменить напрямую на Schema<"PublishSelectionIn">
+export type PublishSelectionIn = Omit<
+  Schema<"PublishSelectionIn">,
+  "selected_bundle_group"
+> & {
   selected_bundle_group: number;
-  final_items: SelectedEventTariffPairIn[];
-  final_pitch_text: string;
-}
+};
+export type PublishSelectionOut = Required<Schema<"PublishSelectionOut">>;
 
-export interface PublishSelectionOut {
+export type SelectionItemReactionActivity = Required<
+  Schema<"SelectionItemReactionActivity">
+>;
+export type SelectionQuestionActivity = Required<
+  Schema<"SelectionQuestionActivity">
+>;
+export type SelectionActivityOut = {
   selection_id: number;
-  status: "published";
-  magic_token: string;
-  public_showcase_url: string;
-  total_package_price: number;
-  total_package_savings: number;
-}
+  reactions: SelectionItemReactionActivity[];
+  pending_questions: SelectionQuestionActivity[];
+};
 
-export interface ShowcaseEventItemOut {
-  selection_item_id: number;
-  event_id: number;
-  canonical_title: string;
-  event_format: string;
-  city: string | null;
-  is_online: boolean;
-  venue: string | null;
-  start_date: string;
-  end_date: string;
-  summary: string;
-  themes: string[];
-  tariff_name: string;
-  participation_role: ParticipationRole;
-  actual_price: number | null;
-  base_price: number | null;
-  early_bird_deadline: string | null;
-  savings: number;
-  included_benefits: string | null;
-  ai_rationale: string;
-  client_reaction: ClientReactionStatus;
-  client_comment: string | null;
-}
+export type ManagerReplyIn = Schema<"ManagerReplyIn">;
+export type ManagerReplyOut = Required<Schema<"ManagerReplyOut">>;
 
-export interface ShowcaseViewOut {
-  selection_id: number;
-  company_name: string;
-  manager_full_name: string;
-  pitch_text: string;
-  total_events_count: number;
-  total_actual_price: number;
-  total_savings: number;
-  min_early_bird_deadline: string | null;
+// ---- Публичная витрина клиента (/api/public/s/{magic_token}/*) ----
+export type ShowcaseChatMessageOut = Required<Schema<"ShowcaseChatMessageOut">>;
+
+export type ShowcaseEventItemOut = Omit<
+  Required<Schema<"ShowcaseEventItemOut">>,
+  "chat_messages"
+> & {
+  chat_messages: ShowcaseChatMessageOut[];
+};
+
+export type ShowcaseViewOut = Omit<
+  Required<Schema<"ShowcaseViewOut">>,
+  "items"
+> & {
   items: ShowcaseEventItemOut[];
-  faq_quick_chips: string[];
-}
+};
 
-export interface ClientReactionIn {
-  reaction: "interested" | "rejected";
-  comment?: string | null;
-}
+export type ClientReactionIn = Schema<"ClientReactionIn">;
+export type ClientReactionOut = Required<Schema<"ClientReactionOut">>;
 
-export interface ClientReactionOut {
-  selection_item_id: number;
-  new_reaction: "interested" | "rejected";
-  manager_notified: boolean;
-}
+export type AskRegulationQuestionIn = Schema<"AskRegulationQuestionIn">;
+export type AskRegulationQuestionOut = Required<
+  Schema<"AskRegulationQuestionOut">
+>;
 
-export interface AskRegulationQuestionIn {
-  question_text: string;
-}
-
-export interface AskRegulationQuestionOut {
-  event_id: number;
-  question_text: string;
-  is_answer_found: boolean;
-  answer_text: string;
-  source_quote: string | null;
-  from_cache: boolean;
-  escalated_to_telegram: boolean;
-}
-
-export interface EscalateQuestionIn {
-  question_text: string;
-}
-
-export interface EscalateQuestionOut {
-  event_id: number;
-  question_text: string;
-  success: boolean;
-  message: string;
-}
+export type EscalateQuestionIn = Schema<"EscalateQuestionIn">;
+export type EscalateQuestionOut = Required<Schema<"EscalateQuestionOut">>;
