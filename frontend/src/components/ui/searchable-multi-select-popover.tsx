@@ -120,13 +120,12 @@ export function SearchableMultiSelectPopover({
   // Автофокус на поле поиска при открытии
   React.useEffect(() => {
     if (isOpen) {
-      // [AUDIT-CRUTCH]: Таймер setTimeout запускается в useEffect без возврата функции очистки clearTimeout при размонтировании или быстром закрытии поповера
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);
-    } else {
-      setSearchQuery("");
+      return () => clearTimeout(timer);
     }
+    setSearchQuery("");
   }, [isOpen]);
 
   const toggleValue = (val: string) => {
