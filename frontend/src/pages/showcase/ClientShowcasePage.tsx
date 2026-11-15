@@ -45,8 +45,10 @@ export function ClientShowcasePage() {
     layoutMode,
     roleFilter,
     activeDrawerEventId,
+    drawerInitialTab,
     chatByEventId,
     selectedAgencyServicesByItem,
+    bindMagicToken,
     setLayoutMode,
     setRoleFilter,
     openEventDrawer,
@@ -58,6 +60,21 @@ export function ClientShowcasePage() {
     setExchangeEscalated,
     toggleAgencyServiceForItem,
   } = useShowcaseStore();
+
+  const [escalatingServerId, setEscalatingServerId] = React.useState<
+    string | null
+  >(null);
+  const [escalatedServerIds, setEscalatedServerIds] = React.useState<
+    Record<string, boolean>
+  >({});
+
+  React.useEffect(() => {
+    if (magicToken) {
+      bindMagicToken(magicToken);
+      setEscalatingServerId(null);
+      setEscalatedServerIds({});
+    }
+  }, [magicToken, bindMagicToken]);
 
   // Инициализация Embla Carousel с поддержкой свайпа
   const [emblaRef, emblaApi] = useEmblaCarousel({
@@ -80,9 +97,17 @@ export function ClientShowcasePage() {
     updateScrollButtons();
     emblaApi.on("select", updateScrollButtons);
     emblaApi.on("reInit", updateScrollButtons);
-  }, [emblaApi, updateScrollButtons, roleFilter]);
+    return () => {
+      emblaApi.off("select", updateScrollButtons);
+      emblaApi.off("reInit", updateScrollButtons);
+    };
+  }, [emblaApi, updateScrollButtons, roleFilter, layoutMode]);
 
-  const items = showcase?.items || [];
+  const items = React.useMemo(() => showcase?.items || [], [showcase?.items]);
+
+  const pendingSelectionItemId = reactionMutation.isPending
+    ? (reactionMutation.variables?.selectionItemId ?? null)
+    : null;
 
   const filteredItems = items.filter((item) => {
     if (roleFilter === "all") return true;
@@ -98,12 +123,9 @@ export function ClientShowcasePage() {
     city: item.city,
   }));
 
-  // [AUDIT-CRUTCH]: Фолбэк || items[0] подставляет первое попавшееся мероприятие из пакета, если activeDrawerEventId не найден (например, после пересборки пакета менеджером)
   const activeDrawerEvent = React.useMemo(() => {
     if (!activeDrawerEventId) return null;
-    return (
-      items.find((i) => i.event_id === activeDrawerEventId) || items[0] || null
-    );
+    return items.find((i) => i.event_id === activeDrawerEventId) || null;
   }, [activeDrawerEventId, items]);
 
   const handleReactToItem = async (
@@ -116,7 +138,7 @@ export function ClientShowcasePage() {
         selectionItemId,
         payload: {
           reaction,
-          comment: comment || null,
+          comment: comment !== undefined ? comment : null,
         },
       });
       if (reaction === "interested") {
@@ -158,20 +180,37 @@ export function ClientShowcasePage() {
     }
   };
 
-  const handleEscalateQuestion = async (exchangeId: string, questionText: string) => {
+  const handleEscalateQuestion = async (
+    exchangeId: string,
+    questionText: string
+  ) => {
     if (!activeDrawerEvent) return;
     const eventId = activeDrawerEvent.event_id;
-    setExchangeEscalating(eventId, exchangeId, true);
+    const isServerItem = exchangeId.startsWith("server-");
+    if (isServerItem) {
+      setEscalatingServerId(exchangeId);
+    } else {
+      setExchangeEscalating(eventId, exchangeId, true);
+    }
 
     try {
       await escalateMutation.mutateAsync({
         eventId,
         payload: { question_text: questionText },
       });
-      setExchangeEscalated(eventId, exchangeId);
+      if (isServerItem) {
+        setEscalatingServerId(null);
+        setEscalatedServerIds((prev) => ({ ...prev, [exchangeId]: true }));
+      } else {
+        setExchangeEscalated(eventId, exchangeId);
+      }
       toast.success("Вопрос передан персональному куратору");
     } catch (err) {
-      setExchangeEscalating(eventId, exchangeId, false);
+      if (isServerItem) {
+        setEscalatingServerId(null);
+      } else {
+        setExchangeEscalating(eventId, exchangeId, false);
+      }
       toast.error(
         err instanceof Error
           ? err.message
@@ -424,7 +463,7 @@ export function ClientShowcasePage() {
                             selectedAgencyServices={
                               selectedAgencyServicesByItem[
                                 item.selection_item_id
-                              ] || []
+                              ]
                             }
                             onToggleAgencyService={(tag) =>
                               toggleAgencyServiceForItem(
@@ -439,7 +478,9 @@ export function ClientShowcasePage() {
                                 comment
                               )
                             }
-                            isReacting={reactionMutation.isPending}
+                            isReacting={
+                              pendingSelectionItemId === item.selection_item_id
+                            }
                             onOpenRegulationDrawer={(initialQuestion) =>
                               handleOpenRegulationDrawerForCard(
                                 item.event_id,
@@ -465,8 +506,7 @@ export function ClientShowcasePage() {
                         key={item.selection_item_id}
                         item={item}
                         selectedAgencyServices={
-                          selectedAgencyServicesByItem[item.selection_item_id] ||
-                          []
+                          selectedAgencyServicesByItem[item.selection_item_id]
                         }
                         onToggleAgencyService={(tag) =>
                           toggleAgencyServiceForItem(
@@ -481,7 +521,9 @@ export function ClientShowcasePage() {
                             comment
                           )
                         }
-                        isReacting={reactionMutation.isPending}
+                        isReacting={
+                          pendingSelectionItemId === item.selection_item_id
+                        }
                         onOpenRegulationDrawer={(initialQuestion) =>
                           handleOpenRegulationDrawerForCard(
                             item.event_id,
@@ -534,7 +576,8 @@ export function ClientShowcasePage() {
         onClose={closeEventDrawer}
         events={items}
         activeEvent={activeDrawerEvent}
-        onSelectEvent={(evId) => openEventDrawer(evId, "regulation")}
+        initialTab={drawerInitialTab}
+        onSelectEvent={(evId) => openEventDrawer(evId, drawerInitialTab)}
         faqQuickChips={showcase.faq_quick_chips}
         exchanges={
           activeDrawerEvent
@@ -548,11 +591,21 @@ export function ClientShowcasePage() {
         }}
         isAsking={askMutation.isPending}
         managerFullName={showcase.manager_full_name}
-        onApproveEvent={(ev) =>
-          handleReactToItem(ev.selection_item_id, "interested")
+        onApproveEvent={(ev) => {
+          const services = selectedAgencyServicesByItem[ev.selection_item_id];
+          const approvalComment =
+            services && services.length > 0
+              ? `Опции сопровождения: ${services.join("; ")}`
+              : undefined;
+          handleReactToItem(ev.selection_item_id, "interested", approvalComment);
+        }}
+        isReacting={
+          activeDrawerEvent !== null &&
+          pendingSelectionItemId === activeDrawerEvent.selection_item_id
         }
-        isReacting={reactionMutation.isPending}
         onEscalateQuestion={handleEscalateQuestion}
+        escalatingExchangeId={escalatingServerId}
+        escalatedServerIds={escalatedServerIds}
       />
       </div>
     </div>
