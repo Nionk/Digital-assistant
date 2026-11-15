@@ -2,6 +2,7 @@ import datetime
 import logging
 from typing import Annotated, Literal
 
+import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -464,13 +465,16 @@ async def get_manager_events_catalog(
     events_out: list[CatalogEventItemOut] = []
 
     try:
-        ev_stmt = select(Event).where(
-            (Event.is_active.is_(True)) | (Event.data_status == "needs_enrichment")
-        )
+        ev_stmt = select(Event)
         if data_status is not None:
             ev_stmt = ev_stmt.where(Event.data_status == data_status)
+            if data_status == "ready":
+                ev_stmt = ev_stmt.where(Event.is_active.is_(True))
         else:
-            ev_stmt = ev_stmt.where(Event.data_status != "archived")
+            ev_stmt = ev_stmt.where(
+                (Event.is_active.is_(True)) | (Event.data_status == "needs_enrichment"),
+                Event.data_status != "archived",
+            )
 
         if city is not None and city.strip():
             clean_city = city.strip()
@@ -595,6 +599,17 @@ async def upload_event_material(
         )
     except HTTPException:
         raise
+    except httpx.InvalidURL as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Передан некорректный URL источника: {exc}",
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("Ошибка загрузки внешнего URL при импорте события: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Не удалось загрузить страницу мероприятия по указанному URL.",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
