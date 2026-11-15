@@ -13,10 +13,10 @@ import {
   Sparkles,
   Copy,
 } from "lucide-react";
-import { toast } from "sonner";
 import type { ShowcaseEventItemOut } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   AGENCY_SERVICES_STAGE_09,
   FORMAT_SHORT_LABELS,
@@ -29,9 +29,64 @@ import {
 import { getEventCoverVisual } from "@/lib/eventCovers";
 import { cn } from "@/lib/utils";
 
+const ACCOMPANIMENT_PREFIX_RE =
+  /^(?:Сопровождение агентства \(Этап 09\)|Опции сопровождения):\s*(.+)$/i;
+const KNOWN_STAGE_09_TAGS = new Set<string>(
+  AGENCY_SERVICES_STAGE_09.map((srv) => srv.shortTag)
+);
+
+function parseClientComment(raw: string | null | undefined): {
+  freeNote: string;
+  parsedServices: string[];
+} {
+  if (!raw) return { freeNote: "", parsedServices: [] };
+  const freeLines: string[] = [];
+  const parsedServices: string[] = [];
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(ACCOMPANIMENT_PREFIX_RE);
+    if (match) {
+      const rawTags = match[1]
+        .split(/[;,]\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const tok of rawTags) {
+        const canonicalTag = KNOWN_STAGE_09_TAGS.has(tok) ? tok : tok;
+        if (!parsedServices.includes(canonicalTag)) {
+          parsedServices.push(canonicalTag);
+        }
+      }
+    } else if (!/^Участие по базовому тарифу$/i.test(trimmed)) {
+      freeLines.push(trimmed);
+    }
+  }
+
+  return {
+    freeNote: freeLines.join("\n"),
+    parsedServices,
+  };
+}
+
+function formatReactionComment(
+  services: string[],
+  freeNote?: string | null
+): string | undefined {
+  const parts: string[] = [];
+  const cleanedNote = (freeNote || "").trim();
+  if (cleanedNote) {
+    parts.push(cleanedNote);
+  }
+  if (services.length > 0) {
+    parts.push(`Опции сопровождения: ${services.join("; ")}`);
+  }
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
 interface ShowcaseEventCardProps {
   item: ShowcaseEventItemOut;
-  selectedAgencyServices: string[];
+  selectedAgencyServices: string[] | undefined;
   onToggleAgencyService: (serviceTag: string) => void;
   onReact: (reaction: "interested" | "rejected", comment?: string) => void;
   isReacting: boolean;
@@ -46,16 +101,92 @@ export function ShowcaseEventCard({
   isReacting,
   onOpenRegulationDrawer,
 }: ShowcaseEventCardProps) {
+  const parsedComment = React.useMemo(
+    () => parseClientComment(item.client_comment),
+    [item.client_comment]
+  );
+
   const [activeExpandPanel, setActiveExpandPanel] = React.useState<
     "none" | "accompaniment" | "replace"
   >("none");
   const [replaceComment, setReplaceComment] = React.useState(
-    item.client_reaction === "rejected" && item.client_comment
-      ? item.client_comment
-      : ""
+    item.client_reaction === "rejected" ? parsedComment.freeNote : ""
   );
+  const [interestedNote, setInterestedNote] = React.useState(
+    item.client_reaction === "interested" ? parsedComment.freeNote : ""
+  );
+  const [hasClearedInitialServices, setHasClearedInitialServices] =
+    React.useState(false);
   const [imageError, setImageError] = React.useState(false);
   const [copiedAddress, setCopiedAddress] = React.useState(false);
+
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevRejectedNoteRef = React.useRef(
+    item.client_reaction === "rejected" ? parsedComment.freeNote : ""
+  );
+  const prevInterestedNoteRef = React.useRef(
+    item.client_reaction === "interested" ? parsedComment.freeNote : ""
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const nextRejectedNote =
+      item.client_reaction === "rejected" ? parsedComment.freeNote : "";
+    if (nextRejectedNote !== prevRejectedNoteRef.current) {
+      prevRejectedNoteRef.current = nextRejectedNote;
+      if (activeExpandPanel !== "replace") {
+        setReplaceComment(nextRejectedNote);
+      }
+    }
+
+    const nextInterestedNote =
+      item.client_reaction === "interested" ? parsedComment.freeNote : "";
+    if (nextInterestedNote !== prevInterestedNoteRef.current) {
+      prevInterestedNoteRef.current = nextInterestedNote;
+      if (activeExpandPanel !== "accompaniment") {
+        setInterestedNote(nextInterestedNote);
+      }
+    }
+  }, [item.client_reaction, parsedComment.freeNote, activeExpandPanel]);
+
+  React.useEffect(() => {
+    if (selectedAgencyServices !== undefined) {
+      setHasClearedInitialServices(false);
+    }
+  }, [selectedAgencyServices]);
+
+  const effectiveAgencyServices = React.useMemo(() => {
+    if (selectedAgencyServices !== undefined) return selectedAgencyServices;
+    if (hasClearedInitialServices) return [];
+    return parsedComment.parsedServices;
+  }, [
+    selectedAgencyServices,
+    hasClearedInitialServices,
+    parsedComment.parsedServices,
+  ]);
+
+  const handleToggleService = (serviceTag: string) => {
+    if (selectedAgencyServices !== undefined) {
+      onToggleAgencyService(serviceTag);
+      return;
+    }
+    const next = effectiveAgencyServices.includes(serviceTag)
+      ? effectiveAgencyServices.filter((t) => t !== serviceTag)
+      : [...effectiveAgencyServices, serviceTag];
+    if (next.length === 0) {
+      setHasClearedInitialServices(true);
+      return;
+    }
+    setHasClearedInitialServices(false);
+    for (const tag of next) {
+      onToggleAgencyService(tag);
+    }
+  };
 
   const cal = formatCalendarBadge(item.start_date, item.end_date);
   const cover = getEventCoverVisual(item.event_id, item.event_format);
@@ -66,30 +197,29 @@ export function ShowcaseEventCard({
   const isInterested = item.client_reaction === "interested";
   const isRejected = item.client_reaction === "rejected";
 
-  // Убираем технический префикс при отображении комментария клиенту
-  // [AUDIT-CRUTCH]: Костыльное хранение выбранных B2B-услуг сопровождения (Этап 09) прямо внутри текстового поля client_comment через префикс «Опции сопровождения: » вместо отдельного поля БД, что затирает текстовый комментарий клиента
   const cleanClientComment = React.useMemo(() => {
-    if (!item.client_comment) return null;
-    return item.client_comment
-      .replace(/^Сопровождение агентства \(Этап 09\):\s*/i, "")
-      .replace(/^Опции сопровождения:\s*/i, "");
-  }, [item.client_comment]);
+    if (parsedComment.freeNote) return parsedComment.freeNote;
+    if (!isInterested && parsedComment.parsedServices.length > 0) {
+      return parsedComment.parsedServices.join(", ");
+    }
+    return null;
+  }, [parsedComment, isInterested]);
 
-  // [AUDIT-FAKE]: Вызов navigator.clipboard.writeText без await и без обработки ошибок с безусловным показом toast.success("Адрес скопирован в буфер")
-  const handleCopyAddress = (e: React.MouseEvent) => {
+  const handleCopyAddress = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const addressToCopy = item.venue
       ? `${item.venue}${item.city ? `, ${item.city}` : ""}`
       : item.city || (item.is_online ? "Онлайн-мероприятие" : "Россия");
 
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(addressToCopy);
-      setCopiedAddress(true);
-      toast.success("Адрес скопирован в буфер", {
-        description: addressToCopy,
-      });
-      setTimeout(() => setCopiedAddress(false), 2200);
-    }
+    const ok = await copyTextToClipboard(addressToCopy, {
+      successMessage: `Адрес скопирован: ${addressToCopy}`,
+    });
+    if (!ok) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    setCopiedAddress(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedAddress(false);
+    }, 2200);
   };
 
   const handleApproveClick = () => {
@@ -99,19 +229,17 @@ export function ShowcaseEventCard({
       );
       return;
     }
-    const comment =
-      selectedAgencyServices.length > 0
-        ? `Опции сопровождения: ${selectedAgencyServices.join(", ")}`
-        : undefined;
+    const comment = formatReactionComment(
+      effectiveAgencyServices,
+      interestedNote
+    );
     onReact("interested", comment);
     setActiveExpandPanel("accompaniment");
   };
 
   const handleSendAccompanimentUpdate = () => {
     const comment =
-      selectedAgencyServices.length > 0
-        ? `Опции сопровождения: ${selectedAgencyServices.join(", ")}`
-        : "Участие по базовому тарифу";
+      formatReactionComment(effectiveAgencyServices, interestedNote) ?? "";
     onReact("interested", comment);
     setActiveExpandPanel("none");
   };
@@ -434,8 +562,8 @@ export function ShowcaseEventCard({
                 strokeWidth={1.75}
               />
               <span>
-                {selectedAgencyServices.length > 0
-                  ? `Выбрана помощь агентства (${selectedAgencyServices.length})`
+                {effectiveAgencyServices.length > 0
+                  ? `Выбрана помощь агентства (${effectiveAgencyServices.length})`
                   : "Помощь агентства на мероприятии"}
               </span>
               <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={1.75} />
@@ -486,7 +614,7 @@ export function ShowcaseEventCard({
 
                 <div className="mt-2.5 space-y-1.5">
                   {AGENCY_SERVICES_STAGE_09.map((srv) => {
-                    const checked = selectedAgencyServices.includes(
+                    const checked = effectiveAgencyServices.includes(
                       srv.shortTag
                     );
                     return (
@@ -502,7 +630,7 @@ export function ShowcaseEventCard({
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => onToggleAgencyService(srv.shortTag)}
+                          onChange={() => handleToggleService(srv.shortTag)}
                           className="mt-0.5 h-3.5 w-3.5 rounded accent-[#34D399]"
                         />
                         <div className="min-w-0 flex-1">
@@ -518,12 +646,21 @@ export function ShowcaseEventCard({
                   })}
                 </div>
 
+                <input
+                  type="text"
+                  value={interestedNote}
+                  onChange={(e) => setInterestedNote(e.target.value)}
+                  placeholder="Комментарий куратору (необязательно)..."
+                  className="mt-2.5 h-8 w-full rounded-[6px] border border-[#1E5241]/70 bg-[#0A1914] px-2.5 text-xs text-white placeholder:text-[#6B8F82] focus:border-[#34D399] focus:outline-none"
+                />
+
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={isReacting}
                   onClick={handleSendAccompanimentUpdate}
-                  className="mt-3 w-full border-[#2B6E58] bg-[#14382D] text-xs font-semibold text-[#34D399] hover:bg-[#194638] hover:text-white cursor-pointer"
+                  className="mt-2.5 w-full border-[#2B6E58] bg-[#14382D] text-xs font-semibold text-[#34D399] hover:bg-[#194638] hover:text-white cursor-pointer"
                 >
                   <Check className="h-3.5 w-3.5" strokeWidth={2.25} />
                   <span>Сохранить выбранные опции</span>
@@ -563,11 +700,12 @@ export function ShowcaseEventCard({
                     <button
                       key={reason}
                       type="button"
+                      disabled={isReacting}
                       onClick={() => {
                         setReplaceComment(reason);
                         handleSubmitReplacement(reason);
                       }}
-                      className="rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] transition-colors hover:border-[#5E2242] hover:bg-[#28131E] hover:text-[#F472B6] cursor-pointer"
+                      className="rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] transition-colors hover:border-[#5E2242] hover:bg-[#28131E] hover:text-[#F472B6] disabled:opacity-50 cursor-pointer"
                     >
                       {reason}
                     </button>
@@ -586,6 +724,7 @@ export function ShowcaseEventCard({
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={isReacting}
                     onClick={() => handleSubmitReplacement()}
                     className="border-[#5E2242] bg-[#28131E] text-[#F472B6] hover:bg-[#381a2b] cursor-pointer"
                   >
