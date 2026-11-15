@@ -1,7 +1,7 @@
 import { Layers, Check } from "lucide-react";
 import type { ShowcaseViewOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
-import { formatDateShort, formatRub } from "@/lib/formatters";
+import { formatDateShort, formatRub, pluralizeRu } from "@/lib/formatters";
 import logoImage from "@/assets/images/logo.png";
 
 interface ShowcaseExecutiveHeaderProps {
@@ -15,11 +15,18 @@ export function ShowcaseExecutiveHeader({
     (i) => i.client_reaction === "interested"
   ).length;
 
-  // [AUDIT-CRUTCH]: Подсчет базовой стоимости (totalBasePrice) суммирует 0 для спецпроектов «По запросу» (actual_price = null) и не выводит пометку «+ спецпроект по запросу» рядом с итоговой суммой в шапке витрины
-  const totalBasePrice = showcase.items.reduce(
-    (acc, item) => acc + (item.base_price ?? item.actual_price ?? 0),
-    0
-  );
+  const onRequestCount = showcase.items.filter(
+    (item) => item.actual_price === null
+  ).length;
+  const onlyOnRequest =
+    onRequestCount > 0 &&
+    onRequestCount === showcase.items.length &&
+    showcase.total_actual_price === 0;
+
+  const totalBasePrice = showcase.items.reduce((acc, item) => {
+    if (item.actual_price === null) return acc;
+    return acc + (item.base_price ?? item.actual_price);
+  }, 0);
 
   // Извлекаем чистое имя куратора и инициалы для персонального бейджа
   const rawName = showcase.manager_full_name || "Анна Соколова";
@@ -150,11 +157,31 @@ export function ShowcaseExecutiveHeader({
                     )}
                 </div>
 
-                <div className="mt-1 flex items-baseline gap-2.5 tabular-nums">
-                  <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                    {formatRub(showcase.total_actual_price)}
-                  </span>
-                  <span className="text-xs text-[#8E95A0]">с НДС</span>
+                <div className="mt-1 flex flex-wrap items-baseline gap-2.5 tabular-nums">
+                  {onlyOnRequest ? (
+                    <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                      По запросу
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                        {formatRub(showcase.total_actual_price)}
+                      </span>
+                      <span className="text-xs text-[#8E95A0]">с НДС</span>
+                    </>
+                  )}
+
+                  {onRequestCount > 0 && (
+                    <Badge variant="ebAmber" className="text-[10px]">
+                      + {onRequestCount}{" "}
+                      {pluralizeRu(onRequestCount, [
+                        "спецпроект",
+                        "спецпроекта",
+                        "спецпроектов",
+                      ])}{" "}
+                      по запросу
+                    </Badge>
+                  )}
                 </div>
               </div>
 
