@@ -16,6 +16,7 @@ class ShowcaseChatMessageOut(BaseModel):
         ..., description="Роль отправителя: client, ai_assistant или manager"
     )
     message_text: str = Field(..., description="Текст сообщения")
+    needs_manager_attention: bool = Field(False, description="Требует внимания персонального менеджера")
     created_at: str | None = Field(None, description="Время создания сообщения (ISO-строка)")
 
 
