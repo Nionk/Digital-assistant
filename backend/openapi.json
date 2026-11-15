@@ -2219,6 +2219,12 @@
             "title": "Message Text",
             "description": "Текст сообщения"
           },
+          "needs_manager_attention": {
+            "type": "boolean",
+            "title": "Needs Manager Attention",
+            "description": "Требует внимания персонального менеджера",
+            "default": false
+          },
           "created_at": {
             "anyOf": [
               {
