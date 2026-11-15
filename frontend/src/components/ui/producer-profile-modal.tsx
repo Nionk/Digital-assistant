@@ -1,28 +1,27 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { X, Play } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { X, LogOut, Mail, Briefcase, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  PRODUCER_PROFILES,
-  type ProducerProfile,
-  useManagerStore,
-} from "@/store/useManagerStore";
-import { cn } from "@/lib/utils";
+import { useManagerDashboard } from "@/api/queries";
+import { parseManagerDisplayInfo, useAuthStore } from "@/store/useAuthStore";
 
 interface ProducerProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-// [AUDIT-FAKE]: Бутафорское модальное окно «Выбор куратора», переключающее локальную аватарку в Zustand без обращения к серверу авторизации и без смены JWT-сессии
 export function ProducerProfileModal({
   isOpen,
   onClose,
 }: ProducerProfileModalProps) {
-  const currentProducer = useManagerStore((s) => s.currentProducer);
-  const setProducer = useManagerStore((s) => s.setProducer);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [selectedId, setSelectedId] = React.useState(currentProducer.id);
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const { data: dashboardData } = useManagerDashboard();
 
   const [mounted, setMounted] = React.useState(false);
 
@@ -31,24 +30,32 @@ export function ProducerProfileModal({
   }, []);
 
   React.useEffect(() => {
-    setSelectedId(currentProducer.id);
-  }, [currentProducer.id]);
-
-  const handleSelect = (profile: ProducerProfile) => {
-    setSelectedId(profile.id);
-    setProducer(profile);
-    setTimeout(() => {
-      onClose();
-    }, 180);
-  };
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!mounted || typeof document === "undefined") return null;
+
+  const profile = parseManagerDisplayInfo(user);
+  const activeClientsCount = dashboardData?.clients.length ?? 0;
+
+  const handleLogout = () => {
+    onClose();
+    logout();
+    queryClient.clear();
+    navigate("/login", { replace: true });
+  };
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          {/* Матовый затемняющий фон с плавным проявлением */}
           <motion.div
             key="modal-backdrop"
             initial={{ opacity: 0 }}
@@ -59,7 +66,6 @@ export function ProducerProfileModal({
             onClick={onClose}
           />
 
-          {/* Карточка окна: благородный матовый фон, золотистый кант, плавная анимация раскрытия */}
           <motion.div
             key="modal-content"
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -69,12 +75,11 @@ export function ProducerProfileModal({
             className="relative z-10 w-full max-w-md overflow-hidden rounded-[10px] border border-[#7C5A20] bg-[#161B22] text-white shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_20px_rgba(229,195,120,0.1)]"
           >
             <div className="p-4 sm:p-5">
-              {/* Шапка окна: лаконичный заголовок + выразительный золотой крестик */}
               <div className="flex items-center justify-between border-b border-[#21262F] pb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-[#E5C378] text-xs select-none">✦</span>
                   <h2 className="font-serif italic text-base font-semibold tracking-tight text-[#E5C378]">
-                    Выбор куратора
+                    Профиль куратора
                   </h2>
                 </div>
 
@@ -88,65 +93,69 @@ export function ProducerProfileModal({
                 </button>
               </div>
 
-              {/* Список кураторов в строгом книжном стиле */}
-              <div className="mt-3 space-y-2">
-                {PRODUCER_PROFILES.map((profile) => {
-                  const isCurrent = profile.id === selectedId;
-
-                  return (
-                    <div
-                      key={profile.id}
-                      onClick={() => handleSelect(profile)}
-                      className={cn(
-                        "group flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border p-2.5 transition-colors duration-150 select-none",
-                        isCurrent
-                          ? "border-[#E5C378] bg-[#1E190E] shadow-[0_0_10px_rgba(229,195,120,0.12)]"
-                          : "border-[#262D35] bg-[#12161A] hover:border-[#7C5A20] hover:bg-[#181D23]"
-                      )}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Компактная плашка с инициалами */}
-                        <div
-                          className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border text-xs font-bold tabular-nums font-sans",
-                            isCurrent
-                              ? "border-[#E5C378] bg-[#E5C378] text-[#1A1405]"
-                              : "border-[#262D35] bg-[#161B21] text-[#E5C378]"
-                          )}
-                        >
-                          {profile.avatarText}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="font-serif text-sm font-semibold text-white group-hover:text-[#E5C378] transition-colors truncate">
-                              {profile.name}
-                            </span>
-                            <span className="shrink-0 rounded-[2px] border border-[#262D35] bg-[#161B21] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0]">
-                              {profile.role}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-xs text-[#727985] truncate tabular-nums">
-                            {profile.department} · {profile.dealsCount} активных сделок
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Статус активности либо золотой треугольник перехода (без переносов) */}
-                      <div className="shrink-0 flex items-center">
-                        {isCurrent ? (
-                          <span className="inline-flex items-center gap-1 rounded-[3px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
-                            ✦ Активен
-                          </span>
-                        ) : (
-                          <span className="flex h-6 w-6 items-center justify-center rounded-[3px] border border-[#262D35] bg-[#12161A] text-[#E5C378] transition-all duration-150 group-hover:border-[#E5C378] group-hover:bg-[#261E0F] group-hover:translate-x-0.5">
-                            <Play className="h-2.5 w-2.5 fill-[#E5C378] text-[#E5C378]" />
-                          </span>
-                        )}
-                      </div>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-[6px] border border-[#E5C378] bg-[#1E190E] p-3 shadow-[0_0_10px_rgba(229,195,120,0.12)]">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-[#E5C378] bg-[#E5C378] text-xs font-bold tabular-nums font-sans text-[#1A1405]">
+                      {profile.initials}
                     </div>
-                  );
-                })}
+                    <div className="min-w-0">
+                      <span className="block font-serif text-sm font-semibold text-white truncate">
+                        {profile.displayName}
+                      </span>
+                      <span className="mt-0.5 inline-block rounded-[2px] border border-[#7C5A20]/50 bg-[#161B21] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
+                        {profile.roleLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <span className="shrink-0 inline-flex items-center gap-1 rounded-[3px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
+                    ✦ Активен
+                  </span>
+                </div>
+
+                <div className="space-y-2 rounded-[6px] border border-[#262D35] bg-[#12161A] p-3 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-[#8E95A0]">
+                      <Mail className="h-3.5 w-3.5 text-[#E5C378]/80" />
+                      Email сессии
+                    </span>
+                    <span className="font-medium text-[#F1F5F9] truncate">
+                      {profile.email || "—"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-[#8E95A0]">
+                      <Briefcase className="h-3.5 w-3.5 text-[#E5C378]/80" />
+                      Компаний в портфеле
+                    </span>
+                    <span className="font-semibold tabular-nums text-[#F1F5F9]">
+                      {activeClientsCount}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-[#8E95A0]">
+                      <MessageSquare className="h-3.5 w-3.5 text-[#E5C378]/80" />
+                      Telegram-уведомления
+                    </span>
+                    <span className="tabular-nums text-[#CBD5E1]">
+                      {profile.telegramChatId !== null
+                        ? `ID ${profile.telegramChatId}`
+                        : "Не привязан"}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center justify-center gap-2 rounded-[6px] border border-[#7C5A20]/70 bg-[#1A150B] px-3.5 py-2.5 text-xs font-semibold text-[#E5C378] transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Выйти / Сменить аккаунт</span>
+                </button>
               </div>
             </div>
           </motion.div>
