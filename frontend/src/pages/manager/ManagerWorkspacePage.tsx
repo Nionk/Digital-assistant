@@ -2,16 +2,20 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Building2, UserCheck, Compass, PanelLeftOpen, Search } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useShallow } from "zustand/react/shallow";
 import {
   useManagerDashboard,
   useManagerEventsCatalog,
   useMatchClientMutation,
+  usePublicShowcase,
   usePublishSelectionMutation,
 } from "@/api/queries";
 import {
   computeClientFinancialSummary,
   useManagerStore,
 } from "@/store/useManagerStore";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import { pluralizeRu } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ManagerHeader } from "./ManagerHeader";
@@ -25,46 +29,95 @@ import { EventDetailsDrawer } from "./EventDetailsDrawer";
 export function ManagerWorkspacePage() {
   const { data: dashboard, isLoading: isDashboardLoading } =
     useManagerDashboard();
-  const { data: catalogData } = useManagerEventsCatalog(true);
 
-  const matchMutation = useMatchClientMutation();
-  const publishMutation = usePublishSelectionMutation();
+  const workspaceMode = useManagerStore((s) => s.workspaceMode);
+  const selectedClientId = useManagerStore((s) => s.selectedClientId);
+  const clientSearchQuery = useManagerStore((s) => s.clientSearchQuery);
+  const isNotesCollapsed = useManagerStore((s) => s.isNotesCollapsed);
+  const activeNotesOverride = useManagerStore((s) =>
+    s.selectedClientId !== null ? s.notesByClient[s.selectedClientId] : undefined
+  );
+  const activeMatchResult = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.matchResultByClient[s.selectedClientId]
+      : undefined
+  );
+  const activeEditableProfile = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.editableProfileByClient[s.selectedClientId]
+      : undefined
+  );
+  const activeVariantGroup = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? (s.selectedVariantGroupByClient[s.selectedClientId] ?? 1)
+      : 1
+  );
+  const activeIncludedEvents = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.includedEventsByClient[s.selectedClientId]
+      : undefined
+  );
+  const activeSelectedTariffs = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.selectedTariffByClient[s.selectedClientId]
+      : undefined
+  );
+  const activeCustomRationales = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.customRationaleByClient[s.selectedClientId]
+      : undefined
+  );
+  const activePitchTextOverride = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.pitchTextByClient[s.selectedClientId]
+      : undefined
+  );
+  const activePublishedInfo = useManagerStore((s) =>
+    s.selectedClientId !== null
+      ? s.publishedInfoByClient[s.selectedClientId]
+      : undefined
+  );
+  const draftClientIds = useManagerStore(
+    useShallow((s) => Object.keys(s.matchResultByClient).map(Number))
+  );
+  const publishedClientIds = useManagerStore(
+    useShallow((s) => Object.keys(s.publishedInfoByClient).map(Number))
+  );
 
-  const state = useManagerStore();
-  const {
-    workspaceMode,
-    selectedClientId,
-    clientSearchQuery,
-    notesByClient,
-    isNotesCollapsed,
-    matchResultByClient,
-    editableProfileByClient,
-    selectedVariantGroupByClient,
-    pitchTextByClient,
-    publishedInfoByClient,
-    setWorkspaceMode,
-    selectClient,
-    setClientSearchQuery,
-    setClientNotes,
-    setNotesCollapsed,
-    hydrateMatchResponse,
-    updateEditableProfile,
-    selectVariantGroup,
-    toggleEventIncluded,
-    changeEventTariff,
-    updateEventRationale,
-    setPitchText,
-    syncPitchNumbersWithPackage,
-    setPublishedInfo,
-  } = state;
-
-  const clients = dashboard?.clients || [];
-  const burningDeadlines = dashboard?.burning_deadlines || [];
+  const setWorkspaceMode = useManagerStore((s) => s.setWorkspaceMode);
+  const selectClient = useManagerStore((s) => s.selectClient);
+  const setClientSearchQuery = useManagerStore((s) => s.setClientSearchQuery);
+  const setClientNotes = useManagerStore((s) => s.setClientNotes);
+  const setNotesCollapsed = useManagerStore((s) => s.setNotesCollapsed);
+  const hydrateMatchResponse = useManagerStore((s) => s.hydrateMatchResponse);
+  const updateEditableProfile = useManagerStore((s) => s.updateEditableProfile);
+  const selectVariantGroup = useManagerStore((s) => s.selectVariantGroup);
+  const toggleEventIncluded = useManagerStore((s) => s.toggleEventIncluded);
+  const changeEventTariff = useManagerStore((s) => s.changeEventTariff);
+  const updateEventRationale = useManagerStore((s) => s.updateEventRationale);
+  const setPitchText = useManagerStore((s) => s.setPitchText);
+  const syncPitchNumbersWithPackage = useManagerStore(
+    (s) => s.syncPitchNumbersWithPackage
+  );
+  const setPublishedInfo = useManagerStore((s) => s.setPublishedInfo);
+  const hydratePublishedShowcase = useManagerStore(
+    (s) => s.hydratePublishedShowcase
+  );
 
   const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
   const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
     React.useState<number | null>(null);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const { data: catalogData } = useManagerEventsCatalog(
+    Boolean(activeMatchResult) || selectedEventIdForDrawer !== null
+  );
+
+  const matchMutation = useMatchClientMutation();
+  const publishMutation = usePublishSelectionMutation();
+
+  const clients = dashboard?.clients || [];
+  const burningDeadlines = dashboard?.burning_deadlines || [];
 
   const selectedCatalogEventForDrawer = React.useMemo(() => {
     if (selectedEventIdForDrawer === null || !catalogData?.events) return null;
@@ -117,55 +170,111 @@ export function ManagerWorkspacePage() {
 
   const activeClient =
     clients.find((c) => c.id === selectedClientId) || null;
+  const activeClientId = activeClient?.id ?? null;
 
   const currentNotes = activeClient
-    ? (notesByClient[activeClient.id] ?? activeClient.raw_manager_notes)
+    ? (activeNotesOverride ?? activeClient.raw_manager_notes)
     : "";
 
-  const activeMatchResult = activeClient
-    ? matchResultByClient[activeClient.id]
-    : undefined;
-
-  const activeEditableProfile = activeClient
-    ? editableProfileByClient[activeClient.id]
-    : undefined;
-
-  const activeVariantGroup = activeClient
-    ? (selectedVariantGroupByClient[activeClient.id] ?? 1)
-    : 1;
-
   const activePitchText = activeClient
-    ? (pitchTextByClient[activeClient.id] ??
+    ? (activePitchTextOverride ??
       activeMatchResult?.generated_pitch_text ??
       "")
     : "";
 
-  // [AUDIT-TIMEBOMB]: Передача всего корневого объекта state = useManagerStore() в зависимости useMemo полностью убивает мемоизацию — пересчет финансовой сводки и конфликтов дат выполняется на каждый чих стора (ввод символа в поиск клиента, открытие модалки и т.д.)
   const computedSummary = React.useMemo(
     () =>
-      activeClient
-        ? computeClientFinancialSummary(state, activeClient.id)
+      activeClientId !== null
+        ? computeClientFinancialSummary(useManagerStore.getState(), activeClientId)
         : null,
-    [state, activeClient]
+    [
+      activeClientId,
+      activeMatchResult,
+      activeVariantGroup,
+      activeIncludedEvents,
+      activeSelectedTariffs,
+      activeCustomRationales,
+      activeEditableProfile,
+    ]
   );
 
   // Токен опубликованной витрины (из текущей сессии или из БД)
   const activeMagicToken = activeClient
-    ? publishedInfoByClient[activeClient.id]?.magicToken ||
-      activeClient.magic_token
+    ? activePublishedInfo?.magicToken || activeClient.magic_token
     : null;
 
   const activePublishedUrl = activeMagicToken
     ? `/s/${activeMagicToken}`
     : null;
 
-  const hasDraftInSessionMap = React.useMemo(() => {
-    const map: Record<number, boolean> = {};
-    for (const k of Object.keys(matchResultByClient)) {
-      map[Number(k)] = true;
+  // Однократная гидратация selectionId, сумм и позиций для опубликованной витрины (переживает F5 без лишнего поллинга /public/s)
+  const { data: hydratedShowcase } = usePublicShowcase(activeMagicToken, 0);
+
+  React.useEffect(() => {
+    if (!activeClient || !activeMagicToken || !hydratedShowcase) return;
+    if (
+      activePublishedInfo?.magicToken === activeMagicToken &&
+      activePublishedInfo.selectionId === hydratedShowcase.selection_id &&
+      activePublishedInfo.totalPrice === hydratedShowcase.total_actual_price &&
+      activePublishedInfo.totalSavings === hydratedShowcase.total_savings
+    ) {
+      return;
     }
-    return map;
-  }, [matchResultByClient]);
+    hydratePublishedShowcase(activeClient.id, activeMagicToken, hydratedShowcase);
+  }, [
+    activeClient,
+    activeMagicToken,
+    hydratedShowcase,
+    activePublishedInfo,
+    hydratePublishedShowcase,
+  ]);
+
+  const activeSelectionId = React.useMemo(() => {
+    if (!activeClient || !activeMagicToken) return null;
+    if (
+      activePublishedInfo?.magicToken === activeMagicToken &&
+      activePublishedInfo.selectionId != null
+    ) {
+      return activePublishedInfo.selectionId;
+    }
+    if (hydratedShowcase?.selection_id != null) {
+      return hydratedShowcase.selection_id;
+    }
+    if (activeClient.magic_token === activeMagicToken) {
+      return activeClient.latest_selection_id ?? null;
+    }
+    return null;
+  }, [activeClient, activeMagicToken, activePublishedInfo, hydratedShowcase]);
+
+  const activePublishedSummary = React.useMemo(() => {
+    if (!activeMagicToken) return null;
+    if (activePublishedInfo?.magicToken === activeMagicToken) {
+      return {
+        totalPrice:
+          hydratedShowcase?.total_actual_price ?? activePublishedInfo.totalPrice,
+        totalSavings:
+          hydratedShowcase?.total_savings ?? activePublishedInfo.totalSavings,
+        totalEventsCount: hydratedShowcase?.items.length,
+      };
+    }
+    if (hydratedShowcase) {
+      return {
+        totalPrice: hydratedShowcase.total_actual_price,
+        totalSavings: hydratedShowcase.total_savings,
+        totalEventsCount: hydratedShowcase.items.length,
+      };
+    }
+    return null;
+  }, [activeMagicToken, activePublishedInfo, hydratedShowcase]);
+
+  const draftClientIdSet = React.useMemo(
+    () => new Set(draftClientIds),
+    [draftClientIds]
+  );
+  const publishedClientIdSet = React.useMemo(
+    () => new Set(publishedClientIds),
+    [publishedClientIds]
+  );
 
   const handleRunInitialMatch = async () => {
     if (!activeClient) return;
@@ -200,6 +309,21 @@ export function ManagerWorkspacePage() {
 
   const handleRematchWithOverride = async () => {
     if (!activeClient || !activeEditableProfile) return;
+    if (
+      activeEditableProfile.total_budget_max !== null &&
+      activeEditableProfile.total_budget_max <= 0
+    ) {
+      toast.error("Максимальный бюджет должен быть больше нуля");
+      return;
+    }
+    if (
+      activeEditableProfile.date_from &&
+      activeEditableProfile.date_to &&
+      activeEditableProfile.date_to < activeEditableProfile.date_from
+    ) {
+      toast.error("Дата окончания периода не может быть раньше даты начала");
+      return;
+    }
     try {
       const res = await matchMutation.mutateAsync({
         clientId: activeClient.id,
@@ -224,11 +348,7 @@ export function ManagerWorkspacePage() {
     if (!activeClient) return;
     selectVariantGroup(activeClient.id, group);
     // Сразу синхронизируем цифры в письме при переключении вкладки Варианта 1 / Варианта 2
-    setTimeout(() => {
-      useManagerStore
-        .getState()
-        .syncPitchNumbersWithPackage(activeClient.id, activeClient.company_name);
-    }, 0);
+    syncPitchNumbersWithPackage(activeClient.id, activeClient.company_name);
   };
 
   const handleSyncPitch = () => {
@@ -237,11 +357,11 @@ export function ManagerWorkspacePage() {
     toast.success("Цифры бюджета, выгоды и список площадок в письме обновлены");
   };
 
-  // [AUDIT-FAKE]: Проглатывание ошибки записи в буфер обмена через .catch(() => {}) с безусловным показом уведомления об успехе
-  const handleCopyShowcaseLink = (relativeUrl: string) => {
+  const handleCopyShowcaseLink = async (relativeUrl: string): Promise<boolean> => {
     const fullUrl = `${window.location.origin}${relativeUrl}`;
-    navigator.clipboard.writeText(fullUrl).catch(() => {});
-    toast.success("Персональная ссылка скопирована в буфер обмена");
+    return copyTextToClipboard(fullUrl, {
+      successMessage: "Персональная ссылка скопирована в буфер обмена",
+    });
   };
 
   const handlePublishSelection = async () => {
@@ -262,6 +382,7 @@ export function ManagerWorkspacePage() {
       });
 
       setPublishedInfo(activeClient.id, {
+        selectionId: activeMatchResult.selection_id,
         magicToken: res.magic_token,
         publicUrl: res.public_showcase_url,
         totalPrice: res.total_package_price,
@@ -269,10 +390,15 @@ export function ManagerWorkspacePage() {
       });
 
       const fullUrl = `${window.location.origin}${res.public_showcase_url}`;
-      navigator.clipboard.writeText(fullUrl).catch(() => {});
-      toast.success(
-        "Персональная витрина клиента опубликована! Ссылка скопирована в буфер обмена."
-      );
+      const copied = await copyTextToClipboard(fullUrl, {
+        successMessage:
+          "Персональная витрина клиента опубликована! Ссылка скопирована в буфер обмена.",
+        errorMessage:
+          "Витрина опубликована, но скопировать ссылку автоматически не удалось.",
+      });
+      if (!copied) {
+        toast.success("Персональная витрина клиента опубликована!");
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Ошибка при публикации витрины"
@@ -349,7 +475,12 @@ export function ManagerWorkspacePage() {
                             </p>
                           </div>
                           <Badge variant="ebAmber" className="text-[11px]">
-                            {clients.length} компании
+                            {clients.length}{" "}
+                            {pluralizeRu(clients.length, [
+                              "компания",
+                              "компании",
+                              "компаний",
+                            ])}
                           </Badge>
                         </div>
 
@@ -370,100 +501,97 @@ export function ManagerWorkspacePage() {
                           />
                         </div>
 
-                      {/* Список карточек клиентов в ячейках #1A1E24 */}
-                      {filteredClients.length === 0 ? (
-                        <p className="py-6 text-center text-xs text-[#8E95A0]">
-                          Компании не найдены
-                        </p>
-                      ) : (
-                        <div className="max-h-[360px] space-y-2.5 overflow-y-auto pr-1 scrollbar-thin">
-                          {filteredClients.map((client) => {
-                            const isSelected = client.id === selectedClientId;
-                            const isPublished =
-                              Boolean(publishedInfoByClient[client.id]) ||
-                              client.latest_selection_status === "published";
-                            const isDraft =
-                              !isPublished &&
-                              (Boolean(hasDraftInSessionMap[client.id]) ||
-                                client.latest_selection_status === "draft");
+                        {/* Список карточек клиентов в ячейках #1A1E24 */}
+                        {filteredClients.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-[#8E95A0]">
+                            Компании не найдены
+                          </p>
+                        ) : (
+                          <div className="max-h-[360px] space-y-2.5 overflow-y-auto pr-1 scrollbar-thin">
+                            {filteredClients.map((client) => {
+                              const isSelected = client.id === selectedClientId;
+                              const isPublished =
+                                publishedClientIdSet.has(client.id) ||
+                                client.latest_selection_status === "published";
+                              const isDraft =
+                                !isPublished &&
+                                (draftClientIdSet.has(client.id) ||
+                                  client.latest_selection_status === "draft");
 
-                            return (
-                              <div
-                                key={client.id}
-                                onClick={() => {
-                                  selectClient(
-                                    client.id,
-                                    notesByClient[client.id] ?? client.raw_manager_notes
-                                  );
-                                  setIsClientsDropdownOpen(false);
-                                }}
-                                className={cn(
-                                  "rounded-[8px] border p-3 transition-colors cursor-pointer select-none",
-                                  isSelected
-                                    ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
-                                    : "border-[#262C35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
-                                )}
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex items-center gap-2">
-                                    <Building2
-                                      className={cn(
-                                        "h-4 w-4 shrink-0",
-                                        isSelected ? "text-[#E5C378]" : "text-[#8E95A0]"
-                                      )}
-                                      strokeWidth={1.75}
-                                    />
-                                    <p
-                                      className={cn(
-                                        "truncate text-[13px] font-medium leading-snug",
-                                        isSelected ? "text-white font-semibold" : "text-[#F3F4F6]"
-                                      )}
-                                    >
-                                      {client.company_name}
-                                    </p>
+                              return (
+                                <div
+                                  key={client.id}
+                                  onClick={() => {
+                                    selectClient(client.id, client.raw_manager_notes);
+                                    setIsClientsDropdownOpen(false);
+                                  }}
+                                  className={cn(
+                                    "rounded-[8px] border p-3 transition-colors cursor-pointer select-none",
+                                    isSelected
+                                      ? "border-[#E5C378] bg-[#1E252E] shadow-sm"
+                                      : "border-[#262C35] bg-[#1A1E24] hover:border-[#38414F] hover:bg-[#1E232B]"
+                                  )}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex items-center gap-2">
+                                      <Building2
+                                        className={cn(
+                                          "h-4 w-4 shrink-0",
+                                          isSelected ? "text-[#E5C378]" : "text-[#8E95A0]"
+                                        )}
+                                        strokeWidth={1.75}
+                                      />
+                                      <p
+                                        className={cn(
+                                          "truncate text-[13px] font-medium leading-snug",
+                                          isSelected ? "text-white font-semibold" : "text-[#F3F4F6]"
+                                        )}
+                                      >
+                                        {client.company_name}
+                                      </p>
+                                    </div>
+
+                                    {/* Авторские скошенные ячейки-ленты статусов клиента */}
+                                    {isPublished ? (
+                                      <Badge variant="ebEmerald" className="text-[10px]">
+                                        КП активно
+                                      </Badge>
+                                    ) : isDraft ? (
+                                      <Badge variant="ebAmber" className="text-[10px]">
+                                        Черновик
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="ebBlue" className="text-[10px]">
+                                        Новый
+                                      </Badge>
+                                    )}
                                   </div>
 
-                                  {/* Авторские скошенные ячейки-ленты статусов клиента */}
-                                  {isPublished ? (
-                                    <Badge variant="ebEmerald" className="text-[10px]">
-                                      КП активно
-                                    </Badge>
-                                  ) : isDraft ? (
-                                    <Badge variant="ebAmber" className="text-[10px]">
-                                      Черновик
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="ebBlue" className="text-[10px]">
-                                      Новый
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
-                                  <span className="inline-flex items-center gap-1.5 truncate">
-                                    {client.contact_person ? (
-                                      <>
-                                        <UserCheck className="h-3.5 w-3.5 text-[#8E95A0] shrink-0" strokeWidth={1.5} />
-                                        <span className="truncate">{client.contact_person}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-[#636B78]">Контакт не указан</span>
+                                  <div className="mt-2.5 flex items-center justify-between text-xs text-[#8E95A0] tabular-nums">
+                                    <span className="inline-flex items-center gap-1.5 truncate">
+                                      {client.contact_person ? (
+                                        <>
+                                          <UserCheck className="h-3.5 w-3.5 text-[#8E95A0] shrink-0" strokeWidth={1.5} />
+                                          <span className="truncate">{client.contact_person}</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-[#636B78]">Контакт не указан</span>
+                                      )}
+                                    </span>
+                                    {isSelected && (
+                                      <Badge variant="ebGold" className="text-[9px]">
+                                        Выбран
+                                      </Badge>
                                     )}
-                                  </span>
-                                  {isSelected && (
-                                    <Badge variant="ebGold" className="text-[9px]">
-                                      Выбран
-                                    </Badge>
-                                  )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -515,150 +643,153 @@ export function ManagerWorkspacePage() {
                     {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}
                     {activeMagicToken && (
                       <PublishedShowcaseMonitor
+                        selectionId={activeSelectionId}
                         magicToken={activeMagicToken}
+                        publishedSummary={activePublishedSummary}
+                        showcaseItems={hydratedShowcase?.items}
                         onCopyLink={handleCopyShowcaseLink}
                       />
                     )}
 
                     {/* Асимметричная двухколоночная сетка без вертикальной простыни */}
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 items-start">
-                  {/* Левая/Центральная колонка конструктора (7 из 12 = ~58-60%) */}
-                  <div className="space-y-4 xl:col-span-8">
-                    <NotesAndProfileSection
-                      notes={currentNotes}
-                      onNotesChange={(val) =>
-                        setClientNotes(activeClient.id, val)
-                      }
-                      isCollapsed={isNotesCollapsed}
-                      onToggleCollapsed={setNotesCollapsed}
-                      isMatching={matchMutation.isPending}
-                      hasMatchResult={Boolean(activeMatchResult)}
-                      editableProfile={activeEditableProfile}
-                      onUpdateProfile={(updater) =>
-                        updateEditableProfile(activeClient.id, updater)
-                      }
-                      onRunInitialMatch={handleRunInitialMatch}
-                      onRematchWithOverride={handleRematchWithOverride}
-                    />
+                      {/* Левая/Центральная колонка конструктора (7 из 12 = ~58-60%) */}
+                      <div className="space-y-4 xl:col-span-8">
+                        <NotesAndProfileSection
+                          notes={currentNotes}
+                          onNotesChange={(val) =>
+                            setClientNotes(activeClient.id, val)
+                          }
+                          isCollapsed={isNotesCollapsed}
+                          onToggleCollapsed={setNotesCollapsed}
+                          isMatching={matchMutation.isPending}
+                          hasMatchResult={Boolean(activeMatchResult)}
+                          editableProfile={activeEditableProfile}
+                          onUpdateProfile={(updater) =>
+                            updateEditableProfile(activeClient.id, updater)
+                          }
+                          onRunInitialMatch={handleRunInitialMatch}
+                          onRematchWithOverride={handleRematchWithOverride}
+                        />
 
-                    <AnimatePresence mode="wait">
-                      {activeMatchResult && computedSummary ? (
-                        <motion.div
-                          key={`bundle-section-${activeMatchResult.selection_id}`}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
-                          transition={{ duration: 0.24, ease: "easeOut" }}
-                        >
-                          <BundleConstructorSection
-                            variants={activeMatchResult.bundle_variants}
-                            selectedVariantGroup={activeVariantGroup}
-                            onSelectVariantGroup={handleSelectVariantGroup}
-                            summary={computedSummary}
-                            onToggleEventIncluded={(evId) =>
-                              toggleEventIncluded(activeClient.id, evId)
-                            }
-                            onChangeEventTariff={(evId, tarId) =>
-                              changeEventTariff(activeClient.id, evId, tarId)
-                            }
-                            onUpdateEventRationale={(evId, text) =>
-                              updateEventRationale(activeClient.id, evId, text)
-                            }
-                            onOpenEventDetails={(evId) =>
-                              setSelectedEventIdForDrawer(evId)
-                            }
-                          />
-                        </motion.div>
-                      ) : (
-                        !matchMutation.isPending && (
-                          <motion.div
-                            key="bundle-empty"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm"
-                          >
-                            <Compass
-                              className="mx-auto h-9 w-9 text-[#E5C378]"
-                              strokeWidth={1.5}
-                            />
-                            <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
-                              Готово к формированию пакетов участия
-                            </h3>
-                            <p className="mx-auto mt-1.5 max-w-lg text-xs leading-relaxed text-[#8E95A0]">
-                              Проверьте конспект установочной встречи выше и нажмите{" "}
-                              <strong className="font-semibold text-white">
-                                «Подобрать варианты пакетов»
-                              </strong>
-                              . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
-                            </p>
-                          </motion.div>
-                        )
-                      )}
-                    </AnimatePresence>
-                  </div>
+                        <AnimatePresence mode="wait">
+                          {activeMatchResult && computedSummary ? (
+                            <motion.div
+                              key={`bundle-section-${activeMatchResult.selection_id}`}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -8 }}
+                              transition={{ duration: 0.24, ease: "easeOut" }}
+                            >
+                              <BundleConstructorSection
+                                variants={activeMatchResult.bundle_variants}
+                                selectedVariantGroup={activeVariantGroup}
+                                onSelectVariantGroup={handleSelectVariantGroup}
+                                summary={computedSummary}
+                                onToggleEventIncluded={(evId) =>
+                                  toggleEventIncluded(activeClient.id, evId)
+                                }
+                                onChangeEventTariff={(evId, tarId) =>
+                                  changeEventTariff(activeClient.id, evId, tarId)
+                                }
+                                onUpdateEventRationale={(evId, text) =>
+                                  updateEventRationale(activeClient.id, evId, text)
+                                }
+                                onOpenEventDetails={(evId) =>
+                                  setSelectedEventIdForDrawer(evId)
+                                }
+                              />
+                            </motion.div>
+                          ) : (
+                            !matchMutation.isPending && (
+                              <motion.div
+                                key="bundle-empty"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm"
+                              >
+                                <Compass
+                                  className="mx-auto h-9 w-9 text-[#E5C378]"
+                                  strokeWidth={1.5}
+                                />
+                                <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
+                                  Готово к формированию пакетов участия
+                                </h3>
+                                <p className="mx-auto mt-1.5 max-w-lg text-xs leading-relaxed text-[#8E95A0]">
+                                  Проверьте конспект установочной встречи выше и нажмите{" "}
+                                  <strong className="font-semibold text-white">
+                                    «Подобрать варианты пакетов»
+                                  </strong>
+                                  . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
+                                </p>
+                              </motion.div>
+                            )
+                          )}
+                        </AnimatePresence>
+                      </div>
 
-                  {/* Правая закрепленная колонка итога и публикации (4 из 12 = ~33-38%, sticky) */}
-                  <div className="xl:col-span-4">
-                    <AnimatePresence mode="wait">
-                      {activeMatchResult && computedSummary ? (
-                        <motion.div
-                          key={`pitch-panel-${activeMatchResult.selection_id}`}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
-                          transition={{ duration: 0.24, ease: "easeOut" }}
-                        >
-                          <FinancialAndPitchPanel
-                            companyName={activeClient.company_name}
-                            summary={computedSummary}
-                            pitchText={activePitchText}
-                            onPitchChange={(text) =>
-                              setPitchText(activeClient.id, text)
-                            }
-                            onSyncPitchNumbers={handleSyncPitch}
-                            onPublish={handlePublishSelection}
-                            isPublishing={publishMutation.isPending}
-                            publishedUrl={activePublishedUrl}
-                            onCopyLink={handleCopyShowcaseLink}
-                          />
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          key="pitch-empty"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm"
-                        >
-                          <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
-                            Сводка и публикация КП
-                          </span>
-                          <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
-                            Ожидание расчёта подборки
-                          </h3>
-                          <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
-                            После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
-                          </p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            )}
-          </div>
-        </main>
+                      {/* Правая закрепленная колонка итога и публикации (4 из 12 = ~33-38%, sticky) */}
+                      <div className="xl:col-span-4">
+                        <AnimatePresence mode="wait">
+                          {activeMatchResult && computedSummary ? (
+                            <motion.div
+                              key={`pitch-panel-${activeMatchResult.selection_id}`}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -8 }}
+                              transition={{ duration: 0.24, ease: "easeOut" }}
+                            >
+                              <FinancialAndPitchPanel
+                                companyName={activeClient.company_name}
+                                summary={computedSummary}
+                                pitchText={activePitchText}
+                                onPitchChange={(text) =>
+                                  setPitchText(activeClient.id, text)
+                                }
+                                onSyncPitchNumbers={handleSyncPitch}
+                                onPublish={handlePublishSelection}
+                                isPublishing={publishMutation.isPending}
+                                publishedUrl={activePublishedUrl}
+                                onCopyLink={handleCopyShowcaseLink}
+                              />
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="pitch-empty"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm"
+                            >
+                              <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
+                                Сводка и публикация КП
+                              </span>
+                              <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
+                                Ожидание расчёта подборки
+                              </h3>
+                              <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
+                                После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
+                              </p>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </div>
+          </main>
 
-        {/* Выдвижная шторка детального просмотра площадки прямо из конструктора пакета */}
-        <EventDetailsDrawer
-          event={selectedCatalogEventForDrawer}
-          isOpen={Boolean(selectedCatalogEventForDrawer)}
-          onClose={() => setSelectedEventIdForDrawer(null)}
-        />
+          {/* Выдвижная шторка детального просмотра площадки прямо из конструктора пакета */}
+          <EventDetailsDrawer
+            event={selectedCatalogEventForDrawer}
+            isOpen={Boolean(selectedCatalogEventForDrawer)}
+            onClose={() => setSelectedEventIdForDrawer(null)}
+          />
         </div>
       )}
     </div>
