@@ -7,12 +7,16 @@ import {
   FileText,
   X,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
 import { useManagerEventsCatalog } from "@/api/queries";
 import type {
   ClientQueryExtracted,
+  EventFormat,
   ParticipationRole,
+  ProfileSource,
 } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +25,11 @@ import {
   SearchableMultiSelectPopover,
   type MultiSelectOption,
 } from "@/components/ui/searchable-multi-select-popover";
-import { ROLE_BADGE_LABELS, formatNumberCompact } from "@/lib/formatters";
+import {
+  FORMAT_LABELS,
+  ROLE_BADGE_LABELS,
+  formatNumberCompact,
+} from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
 interface NotesAndProfileSectionProps {
@@ -62,29 +70,36 @@ const DEMO_NOTE_PRESETS = [
 
 const ALL_ROLES: ParticipationRole[] = ["delegate", "speaker", "sponsor"];
 
-// [AUDIT-FAKE]: 20 театральных маркетинговых фраз («Проверяем, чтобы на площадке подавали приличный зерновой кофе...»), крутящихся по таймеру для маскировки задержки синхронного ответа LLM
-const LOADING_PHRASES = [
-  "Анализируем цели клиента и сопоставляем с календарем отрасли...",
-  "Проверяем спикерские слоты на ключевых пленарных сессиях...",
-  "Выбиваем максимальную скидку Early Bird у организаторов...",
-  "Сверяем даты, чтобы спикер не телепортировался между городами...",
-  "Ищем закрытые деловые завтраки с первыми лицами индустрии...",
-  "Фильтруем скучные доклады, оставляем только целевой нетворкинг...",
-  "Подбираем выставочные зоны с максимальной проходимостью целевой аудитории...",
-  "Считаем отдачу и выгоду каждого вложенного рубля в участие...",
-  "Узнаём инсайды у программных директоров и отраслевых продюсеров...",
-  "Проверяем, чтобы на площадке подавали приличный зерновой кофе...",
-  "Калибруем пакеты: от экономного делегата до генерального партнёра...",
-  "Отсекаем площадки с накрученной посещаемостью и фальшивыми охватами...",
-  "Упаковываем смыслы выступления под актуальные боли заказчиков...",
-  "Ищем события, где точно соберутся ваши будущие ключевые клиенты...",
-  "Формируем идеальное трио площадок под утвержденный бюджет...",
-  "Согласовываем тайминги кофе-брейков и кулуарных переговоров...",
-  "Убеждаемся, что бейджи спикеров напечатают без досадных опечаток...",
-  "Проверяем акустику залов и видимость слайдов презентации...",
-  "Исключаем пересечения дат с семейными отпусками и дедлайнами...",
-  "Финальная полировка готовых пакетов предложений...",
+const ALL_EVENT_FORMATS: EventFormat[] = [
+  "forum",
+  "conference",
+  "roundtable",
+  "business_breakfast",
+  "session",
 ];
+
+const FORMAT_SELECT_OPTIONS: MultiSelectOption[] = ALL_EVENT_FORMATS.map(
+  (fmt) => ({
+    value: fmt,
+    label: FORMAT_LABELS[fmt] || fmt,
+  })
+);
+
+const PROFILE_SOURCE_LABELS: Record<
+  ProfileSource,
+  { label: string; variant: "ebGold" | "ebBlue" | "ebTeal" }
+> = {
+  llm: { label: "Профиль: ИИ-разбор", variant: "ebGold" },
+  heuristic: { label: "Профиль: автоанализ", variant: "ebBlue" },
+  manual: { label: "Профиль: ручная правка", variant: "ebTeal" },
+};
+
+const MATCHING_STATUS_STEPS = [
+  "Анализ заметки и извлечение параметров...",
+  "Семантический и FTS-поиск по каталогу площадок...",
+  "Комбинаторная оптимизация пакетов без пересечения дат...",
+  "Подготовка коммерческого письма и расчёт Early Bird...",
+] as const;
 
 export function NotesAndProfileSection({
   notes,
@@ -98,8 +113,8 @@ export function NotesAndProfileSection({
   onRunInitialMatch,
   onRematchWithOverride,
 }: NotesAndProfileSectionProps) {
-  const { data: catalogData } = useManagerEventsCatalog(true);
-  const [loadingPhraseIndex, setLoadingPhraseIndex] = React.useState(0);
+  const { data: catalogData } = useManagerEventsCatalog(Boolean(editableProfile));
+  const [loadingStepIndex, setLoadingStepIndex] = React.useState(0);
 
   // Все уникальные города из каталога с количеством мероприятий
   const catalogCityOptions = React.useMemo<MultiSelectOption[]>(() => {
@@ -127,23 +142,19 @@ export function NotesAndProfileSection({
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [catalogData?.events]);
 
-  // Живая ротация привлекательных фраз при подборе (каждые 3.3с в случайном порядке)
+  // Последовательная индикация реальных этапов конвейера подбора
   React.useEffect(() => {
     if (!isMatching) {
-      setLoadingPhraseIndex(0);
+      setLoadingStepIndex(0);
       return;
     }
-    // Случайная стартовая фраза
-    setLoadingPhraseIndex(Math.floor(Math.random() * LOADING_PHRASES.length));
-
-    const interval = setInterval(() => {
-      setLoadingPhraseIndex((prev) => {
-        let next = Math.floor(Math.random() * (LOADING_PHRASES.length - 1));
-        if (next >= prev) next += 1;
-        return next;
-      });
-    }, 3300);
-    return () => clearInterval(interval);
+    setLoadingStepIndex(0);
+    const interval = window.setInterval(() => {
+      setLoadingStepIndex((prev) =>
+        Math.min(prev + 1, MATCHING_STATUS_STEPS.length - 1)
+      );
+    }, 3500);
+    return () => window.clearInterval(interval);
   }, [isMatching]);
 
   const handleUpdateCities = (newCities: string[]) => {
@@ -169,13 +180,11 @@ export function NotesAndProfileSection({
     }));
   };
 
-  // [AUDIT-CRUTCH]: При ручном редактировании тегов тем перезаписывается semantic_search_query простым склеиванием через пробел, что уничтожает развернутый семантический запрос, сгенерированный LLM-профайлером
   const handleUpdateThemes = (newThemes: string[]) => {
     if (!editableProfile) return;
     onUpdateProfile((prev) => ({
       ...prev,
       themes_keywords: newThemes,
-      semantic_search_query: newThemes.join(" ").trim(),
     }));
   };
 
@@ -191,7 +200,24 @@ export function NotesAndProfileSection({
     onUpdateProfile((prev) => ({
       ...prev,
       themes_keywords: prev.themes_keywords.filter((t) => t !== tag),
-      semantic_search_query: prev.themes_keywords.filter((t) => t !== tag).join(" ").trim(),
+    }));
+  };
+
+  const handleUpdatePreferredFormats = (values: string[]) => {
+    if (!editableProfile) return;
+    const validFormats = values.filter((v): v is EventFormat =>
+      ALL_EVENT_FORMATS.includes(v as EventFormat)
+    );
+    onUpdateProfile((prev) => ({
+      ...prev,
+      preferred_formats: validFormats,
+    }));
+  };
+
+  const handleRemovePreferredFormat = (fmt: EventFormat) => {
+    onUpdateProfile((prev) => ({
+      ...prev,
+      preferred_formats: prev.preferred_formats.filter((f) => f !== fmt),
     }));
   };
 
@@ -212,6 +238,30 @@ export function NotesAndProfileSection({
             ? 0
             : prev.min_speaker_events,
     }));
+  };
+
+  const isBudgetInvalid = Boolean(
+    editableProfile &&
+    (!Number.isFinite(editableProfile.total_budget_max) ||
+      editableProfile.total_budget_max <= 0)
+  );
+  const isDateRangeInvalid = Boolean(
+    editableProfile?.date_from &&
+    editableProfile?.date_to &&
+    editableProfile.date_to < editableProfile.date_from
+  );
+  const hasProfileValidationError = isBudgetInvalid || isDateRangeInvalid;
+
+  const handleRematchClick = () => {
+    if (isBudgetInvalid) {
+      toast.error("Укажите лимит бюджета больше 0 ₽ перед пересборкой пакетов.");
+      return;
+    }
+    if (isDateRangeInvalid) {
+      toast.error("Дата окончания периода не может быть раньше даты начала.");
+      return;
+    }
+    onRematchWithOverride();
   };
 
   return (
@@ -328,14 +378,14 @@ export function NotesAndProfileSection({
             <div className="h-5 w-5 shrink-0 rounded-full border-2 border-[#262D35] border-t-[#E5C378] animate-spin" />
             <AnimatePresence mode="wait">
               <motion.p
-                key={loadingPhraseIndex}
+                key={loadingStepIndex}
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -3 }}
                 transition={{ duration: 0.28, ease: "easeInOut" }}
                 className="font-serif italic text-xs font-medium text-[#E5C378]"
               >
-                {LOADING_PHRASES[loadingPhraseIndex]}
+                {MATCHING_STATUS_STEPS[loadingStepIndex]}
               </motion.p>
             </AnimatePresence>
           </div>
@@ -346,23 +396,48 @@ export function NotesAndProfileSection({
       {editableProfile && (
         <div className="bg-[#161B22] rounded-b-[12px]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] px-4 py-2 bg-[#12161A]">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-white">
                 Параметры отбора площадок
               </span>
+              <Badge
+                variant={
+                  PROFILE_SOURCE_LABELS[editableProfile.profile_source]?.variant ??
+                  "ebGold"
+                }
+                asSlanted={false}
+                className="text-[10px]"
+              >
+                {PROFILE_SOURCE_LABELS[editableProfile.profile_source]?.label ??
+                  editableProfile.profile_source}
+              </Badge>
+              {editableProfile.budget_is_assumed && (
+                <Badge
+                  variant="ebAmber"
+                  asSlanted={false}
+                  className="text-[10px]"
+                  title="В конспекте не был явно указан бюджет — применен ориентир по умолчанию"
+                >
+                  Ориентир бюджета подобран системой
+                </Badge>
+              )}
             </div>
             <button
               type="button"
               disabled={isMatching}
-              onClick={onRematchWithOverride}
-              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] select-none cursor-pointer shadow-sm transition-colors duration-150 hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] disabled:opacity-50 disabled:cursor-not-allowed outline-none"
+              onClick={handleRematchClick}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-xs font-medium select-none cursor-pointer shadow-sm transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed outline-none",
+                hasProfileValidationError
+                  ? "border-[#7C4A19] bg-[#22160C] text-[#E59837] hover:border-[#EF4444]"
+                  : "border-[#262D35] bg-[#161B21] text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E]"
+              )}
             >
               <RotateCcw className="h-3 w-3 shrink-0 text-inherit transition-transform" strokeWidth={2} />
               <span>Пересобрать пакеты</span>
             </button>
           </div>
 
-          {/* [AUDIT-STUB]: В 5-ячеечной сетке параметров отбора забыт селектор предпочтительных форматов мероприятий (preferred_formats: forum, conference, roundtable, business_breakfast), хотя поле есть в ClientQueryExtracted */}
           <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
             {/* Ячейка 1: Бюджет и кол-во событий */}
             <div className="p-3 bg-[#161B22]">
@@ -373,13 +448,25 @@ export function NotesAndProfileSection({
                 <input
                   type="number"
                   step={50000}
-                  min={0}
+                  min={1}
                   value={Math.round(editableProfile.total_budget_max)}
                   onChange={(e) => {
-                    const val = Math.max(0, Number(e.target.value) || 0);
-                    onUpdateProfile((prev) => ({ ...prev, total_budget_max: val }));
+                    const parsed = Number(e.target.value);
+                    const val =
+                      Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+                    onUpdateProfile((prev) => ({
+                      ...prev,
+                      total_budget_max: val,
+                      budget_is_assumed: false,
+                    }));
                   }}
-                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  aria-invalid={isBudgetInvalid}
+                  className={cn(
+                    "h-7 w-full rounded-[4px] border bg-[#12161A] pl-2 pr-7 text-xs font-semibold text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                    isBudgetInvalid
+                      ? "border-[#EF4444] focus:border-[#EF4444]"
+                      : "border-[#262D35] focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
+                  )}
                 />
                 <div className="absolute right-1 flex flex-col">
                   <button
@@ -388,6 +475,7 @@ export function NotesAndProfileSection({
                       onUpdateProfile((p) => ({
                         ...p,
                         total_budget_max: p.total_budget_max + 50000,
+                        budget_is_assumed: false,
                       }))
                     }
                     className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
@@ -400,7 +488,11 @@ export function NotesAndProfileSection({
                     onClick={() =>
                       onUpdateProfile((p) => ({
                         ...p,
-                        total_budget_max: Math.max(0, p.total_budget_max - 50000),
+                        total_budget_max:
+                          p.total_budget_max > 50000
+                            ? p.total_budget_max - 50000
+                            : Math.max(10000, p.total_budget_max),
+                        budget_is_assumed: false,
                       }))
                     }
                     className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
@@ -410,6 +502,12 @@ export function NotesAndProfileSection({
                   </button>
                 </div>
               </div>
+              {isBudgetInvalid && (
+                <p className="mt-1 flex items-center gap-1 text-[10px] text-[#FCA5A5]">
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-[#F87171]" />
+                  <span>Укажите сумму больше 0 ₽</span>
+                </p>
+              )}
               <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
                 <span>Площадок в пакете:</span>
                 <CustomSelect
@@ -434,24 +532,24 @@ export function NotesAndProfileSection({
             <div className="p-3 bg-[#161B22] relative flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                <span className="font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
-                  2. География
-                </span>
-                <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB]">
-                  <input
-                    type="checkbox"
-                    checked={editableProfile.include_online}
-                    onChange={(e) =>
-                      onUpdateProfile((prev) => ({
-                        ...prev,
-                        include_online: e.target.checked,
-                      }))
-                    }
-                    className="h-3 w-3 rounded accent-[#E5C378]"
-                  />
-                  <span>+ Онлайн</span>
-                </label>
-              </div>
+                  <span className="font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+                    2. География
+                  </span>
+                  <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB]">
+                    <input
+                      type="checkbox"
+                      checked={editableProfile.include_online}
+                      onChange={(e) =>
+                        onUpdateProfile((prev) => ({
+                          ...prev,
+                          include_online: e.target.checked,
+                        }))
+                      }
+                      className="h-3 w-3 rounded accent-[#E5C378]"
+                    />
+                    <span>+ Онлайн</span>
+                  </label>
+                </div>
 
                 {/* Отображение выбранных городов в ячейке */}
                 <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
@@ -533,7 +631,13 @@ export function NotesAndProfileSection({
                         date_from: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+                    aria-invalid={isDateRangeInvalid}
+                    className={cn(
+                      "h-6 rounded-[4px] border bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none transition-colors duration-150",
+                      isDateRangeInvalid
+                        ? "border-[#EF4444] focus:border-[#EF4444]"
+                        : "border-[#262D35] focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
+                    )}
                   />
                 </div>
                 <div className="flex items-center justify-between gap-1 text-[11px]">
@@ -547,61 +651,132 @@ export function NotesAndProfileSection({
                         date_to: e.target.value || null,
                       }))
                     }
-                    className="h-6 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+                    aria-invalid={isDateRangeInvalid}
+                    className={cn(
+                      "h-6 rounded-[4px] border bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none transition-colors duration-150",
+                      isDateRangeInvalid
+                        ? "border-[#EF4444] focus:border-[#EF4444]"
+                        : "border-[#262D35] focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
+                    )}
                   />
                 </div>
+                {isDateRangeInvalid && (
+                  <p className="flex items-center gap-1 text-[10px] text-[#FCA5A5]">
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-[#F87171]" />
+                    <span>Дата «По» раньше даты «С»</span>
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Ячейка 4: Роли участия и спикерство */}
-            <div className="p-3 bg-[#161B22]">
-              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
-                4. Форматы участия
-              </span>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {ALL_ROLES.map((role) => {
-                  const active = editableProfile.required_roles.includes(role);
-                  return (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleToggleRole(role)}
-                      className={cn(
-                        "px-2 py-0.5 text-[11px] font-serif italic transition-colors outline-none",
-                        active
-                          ? "-skew-x-[9deg] rounded-[2px] border border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-bold shadow-xs"
-                          : "rounded-[3px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
-                      )}
-                    >
-                      <span className={active ? "inline-block skew-x-[9deg]" : ""}>
-                        {ROLE_BADGE_LABELS[role]}
-                      </span>
-                    </button>
-                  );
-                })}
+            {/* Ячейка 4: Роли участия, спикерство и форматы событий */}
+            <div className="p-3 bg-[#161B22] flex flex-col justify-between">
+              <div>
+                <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+                  4. Роли и форматы
+                </span>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {ALL_ROLES.map((role) => {
+                    const active = editableProfile.required_roles.includes(role);
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleToggleRole(role)}
+                        className={cn(
+                          "px-2 py-0.5 text-[11px] font-serif italic transition-colors outline-none",
+                          active
+                            ? "-skew-x-[9deg] rounded-[2px] border border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-bold shadow-xs"
+                            : "rounded-[3px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:bg-[#1A2128] hover:text-white"
+                        )}
+                      >
+                        <span className={active ? "inline-block skew-x-[9deg]" : ""}>
+                          {ROLE_BADGE_LABELS[role]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
+                  <span>Мин. докладов спикером:</span>
+                  <CustomSelect
+                    value={editableProfile.min_speaker_events}
+                    onChange={(val) => {
+                      const count = Number(val) || 0;
+                      onUpdateProfile((prev) => ({
+                        ...prev,
+                        min_speaker_events: count,
+                        required_roles:
+                          count > 0 && !prev.required_roles.includes("speaker")
+                            ? [...prev.required_roles, "speaker"]
+                            : prev.required_roles,
+                      }));
+                    }}
+                    options={[0, 1, 2, 3].map((n) => ({
+                      value: n,
+                      label: String(n),
+                    }))}
+                    buttonClassName="h-6 px-2 py-0.5"
+                    menuClassName="min-w-[60px]"
+                  />
+                </div>
               </div>
 
-              <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
-                <span>Мин. докладов спикером:</span>
-                <CustomSelect
-                  value={editableProfile.min_speaker_events}
-                  onChange={(val) => {
-                    const count = Number(val) || 0;
-                    onUpdateProfile((prev) => ({
-                      ...prev,
-                      min_speaker_events: count,
-                      required_roles:
-                        count > 0 && !prev.required_roles.includes("speaker")
-                          ? [...prev.required_roles, "speaker"]
-                          : prev.required_roles,
-                    }));
-                  }}
-                  options={[0, 1, 2, 3].map((n) => ({
-                    value: n,
-                    label: String(n),
-                  }))}
-                  buttonClassName="h-6 px-2 py-0.5"
-                  menuClassName="min-w-[60px]"
+              <div className="mt-2 border-t border-[#21262F] pt-2">
+                {editableProfile.preferred_formats.length > 0 && (
+                  <div className="mb-1.5 flex flex-wrap gap-1 max-h-14 overflow-y-auto scrollbar-thin">
+                    {editableProfile.preferred_formats.map((fmt) => (
+                      <span
+                        key={fmt}
+                        className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-white"
+                      >
+                        <span>{FORMAT_LABELS[fmt] || fmt}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePreferredFormat(fmt)}
+                          className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
+                          title="Убрать формат"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <SearchableMultiSelectPopover
+                  label="Форматы"
+                  placeholder="Фильтр форматов..."
+                  options={FORMAT_SELECT_OPTIONS}
+                  selectedValues={editableProfile.preferred_formats}
+                  onChange={handleUpdatePreferredFormats}
+                  align="left"
+                  popoverWidthClass="w-64 sm:w-72"
+                  allSelectedLabel="Любые"
+                  renderTriggerContent={({ isOpen }) => (
+                    <button
+                      type="button"
+                      className={cn(
+                        "w-full flex h-7 items-center justify-between gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 text-[11px] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]",
+                        isOpen && "border-[#E5C378] text-[#E5C378] bg-[#161B21]",
+                        editableProfile.preferred_formats.length > 0 &&
+                        "border-[#7C5A20] text-[#E5C378]"
+                      )}
+                    >
+                      <span className="truncate">
+                        {editableProfile.preferred_formats.length > 0
+                          ? `Форматы (${editableProfile.preferred_formats.length})`
+                          : "Форматы: любые"}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-3 w-3 shrink-0 transition-transform duration-200",
+                          isOpen && "rotate-180 text-[#E5C378]"
+                        )}
+                      />
+                    </button>
+                  )}
                 />
               </div>
             </div>

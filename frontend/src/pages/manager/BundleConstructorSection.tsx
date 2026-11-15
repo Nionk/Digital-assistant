@@ -9,6 +9,7 @@ import {
   Building,
   Sparkles,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import type { BundleVariantOut } from "@/api/types";
 import type {
@@ -319,6 +320,18 @@ function EventBuilderRow({
                   Спецпроект
                 </Badge>
               )}
+              {item.data_status === "needs_enrichment" && (
+                <Badge
+                  variant="ebAmber"
+                  className="ml-1 text-[9px]"
+                  title={
+                    item.missing_data_warnings.join(" • ") ||
+                    "Карточка требует обогащения данных"
+                  }
+                >
+                  Требует обогащения
+                </Badge>
+              )}
             </div>
 
             <div className="mt-1 flex items-start justify-between gap-2">
@@ -354,6 +367,13 @@ function EventBuilderRow({
               <p className="mt-0.5 text-[11px] text-[#8E95A0]">
                 Темы: {item.themes.join(" · ")}
               </p>
+            )}
+
+            {item.missing_data_warnings.length > 0 && (
+              <div className="mt-1.5 flex items-start gap-1.5 rounded-[4px] border border-[#7C4A19]/70 bg-[#22160C]/80 px-2 py-1 text-[11px] text-[#E59837]">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" strokeWidth={1.75} />
+                <span>{item.missing_data_warnings.join(" · ")}</span>
+              </div>
             )}
 
             {/* Блок «Аргументы выбора и целевая аудитория» (Слайд 04) с редактированием по клику */}

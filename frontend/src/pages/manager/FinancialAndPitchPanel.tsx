@@ -24,7 +24,7 @@ interface FinancialAndPitchPanelProps {
   onPublish: () => void;
   isPublishing: boolean;
   publishedUrl: string | null;
-  onCopyLink: (url: string) => void;
+  onCopyLink: (url: string) => Promise<boolean> | boolean | void;
 }
 
 export function FinancialAndPitchPanel({
@@ -40,6 +40,19 @@ export function FinancialAndPitchPanel({
 }: FinancialAndPitchPanelProps) {
   const [copied, setCopied] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const copyTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    setCopied(false);
+  }, [publishedUrl]);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Автоматическая подстройка высоты окна обращения под длину текста (до 400px)
   React.useEffect(() => {
@@ -60,10 +73,17 @@ export function FinancialAndPitchPanel({
       ? Math.round((summary.totalSavings / summary.totalBasePrice) * 100)
       : 0;
 
-  const handleCopy = (url: string) => {
-    onCopyLink(url);
+  const handleCopy = async (url: string) => {
+    const ok = await onCopyLink(url);
+    if (ok === false) return;
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = null;
+    }, 2000);
   };
 
   return (
@@ -159,8 +179,8 @@ export function FinancialAndPitchPanel({
                   {summary.isWithinTolerance10Pct
                     ? "Превышение бюджета в пределах допустимых +10% (требует согласования с клиентом)"
                     : `Пакет превышает ориентир бюджета на ${formatRub(
-                        summary.totalActualPrice - summary.budgetMax
-                      )}`}
+                      summary.totalActualPrice - summary.budgetMax
+                    )}`}
                 </span>
               </div>
             )}
