@@ -365,10 +365,10 @@ async def seed_events(session: AsyncSession) -> list[Event]:
                         )
                     )
 
-        # 3.2. Общие вопросы по мероприятию (только на tid = 0, без отказных ответов)
+        # 3.2. Общие вопросы по мероприятию (только на tid = 0, без тарифно-зависимых и отказных ответов)
         for faq in e_schema.faq_cache:
             q_clean = faq.question.strip().lower()
-            if "тариф" in q_clean:
+            if "тариф" in q_clean or "early bird" in q_clean or "ранн" in q_clean:
                 continue
 
             ans_lower = (faq.answer or "").strip().lower()
@@ -384,9 +384,7 @@ async def seed_events(session: AsyncSession) -> list[Event]:
 
             # Нормализованный вопрос (канонический чипс) + синонимы быстрых кнопок витрины
             questions_to_hash = {q_clean}
-            if "early bird" in q_clean or "ранн" in q_clean:
-                questions_to_hash.update({"какие условия раннего бронирования и дедлайны?", "условия early bird"})
-            elif "спикер" in q_clean:
+            if "спикер" in q_clean:
                 questions_to_hash.update({"формат участия и требования к спикеру", "требования к спикеру"})
 
             for q_str in questions_to_hash:
