@@ -115,8 +115,13 @@ class HttpTelegramTransport:
                 logger.error("Ошибка Telegram API (%s): %s", resp.status_code, resp.text)
                 return False
             return True
-        except httpx.HTTPError:
-            logger.exception("Сетевая ошибка при отправке в Telegram")
+        except httpx.HTTPError as exc:
+            masked_error = str(exc).replace(bot_token, "***")
+            logger.error(
+                "Сетевая ошибка при отправке в Telegram (%s): %s",
+                type(exc).__name__,
+                masked_error,
+            )
             return False
 
 
