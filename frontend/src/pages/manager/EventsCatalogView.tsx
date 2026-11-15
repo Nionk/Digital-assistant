@@ -1,6 +1,5 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
 import {
   Search,
   MapPin,
@@ -16,9 +15,15 @@ import {
   ArrowUpDown,
   Copy,
   Check,
+  Upload,
+  Radar,
+  AlertTriangle,
 } from "lucide-react";
 import { useManagerEventsCatalog } from "@/api/queries";
-import type { CatalogEventItemOut } from "@/api/types";
+import type {
+  CatalogEventItemOut,
+  CatalogEventsFilterParams,
+} from "@/api/types";
 import { useManagerStore } from "@/store/useManagerStore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,12 +33,16 @@ import {
   type MultiSelectOption,
 } from "@/components/ui/searchable-multi-select-popover";
 import { EventDetailsDrawer } from "./EventDetailsDrawer";
+import { EventImportModal } from "./EventImportModal";
+import { ScraperRunModal } from "./ScraperRunModal";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   FORMAT_LABELS,
   formatCalendarBadge,
   formatDateShort,
   formatRub,
   formatMinPrice,
+  pluralizeRu,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +53,12 @@ const FORMAT_OPTIONS = [
   { value: "roundtable", label: "Круглые столы" },
   { value: "business_breakfast", label: "Деловые завтраки" },
   { value: "session", label: "Сессии" },
+];
+
+const DATA_STATUS_OPTIONS = [
+  { value: "all", label: "Все статусы" },
+  { value: "ready", label: "Готовы к КП" },
+  { value: "needs_enrichment", label: "Требуют обогащения" },
 ];
 
 const SORT_OPTIONS = [
@@ -61,42 +76,82 @@ const SORT_OPTIONS = [
  * 2. Выпадающие фильтры по формату, локации, тематике и сортировке.
  * 3. Детальная боковая шторка по клику на событие для углубленного изучения тарифов.
  */
-// [AUDIT-STUB]: В реестре площадок полностью отсутствуют модальное окно «Умный импорт и обогащение события (PDF / Ссылка)» (POST /api/manager/events/upload-pdf) и кнопка запуска парсера 9 сайтов (POST /api/manager/scraper/run) из п. 7.1 и 11.4 artifact.md
 export function EventsCatalogView() {
-  const { data, isLoading } = useManagerEventsCatalog(true);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedFormat, setSelectedFormat] = React.useState<string>("all");
   const [selectedCities, setSelectedCities] = React.useState<string[]>([]);
   const [selectedThemes, setSelectedThemes] = React.useState<string[]>([]);
+  const [selectedDataStatus, setSelectedDataStatus] = React.useState<string>("all");
+  const [dateFrom, setDateFrom] = React.useState<string>("");
+  const [dateTo, setDateTo] = React.useState<string>("");
   const [sortBy, setSortBy] = React.useState<string>("date_asc");
   const [onlyEarlyBird, setOnlyEarlyBird] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
-  const [selectedEventForDrawer, setSelectedEventForDrawer] =
-    React.useState<CatalogEventItemOut | null>(null);
+  const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
+    React.useState<number | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+  const [isScraperModalOpen, setIsScraperModalOpen] = React.useState(false);
   const [copiedEventId, setCopiedEventId] = React.useState<number | null>(null);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isDateRangeInvalid = Boolean(dateFrom && dateTo && dateTo < dateFrom);
+
+  const catalogFilters = React.useMemo<CatalogEventsFilterParams | undefined>(() => {
+    const status =
+      selectedDataStatus === "ready" || selectedDataStatus === "needs_enrichment"
+        ? selectedDataStatus
+        : null;
+    const validDateFrom = !isDateRangeInvalid && dateFrom ? dateFrom : null;
+    const validDateTo = !isDateRangeInvalid && dateTo ? dateTo : null;
+    if (!status && !validDateFrom && !validDateTo) return undefined;
+    return {
+      data_status: status,
+      date_from: validDateFrom,
+      date_to: validDateTo,
+    };
+  }, [selectedDataStatus, dateFrom, dateTo, isDateRangeInvalid]);
+
+  const { data, isLoading } = useManagerEventsCatalog(true, catalogFilters);
 
   const catalogTargetEventId = useManagerStore((s) => s.catalogTargetEventId);
   const setCatalogTargetEventId = useManagerStore((s) => s.setCatalogTargetEventId);
 
-  const events = data?.events || [];
+  const events = React.useMemo(() => data?.events || [], [data?.events]);
 
-  const handleCopyLocation = (e: React.MouseEvent, ev: CatalogEventItemOut) => {
+  const selectedEventForDrawer = React.useMemo(() => {
+    if (selectedEventIdForDrawer === null) return null;
+    return events.find((e) => e.event_id === selectedEventIdForDrawer) ?? null;
+  }, [events, selectedEventIdForDrawer]);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleCopyLocation = async (
+    e: React.MouseEvent,
+    ev: CatalogEventItemOut
+  ) => {
     e.stopPropagation();
     const fullText = ev.is_online
       ? "Онлайн"
       : `${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`.trim();
     if (!fullText) return;
-    navigator.clipboard.writeText(fullText).catch(() => {});
+    const ok = await copyTextToClipboard(fullText, {
+      successMessage: `Адрес скопирован: ${fullText}`,
+    });
+    if (!ok) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     setCopiedEventId(ev.event_id);
-    toast.success(`Адрес скопирован: ${fullText}`);
-    setTimeout(() => {
+    copyTimerRef.current = setTimeout(() => {
       setCopiedEventId((prev) => (prev === ev.event_id ? null : prev));
     }, 2000);
   };
 
   // Автоматическое открытие шторки площадки при переходе из дедлайнов Early Bird
   React.useEffect(() => {
-    if (!catalogTargetEventId || events.length === 0) return;
+    if (!catalogTargetEventId || isLoading) return;
     const target = events.find((e) => e.event_id === catalogTargetEventId);
     if (target) {
       if (selectedFormat !== "all" && target.event_format !== selectedFormat) {
@@ -105,10 +160,29 @@ export function EventsCatalogView() {
       if (searchQuery.trim().length > 0) {
         setSearchQuery("");
       }
-      setSelectedEventForDrawer(target);
+      setSelectedEventIdForDrawer(target.event_id);
+      setCatalogTargetEventId(null);
+      return;
+    }
+    // Если событие отфильтровано серверными фильтрами каталога, сбрасываем их перед открытием
+    if (selectedDataStatus !== "all" || dateFrom || dateTo) {
+      setSelectedDataStatus("all");
+      setDateFrom("");
+      setDateTo("");
+      return;
     }
     setCatalogTargetEventId(null);
-  }, [catalogTargetEventId, events, selectedFormat, searchQuery, setCatalogTargetEventId]);
+  }, [
+    catalogTargetEventId,
+    events,
+    isLoading,
+    selectedFormat,
+    searchQuery,
+    selectedDataStatus,
+    dateFrom,
+    dateTo,
+    setCatalogTargetEventId,
+  ]);
 
   const cityOptions = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -229,6 +303,9 @@ export function EventsCatalogView() {
     selectedFormat !== "all" ||
     selectedCities.length > 0 ||
     selectedThemes.length > 0 ||
+    selectedDataStatus !== "all" ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
     onlyEarlyBird;
 
   const handleResetFilters = () => {
@@ -236,6 +313,9 @@ export function EventsCatalogView() {
     setSelectedFormat("all");
     setSelectedCities([]);
     setSelectedThemes([]);
+    setSelectedDataStatus("all");
+    setDateFrom("");
+    setDateTo("");
     setSortBy("date_asc");
     setOnlyEarlyBird(false);
   };
@@ -258,33 +338,57 @@ export function EventsCatalogView() {
             </p>
           </div>
 
-          {/* Строка поиска */}
-          <div className="relative w-full lg:w-72">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8E95A0]"
-              strokeWidth={1.75}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по названию, КРТ, BIM..."
-              className="h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-7 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8E95A0] hover:text-[#E5C378] transition-colors"
-                title="Очистить поиск"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+          {/* Правая зона: поиск + действия импорта и парсера */}
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <div className="relative w-full sm:w-64">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8E95A0]"
+                strokeWidth={1.75}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по названию, КРТ, BIM..."
+                className="h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-7 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                  title="Очистить поиск"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-8 cursor-pointer border-[#7C5A20]/60 bg-[#12161A] text-xs text-[#E5C378] hover:border-[#E5C378] hover:bg-[#1E2530] hover:text-[#E5C378]"
+            >
+              <Upload className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              <span>Импорт PDF / Ссылки</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="monolith"
+              size="sm"
+              onClick={() => setIsScraperModalOpen(true)}
+              className="h-8 cursor-pointer text-xs"
+            >
+              <Radar className="h-3.5 w-3.5 text-[#E5C378] monolith-icon shrink-0" strokeWidth={1.75} />
+              <span>Запустить парсер</span>
+            </Button>
           </div>
         </div>
 
-        {/* Интерактивная строка фильтрации: Формат, Локация, Тематика, Сортировка, Early Bird и Вид */}
+        {/* Интерактивная строка фильтрации: Формат, Локация, Тематика, Статус, Период, Сортировка, Early Bird и Вид */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-[#21262F] pt-2.5 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             {/* Селектор формата */}
@@ -330,6 +434,56 @@ export function EventsCatalogView() {
                 allSelectedLabel={`Все (${events.length})`}
                 popoverWidthClass="w-80"
               />
+            </div>
+
+            {/* Селектор статуса данных (серверная фильтрация) */}
+            <div className="flex items-center gap-1.5">
+              <span className="font-serif italic text-[11px] text-[#8E95A0]">
+                Статус:
+              </span>
+              <CustomSelect
+                value={selectedDataStatus}
+                onChange={(val) => setSelectedDataStatus(String(val))}
+                options={DATA_STATUS_OPTIONS}
+                buttonClassName="h-7 min-w-[138px] text-xs"
+              />
+            </div>
+
+            {/* Фильтр периода дат проведения (серверная фильтрация) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-serif italic text-[11px] text-[#8E95A0]">
+                Период:
+              </span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                aria-label="Дата проведения с"
+                className={cn(
+                  "h-7 rounded-[4px] border bg-[#12161A] px-2 text-xs text-white [color-scheme:dark] outline-none transition-colors",
+                  isDateRangeInvalid
+                    ? "border-[#EF4444]"
+                    : "border-[#262D35] focus:border-[#E5C378]"
+                )}
+              />
+              <span className="text-[11px] text-[#6B7280]">—</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                aria-label="Дата проведения по"
+                className={cn(
+                  "h-7 rounded-[4px] border bg-[#12161A] px-2 text-xs text-white [color-scheme:dark] outline-none transition-colors",
+                  isDateRangeInvalid
+                    ? "border-[#EF4444]"
+                    : "border-[#262D35] focus:border-[#E5C378]"
+                )}
+              />
+              {isDateRangeInvalid && (
+                <span className="text-[11px] text-[#F87171]">
+                  Дата «по» раньше даты «с»
+                </span>
+              )}
             </div>
 
             {/* Меню многофакторной сортировки */}
@@ -501,7 +655,7 @@ export function EventsCatalogView() {
                       return (
                         <tr
                           key={ev.event_id}
-                          onClick={() => setSelectedEventForDrawer(ev)}
+                          onClick={() => setSelectedEventIdForDrawer(ev.event_id)}
                           className={cn(
                             "group cursor-pointer transition-colors duration-150 active:scale-[0.998]",
                             isSelected
@@ -530,107 +684,126 @@ export function EventsCatalogView() {
                             </div>
                           </td>
 
-                      <td className="py-3 px-3 align-middle">
-                        <div className="min-w-0 max-w-lg">
-                          <span
-                            title={ev.canonical_title}
-                            className="font-serif text-[13px] font-semibold text-white group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1 cursor-pointer"
-                          >
-                            {ev.canonical_title}
-                          </span>
-                          {ev.themes.length > 0 && (
-                            <p
-                              title={ev.themes.join(" · ")}
-                              className="mt-0.5 text-[11px] text-[#727985] truncate font-serif italic"
-                            >
-                              {ev.themes.slice(0, 3).join(" · ")}
-                              {ev.themes.length > 3 && (
+                          <td className="py-3 px-3 align-middle">
+                            <div className="min-w-0 max-w-lg">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <span
-                                  className="text-[#E5C378]/80 font-normal ml-1"
-                                  title={ev.themes.slice(3).join(" · ")}
+                                  title={ev.canonical_title}
+                                  className="font-serif text-[13px] font-semibold text-white group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1 cursor-pointer"
                                 >
-                                  +{ev.themes.length - 3}
+                                  {ev.canonical_title}
                                 </span>
+                                {ev.data_status === "needs_enrichment" && (
+                                  <Badge variant="ebAmber" className="text-[9px] shrink-0">
+                                    Требует обогащения
+                                  </Badge>
+                                )}
+                              </div>
+                              {ev.missing_data_warnings.length > 0 && (
+                                <p
+                                  title={ev.missing_data_warnings.join(" · ")}
+                                  className="mt-0.5 flex items-center gap-1 text-[10px] text-[#E5C378]/90 truncate"
+                                >
+                                  <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                                  <span className="truncate">
+                                    {ev.missing_data_warnings.join(" · ")}
+                                  </span>
+                                </p>
                               )}
-                            </p>
-                          )}
-                        </div>
-                      </td>
+                              {ev.themes.length > 0 && (
+                                <p
+                                  title={ev.themes.join(" · ")}
+                                  className="mt-0.5 text-[11px] text-[#727985] truncate font-serif italic"
+                                >
+                                  {ev.themes.slice(0, 3).join(" · ")}
+                                  {ev.themes.length > 3 && (
+                                    <span
+                                      className="text-[#E5C378]/80 font-normal ml-1"
+                                      title={ev.themes.slice(3).join(" · ")}
+                                    >
+                                      +{ev.themes.length - 3}
+                                    </span>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          </td>
 
-                      <td className="py-3 px-3 align-middle whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-xs text-[#D1D5DB]">
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopyLocation(e, ev)}
-                            title={
-                              ev.is_online
-                                ? "Онлайн (клик — скопировать)"
-                                : `Клик — скопировать полный адрес: ${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`
-                            }
-                            className="group/loc inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-1.5 py-0.5 text-xs text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer select-none text-left"
-                          >
-                            {ev.is_online ? (
-                              <Globe className="h-3.5 w-3.5 text-[#529E85] shrink-0" strokeWidth={1.5} />
+                          <td className="py-3 px-3 align-middle whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 text-xs text-[#D1D5DB]">
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyLocation(e, ev)}
+                                title={
+                                  ev.is_online
+                                    ? "Онлайн (клик — скопировать)"
+                                    : `Клик — скопировать полный адрес: ${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`
+                                }
+                                className="group/loc inline-flex items-center gap-1.5 rounded-[4px] border border-transparent px-1.5 py-0.5 text-xs text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer select-none text-left"
+                              >
+                                {ev.is_online ? (
+                                  <Globe className="h-3.5 w-3.5 text-[#529E85] shrink-0" strokeWidth={1.5} />
+                                ) : (
+                                  <MapPin className="h-3.5 w-3.5 text-[#8E95A0] group-hover/loc:text-[#E5C378] shrink-0" strokeWidth={1.5} />
+                                )}
+                                <span className="truncate max-w-[140px] font-medium">
+                                  {locationLabel}
+                                  {ev.venue && ` (${ev.venue})`}
+                                </span>
+                                {copiedEventId === ev.event_id ? (
+                                  <Check className="h-3 w-3 text-[#34D399] shrink-0" />
+                                ) : (
+                                  <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
+                                )}
+                              </button>
+                              <span className="text-[#3A4553]">·</span>
+                              <span className="text-[11px] text-[#8E95A0] font-serif italic">
+                                {formatLabel}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
+                            {minPrice !== null ? (
+                              <div>
+                                <span className="font-sans font-bold text-white text-xs">
+                                  {formatMinPrice(minPrice)}
+                                </span>
+                                <span className="block text-[10px] text-[#727985] font-serif italic">
+                                  {ev.tariffs.length}{" "}
+                                  {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
+                                </span>
+                              </div>
                             ) : (
-                              <MapPin className="h-3.5 w-3.5 text-[#8E95A0] group-hover/loc:text-[#E5C378] shrink-0" strokeWidth={1.5} />
+                              <span className="text-xs text-[#8E95A0] font-serif italic">
+                                По запросу
+                              </span>
                             )}
-                            <span className="truncate max-w-[140px] font-medium">
-                              {locationLabel}
-                              {ev.venue && ` (${ev.venue})`}
-                            </span>
-                            {copiedEventId === ev.event_id ? (
-                              <Check className="h-3 w-3 text-[#34D399] shrink-0" />
+                          </td>
+
+                          <td className="py-3 px-3 align-middle whitespace-nowrap">
+                            {savings > 0 ? (
+                              <Badge variant="ebEmerald" className="text-[9px]">
+                                Выгода {formatRub(savings)}
+                                {deadline ? ` до ${formatDateShort(deadline).slice(0, 5)}` : ""}
+                              </Badge>
                             ) : (
-                              <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
+                              <span className="text-[11px] text-[#727985] font-serif italic">
+                                Базовый тариф
+                              </span>
                             )}
-                          </button>
-                          <span className="text-[#3A4553]">·</span>
-                          <span className="text-[11px] text-[#8E95A0] font-serif italic">
-                            {formatLabel}
-                          </span>
-                        </div>
-                      </td>
+                          </td>
 
-                      <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
-                        {minPrice !== null ? (
-                          <div>
-                            <span className="font-sans font-bold text-white text-xs">
-                              {formatMinPrice(minPrice)}
+                          <td className="py-3 pr-4 pl-2 align-middle text-right whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-serif italic text-[#8E95A0] group-hover:text-[#E5C378] group-hover:translate-x-0.5 transition-all">
+                              <span>Детали</span>
+                              <ChevronRight className="h-3 w-3 text-inherit shrink-0" strokeWidth={2} />
                             </span>
-                            <span className="block text-[10px] text-[#727985] font-serif italic">
-                              {ev.tariffs.length} тарифа
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-[#8E95A0] font-serif italic">
-                            По запросу
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-3 align-middle whitespace-nowrap">
-                        {savings > 0 ? (
-                          <Badge variant="ebEmerald" className="text-[9px]">
-                            Выгода {formatRub(savings)}
-                            {deadline ? ` до ${formatDateShort(deadline).slice(0, 5)}` : ""}
-                          </Badge>
-                        ) : (
-                          <span className="text-[11px] text-[#727985] font-serif italic">
-                            Базовый тариф
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3 pr-4 pl-2 align-middle text-right whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-serif italic text-[#8E95A0] group-hover:text-[#E5C378] group-hover:translate-x-0.5 transition-all">
-                          <span>Детали</span>
-                          <ChevronRight className="h-3 w-3 text-inherit shrink-0" strokeWidth={2} />
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
                 </table>
               </div>
             </motion.div>
@@ -655,7 +828,7 @@ export function EventsCatalogView() {
                 return (
                   <div
                     key={ev.event_id}
-                    onClick={() => setSelectedEventForDrawer(ev)}
+                    onClick={() => setSelectedEventIdForDrawer(ev.event_id)}
                     className={cn(
                       "group flex flex-col justify-between rounded-[10px] border p-4 shadow-sm transition-colors duration-150 active:scale-[0.995] cursor-pointer",
                       isSelected
@@ -663,123 +836,140 @@ export function EventsCatalogView() {
                         : "border-[#262D35] bg-[#161B22] hover:border-[#7C5A20] hover:bg-[#181D24]"
                     )}
                   >
-                <div>
-                  <div className="flex items-start gap-3">
-                    {/* Календарный листок даты */}
-                    <div className="flex min-h-[58px] min-w-[56px] shrink-0 flex-col items-center justify-center rounded-[6px] border border-[#7C5A20]/50 bg-[#12161A] px-2 py-1.5 tabular-nums shadow-inner transition-colors group-hover:border-[#E5C378]">
-                      <span className="text-sm font-bold leading-none text-white">
-                        {cal.dayText}
-                      </span>
-                      <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 leading-none">
-                        {cal.monthText}
-                      </span>
-                      <span className="mt-1 text-[9px] text-[#8E95A0] leading-none">
-                        {cal.durationText}
-                      </span>
-                    </div>
+                    <div>
+                      <div className="flex items-start gap-3">
+                        {/* Календарный листок даты */}
+                        <div className="flex min-h-[58px] min-w-[56px] shrink-0 flex-col items-center justify-center rounded-[6px] border border-[#7C5A20]/50 bg-[#12161A] px-2 py-1.5 tabular-nums shadow-inner transition-colors group-hover:border-[#E5C378]">
+                          <span className="text-sm font-bold leading-none text-white">
+                            {cal.dayText}
+                          </span>
+                          <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 leading-none">
+                            {cal.monthText}
+                          </span>
+                          <span className="mt-1 text-[9px] text-[#8E95A0] leading-none">
+                            {cal.durationText}
+                          </span>
+                        </div>
 
-                    {/* Информация о мероприятии */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#8E95A0]">
-                        <span className="font-semibold text-[#D1D5DB]">
-                          {formatLabel}
-                        </span>
-                        <span>·</span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopyLocation(e, ev)}
-                          title={`Клик — скопировать адрес: ${ev.is_online ? "Онлайн" : `${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`}`}
-                          className="group/loc inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 font-medium text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer"
-                        >
-                          {ev.is_online ? (
-                            <Globe className="h-3 w-3 text-[#529E85]" strokeWidth={1.5} />
-                          ) : (
-                            <MapPin className="h-3 w-3 text-[#8E95A0] group-hover/loc:text-[#E5C378]" strokeWidth={1.5} />
-                          )}
-                          <span>{locationLabel}</span>
-                          {copiedEventId === ev.event_id ? (
-                            <Check className="h-3 w-3 text-[#34D399] shrink-0" />
-                          ) : (
-                            <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
-                          )}
-                        </button>
-                        {ev.venue && (
-                          <>
+                        {/* Информация о мероприятии */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#8E95A0]">
+                            <span className="font-semibold text-[#D1D5DB]">
+                              {formatLabel}
+                            </span>
                             <span>·</span>
                             <button
                               type="button"
                               onClick={(e) => handleCopyLocation(e, ev)}
-                              title={`Клик — скопировать адрес площадки: ${ev.city || ""}, ${ev.venue}`}
-                              className="inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer text-[#D1D5DB] leading-tight truncate max-w-[220px]"
+                              title={`Клик — скопировать адрес: ${ev.is_online ? "Онлайн" : `${ev.city || ""}${ev.venue ? `, ${ev.venue}` : ""}`}`}
+                              className="group/loc inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 font-medium text-[#D1D5DB] hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer"
                             >
-                              <Building className="h-3 w-3 shrink-0 opacity-70" strokeWidth={1.5} />
-                              <span className="truncate">{ev.venue}</span>
+                              {ev.is_online ? (
+                                <Globe className="h-3 w-3 text-[#529E85]" strokeWidth={1.5} />
+                              ) : (
+                                <MapPin className="h-3 w-3 text-[#8E95A0] group-hover/loc:text-[#E5C378]" strokeWidth={1.5} />
+                              )}
+                              <span>{locationLabel}</span>
+                              {copiedEventId === ev.event_id ? (
+                                <Check className="h-3 w-3 text-[#34D399] shrink-0" />
+                              ) : (
+                                <Copy className="h-2.5 w-2.5 opacity-0 group-hover/loc:opacity-100 text-[#E5C378] shrink-0 transition-opacity" />
+                              )}
                             </button>
-                          </>
+                            {ev.venue && (
+                              <>
+                                <span>·</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyLocation(e, ev)}
+                                  title={`Клик — скопировать адрес площадки: ${ev.city || ""}, ${ev.venue}`}
+                                  className="inline-flex items-center gap-1 rounded-[4px] border border-transparent px-1 py-0.5 hover:border-[#7C5A20]/60 hover:bg-[#1E2530] hover:text-[#E5C378] transition-all cursor-pointer text-[#D1D5DB] leading-tight truncate max-w-[220px]"
+                                >
+                                  <Building className="h-3 w-3 shrink-0 opacity-70" strokeWidth={1.5} />
+                                  <span className="truncate">{ev.venue}</span>
+                                </button>
+                              </>
+                            )}
+                            {ev.data_status === "needs_enrichment" && (
+                              <Badge variant="ebAmber" className="ml-auto text-[9px] shrink-0">
+                                Требует обогащения
+                              </Badge>
+                            )}
+                          </div>
+
+                          <h3
+                            title={ev.canonical_title}
+                            className="mt-1 font-serif text-sm sm:text-[15px] font-semibold leading-snug text-white group-hover:text-[#E5C378] transition-colors line-clamp-1"
+                          >
+                            {ev.canonical_title}
+                          </h3>
+
+                          <p
+                            title={ev.summary}
+                            className="mt-1 text-xs text-[#8E95A0] line-clamp-1 leading-relaxed"
+                          >
+                            {ev.summary}
+                          </p>
+
+                          {ev.missing_data_warnings.length > 0 && (
+                            <p
+                              title={ev.missing_data_warnings.join(" · ")}
+                              className="mt-1 flex items-center gap-1 text-[10px] text-[#E5C378]/90 line-clamp-1"
+                            >
+                              <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                              <span className="truncate">
+                                {ev.missing_data_warnings.join(" · ")}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Тематические теги */}
+                      {ev.themes.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1">
+                          {ev.themes.slice(0, 4).map((t) => (
+                            <span
+                              key={t}
+                              title={t}
+                              className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          {ev.themes.length > 4 && (
+                            <span
+                              title={ev.themes.slice(4).join(", ")}
+                              className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
+                            >
+                              +{ev.themes.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Нижняя лаконичная сводка: стоимость + Early Bird + кнопка Подробнее */}
+                    <div className="mt-3 flex items-center justify-between border-t border-[#21262F] pt-2.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-sans font-bold text-white tabular-nums">
+                          {formatMinPrice(minPrice)}
+                        </span>
+                        {savings > 0 && (
+                          <Badge variant="ebEmerald" className="text-[9px]">
+                            Выгода {formatRub(savings)}
+                          </Badge>
                         )}
                       </div>
 
-                      <h3
-                        title={ev.canonical_title}
-                        className="mt-1 font-serif text-sm sm:text-[15px] font-semibold leading-snug text-white group-hover:text-[#E5C378] transition-colors line-clamp-1"
-                      >
-                        {ev.canonical_title}
-                      </h3>
-
-                      <p
-                        title={ev.summary}
-                        className="mt-1 text-xs text-[#8E95A0] line-clamp-1 leading-relaxed"
-                      >
-                        {ev.summary}
-                      </p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-serif italic text-[#8E95A0] group-hover:text-[#E5C378] group-hover:translate-x-0.5 transition-all">
+                        <span>Тарифы ({ev.tariffs.length})</span>
+                        <ChevronRight className="h-3 w-3 text-inherit shrink-0" strokeWidth={2} />
+                      </span>
                     </div>
                   </div>
-
-                  {/* Тематические теги */}
-                  {ev.themes.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1">
-                      {ev.themes.slice(0, 4).map((t) => (
-                        <span
-                          key={t}
-                          title={t}
-                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                      {ev.themes.length > 4 && (
-                        <span
-                          title={ev.themes.slice(4).join(", ")}
-                          className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
-                        >
-                          +{ev.themes.length - 4}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Нижняя лаконичная сводка: стоимость + Early Bird + кнопка Подробнее */}
-                <div className="mt-3 flex items-center justify-between border-t border-[#21262F] pt-2.5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-sans font-bold text-white tabular-nums">
-                      {formatMinPrice(minPrice)}
-                    </span>
-                    {savings > 0 && (
-                      <Badge variant="ebEmerald" className="text-[9px]">
-                        Выгода {formatRub(savings)}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <span className="inline-flex items-center gap-1 text-[11px] font-serif italic text-[#8E95A0] group-hover:text-[#E5C378] group-hover:translate-x-0.5 transition-all">
-                    <span>Тарифы ({ev.tariffs.length})</span>
-                    <ChevronRight className="h-3 w-3 text-inherit shrink-0" strokeWidth={2} />
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>
@@ -788,7 +978,17 @@ export function EventsCatalogView() {
       <EventDetailsDrawer
         event={selectedEventForDrawer}
         isOpen={Boolean(selectedEventForDrawer)}
-        onClose={() => setSelectedEventForDrawer(null)}
+        onClose={() => setSelectedEventIdForDrawer(null)}
+      />
+
+      <EventImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+      />
+
+      <ScraperRunModal
+        isOpen={isScraperModalOpen}
+        onClose={() => setIsScraperModalOpen(false)}
       />
     </div>
   );
