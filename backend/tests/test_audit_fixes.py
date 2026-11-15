@@ -286,3 +286,113 @@ def test_upload_event_material_safely_queries_tariffs():
             assert mock_session.scalar.call_count == 1
 
     asyncio.run(_test())
+
+
+def test_rag_grounding_rejects_punctuation_only_quotes():
+    """Пустые после очистки пунктуации цитаты не должны проходить проверку _is_quote_grounded."""
+    from app.services.rag import _is_quote_grounded
+
+    ctx = "Официальный регламент форума по строительству и девелопменту."
+    assert _is_quote_grounded("..........", ctx) is False
+    assert _is_quote_grounded("--- --- ---", ctx) is False
+    assert _is_quote_grounded("!!! ... !!! ... ???", ctx) is False
+    assert _is_quote_grounded("регламент форума по строительству", ctx) is True
+
+
+def test_upload_event_material_url_and_http_errors(client):
+    """Некорректный URL возвращает 400, а сбой загрузки внешнего сайта — 502."""
+    import app.api.manager as manager_module
+    import httpx
+    from app.core.security import get_current_manager
+
+    mock_mgr = User(
+        id=1,
+        email="mgr@skart.ru",
+        password_hash="fakehash",
+        full_name="Менеджер",
+        telegram_chat_id=111,
+    )
+    app.dependency_overrides[get_current_manager] = lambda: mock_mgr
+
+    async def override_session():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_async_session] = override_session
+
+    with patch.object(
+        manager_module,
+        "ingest_smart_event",
+        new=AsyncMock(side_effect=httpx.InvalidURL("Invalid URL")),
+    ):
+        res_400 = client.post("/api/manager/events/upload-pdf", data={"source_url": "bad-url"})
+        assert res_400.status_code == 400
+
+    with patch.object(
+        manager_module,
+        "ingest_smart_event",
+        new=AsyncMock(side_effect=httpx.ConnectError("Connection refused")),
+    ):
+        res_502 = client.post("/api/manager/events/upload-pdf", data={"source_url": "https://example.com/event"})
+        assert res_502.status_code == 502
+
+
+def test_manager_events_catalog_archived_filter(client):
+    """При ?data_status=archived SQL-фильтр не требует is_active=True."""
+    from app.core.security import get_current_manager
+
+    mock_mgr = User(
+        id=1,
+        email="mgr@skart.ru",
+        password_hash="fakehash",
+        full_name="Менеджер",
+        telegram_chat_id=111,
+    )
+    app.dependency_overrides[get_current_manager] = lambda: mock_mgr
+
+    captured_stmts = []
+
+    async def override_session():
+        mock_session = AsyncMock()
+
+        async def _execute(stmt):
+            captured_stmts.append(stmt)
+            mock_res = MagicMock()
+            mock_res.scalars.return_value.all.return_value = []
+            return mock_res
+
+        mock_session.execute = _execute
+        yield mock_session
+
+    app.dependency_overrides[get_async_session] = override_session
+
+    res = client.get("/api/manager/events?data_status=archived")
+    assert res.status_code == 200
+    sql_str = str(captured_stmts[0])
+    assert "events.data_status =" in sql_str
+    assert "events.is_active IS true" not in sql_str
+
+
+def test_telegram_masks_bot_token_in_error_logs(caplog):
+    """Сетевая ошибка httpx не должна раскрывать TELEGRAM_BOT_TOKEN в логах."""
+    import asyncio
+    import logging
+
+    import httpx
+    from app.services.telegram import HttpTelegramTransport
+
+    secret_token = "123456:ABC-SECRET-BOT-TOKEN"
+    req = httpx.Request("POST", f"https://api.telegram.org/bot{secret_token}/sendMessage")
+    err = httpx.ConnectError(f"Failed to connect to https://api.telegram.org/bot{secret_token}/sendMessage", request=req)
+
+    transport = HttpTelegramTransport()
+    with (
+        patch.object(settings, "TELEGRAM_BOT_TOKEN", secret_token),
+        patch.object(settings, "TELEGRAM_MANAGER_CHAT_ID", 999999),
+        patch("app.services.telegram._post_telegram_message", new=AsyncMock(side_effect=err)),
+        caplog.at_level(logging.ERROR),
+    ):
+        ok = asyncio.run(transport.send_message("Тест", chat_id=999999))
+        assert ok is False
+
+    assert secret_token not in caplog.text
+    assert "***" in caplog.text
