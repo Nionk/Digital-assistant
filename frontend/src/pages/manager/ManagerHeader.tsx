@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { BurningDeadlineOut } from "@/api/types";
+import { useAuthStore, parseManagerDisplayInfo } from "@/store/useAuthStore";
 import { useManagerStore, type ManagerWorkspaceMode } from "@/store/useManagerStore";
 import { formatDateShort, formatRub, getDaysUntil } from "@/lib/formatters";
 import { ProducerProfileModal } from "@/components/ui/producer-profile-modal";
@@ -32,7 +33,11 @@ export function ManagerHeader({
   const [isDeadlinesOpen, setIsDeadlinesOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  const currentProducer = useManagerStore((s) => s.currentProducer);
+  const user = useAuthStore((s) => s.user);
+  const currentProducer = React.useMemo(
+    () => parseManagerDisplayInfo(user),
+    [user]
+  );
   const isProducerModalOpen = useManagerStore((s) => s.isProducerModalOpen);
   const setProducerModalOpen = useManagerStore((s) => s.setProducerModalOpen);
   const navigateToCatalogEvent = useManagerStore((s) => s.navigateToCatalogEvent);
@@ -244,23 +249,22 @@ export function ManagerHeader({
         {/* Тонкий вертикальный разделитель */}
         <div className="h-6 w-[1px] bg-[#2A313C] mx-0.5 sm:mx-1" />
 
-        {/* [AUDIT-FAKE]: Кнопка профиля в шапке открывает бутафорский переключатель 3 захардкоженных кураторов вместо отображения реальной JWT-сессии и кнопки выхода (Logout) */}
-        {/* Профиль продюсера точь-в-точь по макету */}
+        {/* Профиль авторизованного куратора */}
         <button
           type="button"
           onClick={() => setProducerModalOpen(true)}
           className="group flex items-center gap-2.5 rounded-[8px] p-1 transition-opacity hover:opacity-90 focus:outline-none"
-          title="Сменить куратора или открыть терминал продюсера"
+          title="Профиль куратора и выход из аккаунта"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#7C5A20]/60 bg-[#161B21] text-[11px] font-bold text-white tabular-nums shadow-sm group-hover:border-[#E5C378] group-hover:text-[#E5C378] transition-colors">
-            {currentProducer.avatarText}
+            {currentProducer.initials}
           </div>
           <div className="hidden sm:block text-left">
             <span className="block text-xs font-semibold leading-tight text-white group-hover:text-[#E5C378] transition-colors">
-              {currentProducer.name}
+              {currentProducer.displayName}
             </span>
             <span className="block font-serif italic text-[11px] text-[#8E95A0] leading-tight group-hover:text-[#E5C378]/80 transition-colors">
-              {currentProducer.role}
+              {currentProducer.roleLabel}
             </span>
           </div>
         </button>
