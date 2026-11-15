@@ -31,9 +31,14 @@ export function CustomSelect<T extends number | string = number | string>({
   disabled = false,
 }: CustomSelectProps<T>) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [highlightedIndex, setHighlightedIndex] = React.useState<number>(-1);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const optionRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const listboxId = React.useId();
 
-  const selectedOption = options.find((o) => o.value === value);
+  const selectedIndex = options.findIndex((o) => o.value === value);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
 
   // Закрытие при клике снаружи
   React.useEffect(() => {
@@ -53,11 +58,29 @@ export function CustomSelect<T extends number | string = number | string>({
     };
   }, [isOpen]);
 
-  // Закрытие по Escape
+  // Синхронизация подсвеченного индекса при открытии меню
+  React.useEffect(() => {
+    if (isOpen) {
+      setHighlightedIndex(
+        selectedIndex >= 0 ? selectedIndex : options.length > 0 ? 0 : -1
+      );
+    } else {
+      setHighlightedIndex(-1);
+    }
+  }, [isOpen, selectedIndex, options.length]);
+
+  // Прокрутка активной опции в область видимости при навигации стрелками
+  React.useEffect(() => {
+    if (!isOpen || highlightedIndex < 0) return;
+    optionRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [isOpen, highlightedIndex]);
+
+  // Закрытие по Escape (если кликнули вне фокуса кнопки)
   React.useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsOpen(false);
+        buttonRef.current?.focus();
       }
     }
     if (isOpen) {
@@ -68,15 +91,86 @@ export function CustomSelect<T extends number | string = number | string>({
     };
   }, [isOpen]);
 
+  const handleSelectOption = (optionValue: T) => {
+    onChange(optionValue);
+    setIsOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const handleButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled || options.length === 0) return;
+
+    if (!isOpen) {
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "Enter" ||
+        event.key === " "
+      ) {
+        event.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < 0 ? 0 : (prev + 1) % options.length
+        );
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev <= 0 ? options.length - 1 : prev - 1
+        );
+        break;
+      case "Home":
+        event.preventDefault();
+        setHighlightedIndex(0);
+        break;
+      case "End":
+        event.preventDefault();
+        setHighlightedIndex(options.length - 1);
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        if (highlightedIndex >= 0 && options[highlightedIndex]) {
+          handleSelectOption(options[highlightedIndex].value);
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        break;
+      case "Tab":
+        setIsOpen(false);
+        break;
+    }
+  };
+
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? listboxId : undefined}
+        aria-activedescendant={
+          isOpen && highlightedIndex >= 0
+            ? `${listboxId}-opt-${highlightedIndex}`
+            : undefined
+        }
         onClick={() => setIsOpen((prev) => !prev)}
+        onKeyDown={handleButtonKeyDown}
         className={cn(
           "flex items-center justify-between gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2 py-1 text-xs font-medium text-white tabular-nums select-none cursor-pointer outline-none transition-colors duration-150",
-          "hover:border-[#E5C378]",
+          "hover:border-[#E5C378] focus-visible:border-[#E5C378]",
           isOpen && "border-[#E5C378] shadow-[0_0_8px_rgba(229,195,120,0.25)]",
           disabled && "cursor-not-allowed opacity-50",
           buttonClassName
@@ -97,6 +191,9 @@ export function CustomSelect<T extends number | string = number | string>({
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            id={listboxId}
+            role="listbox"
+            aria-label={placeholder}
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -3, scale: 0.98 }}
@@ -106,19 +203,23 @@ export function CustomSelect<T extends number | string = number | string>({
               menuClassName
             )}
           >
-            // [AUDIT-CRUTCH]: Кастомный выпадающий список сверстан на div без ARIA-атрибутов (role="listbox"/role="option") и без поддержки клавиатурной навигации (ArrowUp/ArrowDown/Enter)
-            {options.map((option) => {
+            {options.map((option, idx) => {
               const isSelected = option.value === value;
+              const isHighlighted = idx === highlightedIndex;
               return (
                 <div
                   key={String(option.value)}
-                  onClick={() => {
-                    onChange(option.value);
-                    setIsOpen(false);
+                  ref={(el) => {
+                    optionRefs.current[idx] = el;
                   }}
+                  id={`${listboxId}-opt-${idx}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  onMouseEnter={() => setHighlightedIndex(idx)}
+                  onClick={() => handleSelectOption(option.value)}
                   className={cn(
                     "flex items-center justify-between gap-2 rounded-[4px] px-2.5 py-1.5 text-xs font-medium cursor-pointer select-none transition-colors duration-100",
-                    isSelected
+                    isSelected || isHighlighted
                       ? "bg-[#1E252E] text-[#E5C378]"
                       : "text-[#D1D5DB] hover:bg-[#1E252E] hover:text-[#E5C378]"
                   )}
