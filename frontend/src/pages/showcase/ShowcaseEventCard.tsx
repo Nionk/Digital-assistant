@@ -16,11 +16,13 @@ import {
 import type { ShowcaseEventItemOut } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  formatReactionComment,
+  parseClientComment,
+} from "@/lib/accompaniment";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
-  AGENCY_SERVICES_STAGE_09,
   FORMAT_SHORT_LABELS,
-  REPLACEMENT_QUICK_REASONS,
   ROLE_BADGE_LABELS,
   formatCalendarBadge,
   formatDateShort,
@@ -28,61 +30,8 @@ import {
 } from "@/lib/formatters";
 import { getEventCoverVisual } from "@/lib/eventCovers";
 import { cn } from "@/lib/utils";
-
-const ACCOMPANIMENT_PREFIX_RE =
-  /^(?:Сопровождение агентства \(Этап 09\)|Опции сопровождения):\s*(.+)$/i;
-const KNOWN_STAGE_09_TAGS = new Set<string>(
-  AGENCY_SERVICES_STAGE_09.map((srv) => srv.shortTag)
-);
-
-function parseClientComment(raw: string | null | undefined): {
-  freeNote: string;
-  parsedServices: string[];
-} {
-  if (!raw) return { freeNote: "", parsedServices: [] };
-  const freeLines: string[] = [];
-  const parsedServices: string[] = [];
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const match = trimmed.match(ACCOMPANIMENT_PREFIX_RE);
-    if (match) {
-      const rawTags = match[1]
-        .split(/[;,]\s*/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const tok of rawTags) {
-        const canonicalTag = KNOWN_STAGE_09_TAGS.has(tok) ? tok : tok;
-        if (!parsedServices.includes(canonicalTag)) {
-          parsedServices.push(canonicalTag);
-        }
-      }
-    } else if (!/^Участие по базовому тарифу$/i.test(trimmed)) {
-      freeLines.push(trimmed);
-    }
-  }
-
-  return {
-    freeNote: freeLines.join("\n"),
-    parsedServices,
-  };
-}
-
-function formatReactionComment(
-  services: string[],
-  freeNote?: string | null
-): string | undefined {
-  const parts: string[] = [];
-  const cleanedNote = (freeNote || "").trim();
-  if (cleanedNote) {
-    parts.push(cleanedNote);
-  }
-  if (services.length > 0) {
-    parts.push(`Опции сопровождения: ${services.join("; ")}`);
-  }
-  return parts.length > 0 ? parts.join("\n") : undefined;
-}
+import { CardAccompanimentPanel } from "./card/CardAccompanimentPanel";
+import { CardReplacementPanel } from "./card/CardReplacementPanel";
 
 interface ShowcaseEventCardProps {
   item: ShowcaseEventItemOut;
@@ -588,151 +537,32 @@ export function ShowcaseEventCard({
         {/* Раскрываемое изумрудное окно: Подготовка и сопровождение от агентства */}
         <AnimatePresence>
           {activeExpandPanel === "accompaniment" && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="overflow-hidden"
-            >
-              <div className="mt-3 rounded-[10px] border border-[#1E5241] bg-[#0D211B] p-3.5 shadow-lg">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-serif italic text-xs font-semibold text-[#34D399]">
-                    Подготовка и сопровождение от агентства
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveExpandPanel("none")}
-                    className="text-[11px] text-[#8E95A0] hover:text-white transition-colors cursor-pointer"
-                  >
-                    Свернуть
-                  </button>
-                </div>
-                <p className="mt-1 text-[11px] text-[#A7F3D0]/80">
-                  Отметьте задачи, которые вы хотите поручить нашей команде:
-                </p>
-
-                <div className="mt-2.5 space-y-1.5">
-                  {AGENCY_SERVICES_STAGE_09.map((srv) => {
-                    const checked = effectiveAgencyServices.includes(
-                      srv.shortTag
-                    );
-                    return (
-                      <label
-                        key={srv.id}
-                        className={cn(
-                          "flex cursor-pointer items-start gap-2.5 rounded-[8px] border p-2.5 text-xs transition-colors",
-                          checked
-                            ? "border-[#2B6E58] bg-[#133329] text-white"
-                            : "border-[#1E5241]/60 bg-[#0A1914] text-[#D1D5DB] hover:border-[#2B6E58]"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleToggleService(srv.shortTag)}
-                          className="mt-0.5 h-3.5 w-3.5 rounded accent-[#34D399]"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <span className="block font-semibold text-white">
-                            {srv.title}
-                          </span>
-                          <span className="mt-0.5 block text-[11px] text-[#8E95A0] leading-snug">
-                            {srv.subtitle}
-                          </span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                <input
-                  type="text"
-                  value={interestedNote}
-                  onChange={(e) => setInterestedNote(e.target.value)}
-                  placeholder="Комментарий куратору (необязательно)..."
-                  className="mt-2.5 h-8 w-full rounded-[6px] border border-[#1E5241]/70 bg-[#0A1914] px-2.5 text-xs text-white placeholder:text-[#6B8F82] focus:border-[#34D399] focus:outline-none"
-                />
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isReacting}
-                  onClick={handleSendAccompanimentUpdate}
-                  className="mt-2.5 w-full border-[#2B6E58] bg-[#14382D] text-xs font-semibold text-[#34D399] hover:bg-[#194638] hover:text-white cursor-pointer"
-                >
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.25} />
-                  <span>Сохранить выбранные опции</span>
-                </Button>
-              </div>
-            </motion.div>
+            <CardAccompanimentPanel
+              key="accompaniment"
+              effectiveAgencyServices={effectiveAgencyServices}
+              interestedNote={interestedNote}
+              isReacting={isReacting}
+              onToggleService={handleToggleService}
+              onChangeInterestedNote={setInterestedNote}
+              onClose={() => setActiveExpandPanel("none")}
+              onSubmit={handleSendAccompanimentUpdate}
+            />
           )}
 
           {/* Раскрываемое окно: Пожелания для подбора замены */}
           {activeExpandPanel === "replace" && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="overflow-hidden"
-            >
-              <div className="mt-3 rounded-[10px] border border-[#5E2242]/70 bg-[#12161A] p-3.5 shadow-lg">
-                <div className="flex items-center justify-between">
-                  <span className="font-serif italic text-xs font-semibold text-[#F472B6]">
-                    Пожелания для замены мероприятия
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveExpandPanel("none")}
-                    className="text-[11px] text-[#8E95A0] hover:text-white transition-colors cursor-pointer"
-                  >
-                    Отмена
-                  </button>
-                </div>
-                <p className="mt-1 text-[11px] text-[#8E95A0]">
-                  Укажите причину или напишите комментарий для куратора:
-                </p>
-
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {REPLACEMENT_QUICK_REASONS.map((reason) => (
-                    <button
-                      key={reason}
-                      type="button"
-                      disabled={isReacting}
-                      onClick={() => {
-                        setReplaceComment(reason);
-                        handleSubmitReplacement(reason);
-                      }}
-                      className="rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] transition-colors hover:border-[#5E2242] hover:bg-[#28131E] hover:text-[#F472B6] disabled:opacity-50 cursor-pointer"
-                    >
-                      {reason}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-2.5 flex gap-1.5">
-                  <input
-                    type="text"
-                    value={replaceComment}
-                    onChange={(e) => setReplaceComment(e.target.value)}
-                    placeholder="Ваш комментарий (например, другие даты)..."
-                    className="h-8 flex-1 rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 text-xs text-white placeholder:text-[#727985] focus:border-[#F472B6] focus:outline-none"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isReacting}
-                    onClick={() => handleSubmitReplacement()}
-                    className="border-[#5E2242] bg-[#28131E] text-[#F472B6] hover:bg-[#381a2b] cursor-pointer"
-                  >
-                    Отправить
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
+            <CardReplacementPanel
+              key="replace"
+              replaceComment={replaceComment}
+              isReacting={isReacting}
+              onChangeReplaceComment={setReplaceComment}
+              onSelectQuickReason={(reason) => {
+                setReplaceComment(reason);
+                handleSubmitReplacement(reason);
+              }}
+              onSubmit={() => handleSubmitReplacement()}
+              onClose={() => setActiveExpandPanel("none")}
+            />
           )}
         </AnimatePresence>
       </div>
