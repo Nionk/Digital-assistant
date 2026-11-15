@@ -712,7 +712,11 @@ async def _populate_faq_cache(
     reg_text = (event_obj.full_regulation_markdown or "").lower()
     for faq in schema.faq_cache:
         # Не кэшируем на уровне события (tariff_id=0) ответы, зависящие от рекомендованного тарифа
-        if any(kw in faq.question.lower() for kw in ("что входит", "входит в тариф", "рекомендованный тариф")):
+        q_low = faq.question.lower()
+        if any(
+            kw in q_low
+            for kw in ("что входит", "входит в тариф", "рекомендованный тариф", "раннего бронирования", "early bird")
+        ):
             continue
         ans_lower = (faq.answer or "").strip().lower()
         if not ans_lower or any(stub in ans_lower for stub in ("уточняется", "нет информаци", "не указан")):
