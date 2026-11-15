@@ -57,9 +57,14 @@ def _is_quote_grounded(quote: str | None, context_text: str) -> bool:
     parts = re.split(r"\.{3,}|…", quote)
     valid_parts = [p.strip() for p in parts if len(p.strip()) >= 10]
     if valid_parts:
-        return all(_normalize_text_for_grounding(part) in norm_ctx for part in valid_parts)
+        norm_parts = [_normalize_text_for_grounding(part) for part in valid_parts]
+        if any(not np for np in norm_parts):
+            return False
+        return all(np in norm_ctx for np in norm_parts)
 
     norm_quote = _normalize_text_for_grounding(quote)
+    if not norm_quote:
+        return False
     return norm_quote in norm_ctx
 
 
