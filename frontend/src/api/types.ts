@@ -112,13 +112,7 @@ export type MatchResponseOut = Omit<
 };
 
 export type SelectedEventTariffPairIn = Schema<"SelectedEventTariffPairIn">;
-// TODO(Этап 2): после сужения selectedVariantGroupByClient в useManagerStore до 1 | 2 заменить напрямую на Schema<"PublishSelectionIn">
-export type PublishSelectionIn = Omit<
-  Schema<"PublishSelectionIn">,
-  "selected_bundle_group"
-> & {
-  selected_bundle_group: number;
-};
+export type PublishSelectionIn = Schema<"PublishSelectionIn">;
 export type PublishSelectionOut = Required<Schema<"PublishSelectionOut">>;
 
 export type SelectionItemReactionActivity = Required<
