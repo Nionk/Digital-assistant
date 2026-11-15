@@ -23,7 +23,15 @@ export function CalendarTimeline({
 }: CalendarTimelineProps) {
   if (items.length === 0) return null;
 
-  const sorted = [...items].sort((a, b) =>
+  const uniqueItems: (DateSpanItem & { city?: string | null; roleLabel?: string })[] = [];
+  const seenEventIds = new Set<number>();
+  for (const item of items) {
+    if (seenEventIds.has(item.event_id)) continue;
+    seenEventIds.add(item.event_id);
+    uniqueItems.push(item);
+  }
+
+  const sorted = [...uniqueItems].sort((a, b) =>
     a.start_date.localeCompare(b.start_date)
   );
   const { hasConflict, conflictDescription } = checkDateConflicts(sorted);
@@ -71,14 +79,13 @@ export function CalendarTimeline({
             : "grid-cols-1 md:grid-cols-3 lg:grid-cols-4"
         )}
       >
-        {/* [AUDIT-CRUTCH]: Использование key={ev.event_id} без дедупликации приведет к коллизии ключей React при попадании одного события в основной и бонусный слоты */}
         {sorted.map((ev, index) => {
           const cal = formatCalendarBadge(ev.start_date, ev.end_date);
           const loc = ev.is_online ? "Онлайн" : ev.city || "Россия";
 
           return (
             <div
-              key={ev.event_id}
+              key={`${ev.event_id}-${index}`}
               className="flex items-center gap-2.5 rounded-[6px] border border-[#262C35] bg-[#1A1E24] px-2.5 py-1.5 transition-colors duration-150 hover:border-[#38414F]"
             >
               <div className="flex h-9 w-11 shrink-0 flex-col items-center justify-center rounded-[4px] border border-[#7C5A20]/50 bg-[#161B21] text-white tabular-nums">

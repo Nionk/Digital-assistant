@@ -209,13 +209,14 @@ export interface DateSpanItem {
   start_date: string;
   end_date: string;
   is_online: boolean;
+  city?: string | null;
 }
 
 /**
- * Детерминированная проверка отсутствия пересечений дат между очными мероприятиями
- * (Слайд 02, 03, 04 и Шаг 06 «Календарь без накладок»).
+ * Детерминированная проверка отсутствия пересечений дат между очными мероприятиями.
+ * Алгоритм совпадает с backend/app/services/matcher.py (has_offline_date_conflict):
+ * конфликтом считается любое пересечение дат двух различных очных мероприятий.
  */
-// [AUDIT-CRUTCH]: Проверка накладок дат во фронтенде игнорирует город проведения (city) и роль (role), помечая конфликтом любые два очных события в одну дату даже в одном городе, что противоречит алгоритму бэкенда (п. 9.3.1 artifact.md)
 export function checkDateConflicts(items: DateSpanItem[]): {
   hasConflict: boolean;
   conflictDescription: string | null;
@@ -225,10 +226,31 @@ export function checkDateConflicts(items: DateSpanItem[]): {
     for (let j = i + 1; j < offline.length; j++) {
       const a = offline[i];
       const b = offline[j];
+      if (a.event_id === b.event_id) continue;
       if (a.start_date <= b.end_date && b.start_date <= a.end_date) {
+        const overlapStart =
+          a.start_date > b.start_date ? a.start_date : b.start_date;
+        const overlapEnd = a.end_date < b.end_date ? a.end_date : b.end_date;
+        const overlapDates =
+          overlapStart === overlapEnd
+            ? formatDateShort(overlapStart)
+            : `${formatDateShort(overlapStart)}–${formatDateShort(overlapEnd)}`;
+
+        const cityA = a.city?.trim() || null;
+        const cityB = b.city?.trim() || null;
+        let citiesLabel = "";
+        if (cityA && cityB) {
+          citiesLabel =
+            cityA.toLowerCase() === cityB.toLowerCase()
+              ? ` (оба: ${cityA})`
+              : ` (${cityA} — ${cityB})`;
+        } else if (cityA || cityB) {
+          citiesLabel = ` (${cityA || cityB})`;
+        }
+
         return {
           hasConflict: true,
-          conflictDescription: `Пересечение дат: «${a.canonical_title}» и «${b.canonical_title}»`,
+          conflictDescription: `Пересечение очных дат (${overlapDates}): «${a.canonical_title}» и «${b.canonical_title}»${citiesLabel}`,
         };
       }
     }
