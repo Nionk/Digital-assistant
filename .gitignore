@@ -93,11 +93,8 @@ docs/
 backend/tests/*.md
 backend/alembic/README
 
-# Build artifacts & temporary duplicates
-/openapi.json
+# Build artifacts
 *.tsbuildinfo
-/fire.png
-/logo.png
 
 # Audit & diagnostic dumps
 repo_structure.txt
