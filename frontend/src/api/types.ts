@@ -134,6 +134,8 @@ export type ClientWorkspaceOut = Omit<
 };
 
 export type SelectedEventTariffPairIn = Schema<"SelectedEventTariffPairIn">;
+export type GeneratePitchIn = Schema<"GeneratePitchIn">;
+export type GeneratePitchOut = Required<Schema<"GeneratePitchOut">>;
 export type PublishSelectionIn = Schema<"PublishSelectionIn">;
 export type PublishSelectionOut = Required<Schema<"PublishSelectionOut">>;
 

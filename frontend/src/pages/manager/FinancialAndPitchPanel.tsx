@@ -1,7 +1,8 @@
 import {
   Copy,
   ExternalLink,
-  RefreshCw,
+  Loader2,
+  Sparkles,
   Send,
   ShieldCheck,
   AlertTriangle,
@@ -20,7 +21,8 @@ interface FinancialAndPitchPanelProps {
   summary: ComputedFinancialSummary;
   pitchText: string;
   onPitchChange: (text: string) => void;
-  onSyncPitchNumbers: () => void;
+  onGeneratePitch: () => void;
+  isGeneratingPitch: boolean;
   onPublish: () => void;
   isPublishing: boolean;
   publishedUrl: string | null;
@@ -32,7 +34,8 @@ export function FinancialAndPitchPanel({
   summary,
   pitchText,
   onPitchChange,
-  onSyncPitchNumbers,
+  onGeneratePitch,
+  isGeneratingPitch,
   onPublish,
   isPublishing,
   publishedUrl,
@@ -206,12 +209,26 @@ export function FinancialAndPitchPanel({
 
           <button
             type="button"
-            onClick={onSyncPitchNumbers}
-            title="Автоматически подставить пересчитанную сумму, выгоду и список площадок в текст письма"
-            className="group relative inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
+            disabled={isGeneratingPitch || summary.includedRows.length === 0}
+            onClick={onGeneratePitch}
+            title={
+              summary.includedRows.length === 0
+                ? "Выберите хотя бы одно мероприятие в конструкторе, чтобы обновить письмо"
+                : "Пересчитать состав пакета и сгенерировать живое сопроводительное письмо через ИИ"
+            }
+            className="group relative inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#262D35] disabled:hover:bg-[#12161A] disabled:hover:text-[#D1D5DB] disabled:hover:shadow-none"
           >
-            <RefreshCw className="h-3 w-3 shrink-0 text-inherit transition-colors duration-150 group-hover:text-[#E5C378]" strokeWidth={2} />
-            <span className="transition-colors duration-150">Обновить цифры</span>
+            {isGeneratingPitch ? (
+              <>
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#E5C378]" strokeWidth={2} />
+                <span>Генерация...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3 w-3 shrink-0 text-[#E5C378] transition-colors duration-150" strokeWidth={2} />
+                <span className="transition-colors duration-150">Обновить письмо (ИИ)</span>
+              </>
+            )}
           </button>
         </div>
 

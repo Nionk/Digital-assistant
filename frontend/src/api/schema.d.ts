@@ -170,6 +170,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/manager/selections/{selection_id}/pitch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Живая перегенерация сопроводительного письма КП через ИИ
+         * @description Валидирует выбранные пары (event_id, tariff_id) по БД, детерминированно пересчитывает стоимость, экономию Early Bird, ближайший дедлайн и календарные накладки в Python, после чего генерирует живое сопроводительное письмо через LLM (с откатом на шаблон при сбое).
+         */
+        post: operations["generate_selection_pitch_api_manager_selections__selection_id__pitch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/manager/events": {
         parameters: {
             query?: never;
@@ -976,6 +996,54 @@ export interface components {
              * @description Результат обработки
              */
             message: string;
+        };
+        /**
+         * GeneratePitchIn
+         * @description Запрос на живую перегенерацию сопроводительного письма КП по выбранным парам (event_id, tariff_id).
+         */
+        GeneratePitchIn: {
+            /**
+             * Final Items
+             * @description Итоговый список пар (event_id, tariff_id), по которым пересчитывается письмо КП
+             */
+            final_items: components["schemas"]["SelectedEventTariffPairIn"][];
+            /**
+             * Raw Manager Notes
+             * @description Актуальный конспект встречи от менеджера
+             */
+            raw_manager_notes?: string | null;
+            /**
+             * Total Budget Max
+             * @description Целевой лимит бюджета клиента в рублях
+             */
+            total_budget_max?: number | null;
+            /**
+             * Include Budget Limit
+             * @description Упоминать ли ориентир бюджета клиента в тексте письма
+             * @default true
+             */
+            include_budget_limit: boolean;
+        };
+        /**
+         * GeneratePitchOut
+         * @description Результат живой генерации сопроводительного письма КП.
+         */
+        GeneratePitchOut: {
+            /**
+             * Selection Id
+             * @description ID подборки
+             */
+            selection_id: number;
+            /**
+             * Generated Pitch Text
+             * @description Сгенерированный текст сопроводительного письма КП
+             */
+            generated_pitch_text: string;
+            /**
+             * Used Llm
+             * @description True, если письмо сгенерировано живой LLM; False при откате на шаблон
+             */
+            used_llm: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1949,6 +2017,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublishSelectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_selection_pitch_api_manager_selections__selection_id__pitch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                selection_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeneratePitchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneratePitchOut"];
                 };
             };
             /** @description Validation Error */

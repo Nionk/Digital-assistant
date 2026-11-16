@@ -15,7 +15,6 @@ import {
   type ComputedBundleItem,
   type ComputedFinancialSummary,
 } from "@/lib/bundleMath";
-import { formatDateShort, formatNumberCompact } from "@/lib/formatters";
 import { useAuthStore } from "@/store/useAuthStore";
 
 export type { ComputedBundleItem, ComputedFinancialSummary };
@@ -101,7 +100,6 @@ interface ManagerState {
     rationale: string
   ) => void;
   setPitchText: (clientId: number, text: string) => void;
-  syncPitchNumbersWithPackage: (clientId: number, companyName: string) => void;
   setPublishedInfo: (clientId: number, info: PublishedSelectionInfo) => void;
   setProducerModalOpen: (open: boolean) => void;
   resetWorkspaceMemory: () => void;
@@ -221,7 +219,7 @@ const userScopedManagerStorage: StateStorage = {
 
 export const useManagerStore = create<ManagerState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       isProducerModalOpen: false,
       clientSearchQuery: "",
       catalogTargetEventId: null,
@@ -662,73 +660,6 @@ export const useManagerStore = create<ManagerState>()(
             [clientId]: true,
           },
         })),
-
-      /**
-       * Детерминированное обновление итоговых цифр и состава мероприятий в тексте КП
-       * по текущему состоянию конструктора (без имитации ИИ-генерации).
-       */
-      syncPitchNumbersWithPackage: (clientId, companyName) => {
-        const state = get();
-        const summary = computeClientFinancialSummary(state, clientId);
-        if (!summary) return;
-
-        const matchRes = state.matchResultByClient[clientId];
-        const profile =
-          state.editableProfileByClient[clientId] ||
-          matchRes?.extracted_profile;
-        const cleanThemes = (profile?.themes_keywords ?? [])
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .slice(0, 3);
-        const themesClause =
-          cleanThemes.length > 0
-            ? `по направлениям: ${cleanThemes.join(", ")}`
-            : "по ключевым отраслевым направлениям";
-
-        const titles = summary.includedRows
-          .map(
-            (r) =>
-              `«${r.item.canonical_title}» (${r.selectedTariff.tariff_name})`
-          )
-          .join(", ");
-
-        const priceStr = formatNumberCompact(summary.totalActualPrice);
-        const budgetStr = formatNumberCompact(summary.budgetMax);
-        const onRequestSuffix = summary.hasOnRequestIncluded
-          ? " (+ спецпроект по запросу)"
-          : "";
-
-        let updatedPitch =
-          `Добрый день! По итогам установочной встречи подготовили для компании ${companyName} ` +
-          `рекомендованный календарь профильных мероприятий ${themesClause}.\n\n` +
-          `В согласованный план вошли (${summary.includedRows.length}): ${titles}.\n\n` +
-          `Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет ${priceStr} ₽ (с НДС)${onRequestSuffix} ` +
-          `при ориентире бюджета ${budgetStr} ₽.`;
-
-        if (summary.totalSavings > 0 && summary.earliestDeadline) {
-          const savingsStr = formatNumberCompact(summary.totalSavings);
-          const baseStr = formatNumberCompact(summary.totalBasePrice);
-          const dlStr = formatDateShort(summary.earliestDeadline);
-          updatedPitch +=
-            ` При подтверждении участия до ${dlStr} действуют льготные условия Early Bird и партнёрские преференции — ` +
-            `прямая выгода составит ${savingsStr} ₽ (базовая стоимость без скидки — ${baseStr} ₽).`;
-        }
-
-        updatedPitch +=
-          `\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, ` +
-          `подготовку участия и организацию целевых деловых знакомств на площадках.`;
-
-        set((s) => ({
-          pitchTextByClient: {
-            ...s.pitchTextByClient,
-            [clientId]: updatedPitch,
-          },
-          sessionDirtyDraftByClient: {
-            ...s.sessionDirtyDraftByClient,
-            [clientId]: true,
-          },
-        }));
-      },
 
       setPublishedInfo: (clientId, info) =>
         set((state) => ({
