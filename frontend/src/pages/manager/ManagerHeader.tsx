@@ -54,7 +54,7 @@ export function ManagerHeader({
   }, [isDeadlinesOpen]);
 
   return (
-    <header className="sticky top-0 z-30 flex flex-wrap md:flex-nowrap min-h-[67px] md:h-[67px] shrink-0 items-center justify-between gap-x-2 gap-y-2 border-b border-[#1A2026] bg-[#0E1215] px-3 py-2 md:py-0 sm:px-6 shadow-sm relative">
+    <header className="sticky top-0 z-30 flex flex-wrap md:flex-nowrap min-h-[67px] md:h-[67px] shrink-0 items-center justify-between gap-x-2 gap-y-2 border-b border-[#1A2026] bg-[#0E1215] px-3 py-2 md:py-0 sm:px-6 shadow-sm">
       {/* Деликатная бронзово-золотая нить переплёта, отделяющая хедер от контента */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
 

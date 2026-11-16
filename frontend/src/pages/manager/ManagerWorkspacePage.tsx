@@ -447,7 +447,7 @@ export function ManagerWorkspacePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0B0E12] text-[#F3F4F6]">
+    <div className="flex h-screen overflow-hidden flex-col bg-[#0B0E12] text-[#F3F4F6]">
       {/* Верхняя панель (67px) */}
       <ManagerHeader
         workspaceMode={workspaceMode}
@@ -456,13 +456,13 @@ export function ManagerWorkspacePage() {
       />
 
       {workspaceMode === "catalog" ? (
-        <main className="flex-1 overflow-y-auto scrollbar-thin">
+        <main className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
           <EventsCatalogView />
         </main>
       ) : (
-        <div className="relative flex flex-1 overflow-hidden">
+        <div className="relative flex flex-1 min-h-0 overflow-hidden">
           {/* Основная рабочая область менеджера на всю ширину */}
-          <main className="flex-1 overflow-y-auto p-4 lg:p-5 scrollbar-thin">
+          <main className="flex-1 min-h-0 overflow-y-auto p-4 lg:p-5 scrollbar-thin">
             <div className="mx-auto max-w-[1440px] space-y-4">
               {/* Верхняя строка под хедером: кнопка «Список клиентов» строго под логотипом */}
               <ClientsSelectorDropdown
@@ -497,15 +497,13 @@ export function ManagerWorkspacePage() {
                   }
                 />
               ) : (
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeClient.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                    className="space-y-4"
-                  >
+                <motion.div
+                  key={activeClient.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="space-y-4"
+                >
                     {/* Компактная шапка активного клиента (без иконки здания, разделение названия и контакта) */}
                     <ActiveClientHeader
                       companyName={activeClient.company_name}
@@ -627,7 +625,6 @@ export function ManagerWorkspacePage() {
                       </div>
                     </div>
                   </motion.div>
-                </AnimatePresence>
               )}
             </div>
           </main>

@@ -1,6 +1,7 @@
 import * as React from "react";
-import { AnimatePresence } from "framer-motion";
-import { Compass, RotateCcw } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Compass, FileUp, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import { useManagerEventsCatalog } from "@/api/queries";
 import type {
   CatalogEventItemOut,
@@ -46,9 +47,12 @@ export function EventsCatalogView() {
   const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
     React.useState<number | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+  const [droppedPdfFile, setDroppedPdfFile] = React.useState<File | null>(null);
+  const [isGlobalDragging, setIsGlobalDragging] = React.useState(false);
   const [isScraperModalOpen, setIsScraperModalOpen] = React.useState(false);
   const [copiedEventId, setCopiedEventId] = React.useState<number | null>(null);
   const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragCounterRef = React.useRef(0);
 
   const isDateRangeInvalid = Boolean(dateFrom && dateTo && dateTo < dateFrom);
 
@@ -245,8 +249,89 @@ export function EventsCatalogView() {
     setOnlyUpcoming(false);
   };
 
+  const isAnyOverlayOpen =
+    isImportModalOpen || isScraperModalOpen || Boolean(selectedEventForDrawer);
+
+  React.useEffect(() => {
+    if (isAnyOverlayOpen) {
+      dragCounterRef.current = 0;
+      setIsGlobalDragging(false);
+    }
+  }, [isAnyOverlayOpen]);
+
+  React.useEffect(() => {
+    const resetDrag = () => {
+      dragCounterRef.current = 0;
+      setIsGlobalDragging(false);
+    };
+    window.addEventListener("dragend", resetDrag);
+    return () => window.removeEventListener("dragend", resetDrag);
+  }, []);
+
+  const hasDraggedFiles = (e: React.DragEvent<HTMLDivElement>): boolean =>
+    Array.from(e.dataTransfer.types).includes("Files");
+
+  const handleGlobalDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isAnyOverlayOpen || !hasDraggedFiles(e)) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) {
+      setIsGlobalDragging(true);
+    }
+  };
+
+  const handleGlobalDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isAnyOverlayOpen || !hasDraggedFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleGlobalDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isAnyOverlayOpen || !hasDraggedFiles(e)) return;
+    e.preventDefault();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) {
+      setIsGlobalDragging(false);
+    }
+  };
+
+  const handleGlobalDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    dragCounterRef.current = 0;
+    setIsGlobalDragging(false);
+    if (isAnyOverlayOpen || !hasDraggedFiles(e)) return;
+    e.preventDefault();
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const isPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      toast.error("Поддерживаются только файлы формата PDF (.pdf).");
+      return;
+    }
+    if (file.size === 0) {
+      toast.error("Выбранный PDF-файл пуст.");
+      return;
+    }
+
+    setDroppedPdfFile(file);
+    setIsImportModalOpen(true);
+  };
+
   return (
-    <div className="mx-auto max-w-[1440px] p-4 lg:p-5 space-y-3.5">
+    <div
+      onDragEnter={handleGlobalDragEnter}
+      onDragOver={handleGlobalDragOver}
+      onDragLeave={handleGlobalDragLeave}
+      onDrop={handleGlobalDrop}
+      onDragEnd={() => {
+        dragCounterRef.current = 0;
+        setIsGlobalDragging(false);
+      }}
+      className="relative mx-auto max-w-[1440px] p-4 lg:p-5 space-y-3.5"
+    >
       <CatalogHeaderAndFilters
         totalCount={events.length}
         filteredCount={filteredEvents.length}
@@ -385,13 +470,43 @@ export function EventsCatalogView() {
 
       <EventImportModal
         isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
+        onClose={() => {
+          setIsImportModalOpen(false);
+          setDroppedPdfFile(null);
+        }}
+        initialFile={droppedPdfFile}
+        onOpenEventDetails={(eventId) => setSelectedEventIdForDrawer(eventId)}
       />
 
       <ScraperRunModal
         isOpen={isScraperModalOpen}
         onClose={() => setIsScraperModalOpen(false)}
       />
+
+      <AnimatePresence>
+        {isGlobalDragging && !isAnyOverlayOpen && (
+          <motion.div
+            key="catalog-global-drop-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none fixed inset-0 z-[9990] flex items-center justify-center bg-[#0B0E12]/80 p-6 backdrop-blur-sm"
+          >
+            <div className="flex max-w-md flex-col items-center justify-center rounded-[12px] border-2 border-dashed border-[#E5C378] bg-[#161B22]/95 px-8 py-10 text-center shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_24px_rgba(229,195,120,0.18)]">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#7C5A20] bg-[#1E190E]">
+                <FileUp className="h-6 w-6 text-[#E5C378]" strokeWidth={1.75} />
+              </div>
+              <p className="mt-4 font-serif italic text-base font-semibold text-[#E5C378]">
+                Отпустите PDF-брошюру для быстрого импорта площадки
+              </p>
+              <p className="mt-1.5 text-xs text-[#8E95A0]">
+                Откроется сборщик досье с уже прикреплённым файлом
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
