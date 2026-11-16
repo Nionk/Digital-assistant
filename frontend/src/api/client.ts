@@ -12,6 +12,8 @@ import type {
   EscalateQuestionOut,
   EventUploadIn,
   EventUploadOut,
+  GeneratePitchIn,
+  GeneratePitchOut,
   LoginRequestIn,
   ManagerDashboardOut,
   ManagerEventsCatalogOut,
@@ -313,6 +315,20 @@ export const apiClient = {
         method: "PUT",
         body: JSON.stringify(payload),
         timeoutMs: DEFAULT_TIMEOUT_MS,
+      }
+    );
+  },
+
+  generateSelectionPitch(
+    selectionId: number,
+    payload: GeneratePitchIn
+  ): Promise<GeneratePitchOut> {
+    return requestJson<GeneratePitchOut>(
+      `/api/manager/selections/${selectionId}/pitch`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        timeoutMs: LLM_TIMEOUT_MS,
       }
     );
   },

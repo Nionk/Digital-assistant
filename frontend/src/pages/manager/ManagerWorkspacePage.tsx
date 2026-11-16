@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   useClientWorkspace,
+  useGenerateSelectionPitchMutation,
   useManagerDashboard,
   useManagerEventsCatalog,
   useMatchClientMutation,
@@ -111,9 +112,6 @@ export function ManagerWorkspacePage() {
   const changeEventTariff = useManagerStore((s) => s.changeEventTariff);
   const updateEventRationale = useManagerStore((s) => s.updateEventRationale);
   const setPitchText = useManagerStore((s) => s.setPitchText);
-  const syncPitchNumbersWithPackage = useManagerStore(
-    (s) => s.syncPitchNumbersWithPackage
-  );
   const setPublishedInfo = useManagerStore((s) => s.setPublishedInfo);
   const hydratePublishedShowcase = useManagerStore(
     (s) => s.hydratePublishedShowcase
@@ -134,6 +132,7 @@ export function ManagerWorkspacePage() {
 
   const matchMutation = useMatchClientMutation();
   const publishMutation = usePublishSelectionMutation();
+  const generatePitchMutation = useGenerateSelectionPitchMutation();
 
   const clients = dashboard?.clients || [];
   const burningDeadlines = dashboard?.burning_deadlines || [];
@@ -387,14 +386,41 @@ export function ManagerWorkspacePage() {
   const handleSelectVariantGroup = (group: number) => {
     if (!activeClient) return;
     selectVariantGroup(activeClient.id, group);
-    // Сразу синхронизируем цифры в письме при переключении вкладки Варианта 1 / Варианта 2
-    syncPitchNumbersWithPackage(activeClient.id, activeClient.company_name);
   };
 
-  const handleSyncPitch = () => {
-    if (!activeClient) return;
-    syncPitchNumbersWithPackage(activeClient.id, activeClient.company_name);
-    toast.success("Цифры бюджета, выгоды и список площадок в письме обновлены");
+  const handleGeneratePitch = async () => {
+    if (!activeClient || !activeMatchResult || !computedSummary) return;
+    if (computedSummary.finalItemsPayload.length === 0) {
+      toast.error("Выберите хотя бы одно мероприятие в конструкторе");
+      return;
+    }
+
+    try {
+      const res = await generatePitchMutation.mutateAsync({
+        selectionId: activeMatchResult.selection_id,
+        payload: {
+          final_items: computedSummary.finalItemsPayload,
+          raw_manager_notes: currentNotes.trim() || null,
+          total_budget_max:
+            computedSummary.budgetMax > 0 ? computedSummary.budgetMax : null,
+          include_budget_limit: !(
+            activeEditableProfile?.budget_is_assumed ?? false
+          ),
+        },
+      });
+      setPitchText(activeClient.id, res.generated_pitch_text);
+      if (res.used_llm) {
+        toast.success("Сопроводительное письмо обновлено с помощью ИИ");
+      } else {
+        toast.info(
+          "ИИ-шлюз временно недоступен — применён резервный шаблон с актуальными цифрами"
+        );
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось обновить письмо"
+      );
+    }
   };
 
   const handleCopyShowcaseLink = async (relativeUrl: string): Promise<boolean> => {
@@ -611,7 +637,10 @@ export function ManagerWorkspacePage() {
                                 onPitchChange={(text) =>
                                   setPitchText(activeClient.id, text)
                                 }
-                                onSyncPitchNumbers={handleSyncPitch}
+                                onGeneratePitch={handleGeneratePitch}
+                                isGeneratingPitch={
+                                  generatePitchMutation.isPending
+                                }
                                 onPublish={handlePublishSelection}
                                 isPublishing={publishMutation.isPending}
                                 publishedUrl={activePublishedUrl}

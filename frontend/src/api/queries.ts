@@ -8,6 +8,7 @@ import type {
   ClientUpdateIn,
   EscalateQuestionIn,
   EventUploadIn,
+  GeneratePitchIn,
   LoginRequestIn,
   ManagerDashboardOut,
   ManagerReplyIn,
@@ -198,6 +199,18 @@ export function usePublishSelectionMutation() {
         queryKey: queryKeys.showcase(data.magic_token),
       });
     },
+  });
+}
+
+export function useGenerateSelectionPitchMutation() {
+  return useMutation({
+    mutationFn: ({
+      selectionId,
+      payload,
+    }: {
+      selectionId: number;
+      payload: GeneratePitchIn;
+    }) => apiClient.generateSelectionPitch(selectionId, payload),
   });
 }
 
