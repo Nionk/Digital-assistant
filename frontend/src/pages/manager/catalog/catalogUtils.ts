@@ -1,4 +1,4 @@
-import type { CatalogEventItemOut } from "@/api/types";
+import type { CatalogEventItemOut, ParticipationRole } from "@/api/types";
 import type { MultiSelectOption } from "@/components/ui/searchable-multi-select-popover";
 import { formatMinPrice } from "@/lib/formatters";
 
@@ -17,6 +17,31 @@ export const DATA_STATUS_OPTIONS = [
   { value: "needs_enrichment", label: "Требуют обогащения" },
 ];
 
+export const ROLE_FILTER_OPTIONS: { value: "all" | ParticipationRole; label: string }[] = [
+  { value: "all", label: "Все роли" },
+  { value: "speaker", label: "Спикер" },
+  { value: "delegate", label: "Делегат" },
+  { value: "sponsor", label: "Стенд" },
+];
+
+export const CATALOG_ROLE_LABELS: Record<ParticipationRole, string> = {
+  speaker: "Спикер",
+  delegate: "Делегат",
+  sponsor: "Стенд",
+};
+
+export const CATALOG_ROLE_PILL_CLASSES: Record<ParticipationRole, string> = {
+  speaker: "border-[#7C5A20]/70 bg-[#261E0F] text-[#E5C378]",
+  delegate: "border-[#2A3B52] bg-[#131C28] text-[#93C5FD]",
+  sponsor: "border-[#4C2840] bg-[#21131D] text-[#F9A8D4]",
+};
+
+const CANONICAL_ROLE_ORDER: ParticipationRole[] = [
+  "speaker",
+  "delegate",
+  "sponsor",
+];
+
 export const SORT_OPTIONS = [
   { value: "date_asc", label: "Ближайшие по дате" },
   { value: "date_desc", label: "Поздние по дате" },
@@ -24,6 +49,29 @@ export const SORT_OPTIONS = [
   { value: "price_desc", label: "Сначала премиальные (по цене)" },
   { value: "savings_desc", label: "Выгода Early Bird" },
 ];
+
+/** Возвращает сегодняшнюю локальную дату в формате YYYY-MM-DD. */
+export function getTodayIsoDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Определяет, завершилось ли мероприятие к сегодняшней дате (`end_date < today`). */
+export function isPastEvent(
+  ev: CatalogEventItemOut,
+  todayIso: string = getTodayIsoDate()
+): boolean {
+  return ev.end_date < todayIso;
+}
+
+/** Возвращает уникальные роли участия мероприятия в каноническом порядке. */
+export function getEventRoles(ev: CatalogEventItemOut): ParticipationRole[] {
+  const present = new Set(ev.tariffs.map((t) => t.participation_role));
+  return CANONICAL_ROLE_ORDER.filter((role) => present.has(role));
+}
 
 export function getEventMinPrice(ev: CatalogEventItemOut): number | null {
   return ev.tariffs.reduce<number | null>((acc, t) => {
@@ -136,11 +184,14 @@ export function buildThemeMultiOptions(
 
 export interface CatalogFilterCriteria {
   selectedFormat: string;
+  selectedRole: string;
   selectedCities: string[];
   selectedThemes: string[];
   onlyEarlyBird: boolean;
+  onlyUpcoming: boolean;
   searchQuery: string;
   sortBy: string;
+  todayIso?: string;
 }
 
 export function filterAndSortCatalogEvents(
@@ -149,15 +200,27 @@ export function filterAndSortCatalogEvents(
 ): CatalogEventItemOut[] {
   const {
     selectedFormat,
+    selectedRole,
     selectedCities,
     selectedThemes,
     onlyEarlyBird,
+    onlyUpcoming,
     searchQuery,
     sortBy,
+    todayIso = getTodayIsoDate(),
   } = criteria;
 
   const list = events.filter((ev) => {
     if (selectedFormat !== "all" && ev.event_format !== selectedFormat) {
+      return false;
+    }
+    if (
+      selectedRole !== "all" &&
+      !ev.tariffs.some((t) => t.participation_role === selectedRole)
+    ) {
+      return false;
+    }
+    if (onlyUpcoming && isPastEvent(ev, todayIso)) {
       return false;
     }
     if (selectedCities.length > 0) {
@@ -184,26 +247,36 @@ export function filterAndSortCatalogEvents(
   });
 
   return list.sort((a, b) => {
+    const pastA = isPastEvent(a, todayIso) ? 1 : 0;
+    const pastB = isPastEvent(b, todayIso) ? 1 : 0;
+
     if (sortBy === "date_asc") {
-      return a.start_date.localeCompare(b.start_date);
+      if (pastA !== pastB) return pastA - pastB;
+      // Предстоящие — от ближайших вверх; прошедшие — от недавних к более ранним
+      return pastA === 0
+        ? a.start_date.localeCompare(b.start_date)
+        : b.start_date.localeCompare(a.start_date);
     }
     if (sortBy === "date_desc") {
       return b.start_date.localeCompare(a.start_date);
     }
     if (sortBy === "price_asc") {
+      if (pastA !== pastB) return pastA - pastB;
       const pA = getEventMinPrice(a) ?? Infinity;
       const pB = getEventMinPrice(b) ?? Infinity;
-      return pA - pB;
+      return pA - pB || a.start_date.localeCompare(b.start_date);
     }
     if (sortBy === "price_desc") {
+      if (pastA !== pastB) return pastA - pastB;
       const pA = getEventMinPrice(a) ?? -1;
       const pB = getEventMinPrice(b) ?? -1;
-      return pB - pA;
+      return pB - pA || a.start_date.localeCompare(b.start_date);
     }
     if (sortBy === "savings_desc") {
+      if (pastA !== pastB) return pastA - pastB;
       const sA = getEventMaxSavings(a).savings;
       const sB = getEventMaxSavings(b).savings;
-      return sB - sA;
+      return sB - sA || a.start_date.localeCompare(b.start_date);
     }
     return 0;
   });

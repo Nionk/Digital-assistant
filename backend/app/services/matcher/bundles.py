@@ -329,8 +329,22 @@ def _select_bonus_on_request_pairs(
     excluded_event_ids: set[int],
     limit: int = 2,
 ) -> list[tuple[ScoredEventCandidate, TariffOptionOut]]:
-    """Формирует список бонусных мероприятий со статусом тарифа 'Цена по запросу' (base_price IS NULL)."""
-    on_req_cands = [c for c in candidates if c.on_request_tariffs]
+    """
+    Формирует список бонусных мероприятий со статусом тарифа 'Цена по запросу' (base_price IS NULL),
+    сортируя их строго по убыванию релевантности (rrf_score) и приоритета запрашиваемой роли.
+    """
+    def _bonus_sort_key(c: ScoredEventCandidate) -> tuple[float, bool]:
+        has_speaker_on_req = (
+            profile.min_speaker_events > 0
+            and any(t.participation_role == "speaker" for t in c.on_request_tariffs)
+        )
+        return (c.rrf_score, has_speaker_on_req)
+
+    on_req_cands = sorted(
+        (c for c in candidates if c.on_request_tariffs),
+        key=_bonus_sort_key,
+        reverse=True,
+    )
     ordered = [c for c in on_req_cands if c.event.id not in excluded_event_ids] + [
         c for c in on_req_cands if c.event.id in excluded_event_ids
     ]
@@ -401,4 +415,7 @@ def build_bundles(
         selected_variants.append(variant_2)
 
     selected_event_ids = {c.event.id for var in selected_variants for c in var.candidates}
-    return selected_variants, _select_bonus_on_request_pairs(candidates, profile, selected_event_ids, limit=2)
+    bonus_limit = 3 if len(variant_1.candidates) < profile.target_events_count else 2
+    return selected_variants, _select_bonus_on_request_pairs(
+        candidates, profile, selected_event_ids, limit=bonus_limit
+    )

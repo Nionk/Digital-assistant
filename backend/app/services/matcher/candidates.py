@@ -17,6 +17,36 @@ from app.services.matcher.types import ScoredEventCandidate
 
 logger = logging.getLogger(__name__)
 
+# Параметры весов тематической и доменной релевантности (поверх базового RRF k=60).
+# Базовый vector-only RRF лежит в [0.013, 0.0164], vector+FTS — в [0.026, 0.0328].
+# Тематический вклад масштабирован так, чтобы реальное совпадение тегов/текста
+# гарантированно перевешивало шум косинусного расстояния и бонусы формата/города.
+THEME_TAG_MATCH_WEIGHT = 0.012
+THEME_TAG_COVERAGE_WEIGHT = 0.018
+TEXT_MATCH_WEIGHT = 0.006
+TEXT_COVERAGE_WEIGHT = 0.008
+FORMAT_BONUS_WEIGHT = 0.004
+CITY_BONUS_WEIGHT = 0.003
+
+# Минимальный порог RRF, выше которого при наличии query_vec гарантированно присутствует вклад FTS (1/(60+1) = 0.016393).
+_MAX_VECTOR_ONLY_RRF = 1.0 / 60.0
+
+# Узкий словарь прямых доменных эквивалентов основ (Zero-Local-ML),
+# компенсирующий расхождение русских словообразовательных основ (например, "стройка" <-> "строительство").
+_DIRECT_LEXICAL_EQUIVALENTS: dict[str, tuple[str, ...]] = {
+    "стройк": ("строител", "застрой"),
+    "строит": ("стройк", "застрой"),
+    "застро": ("стройк", "строител"),
+    "цифров": ("digital",),
+    "digital": ("цифров",),
+    "bim": ("тим", "информационн моделирован"),
+    "тим": ("bim", "информационн моделирован"),
+    "proptech": ("проптех",),
+    "проптех": ("proptech",),
+    "ижс": ("малоэтаж", "загородн"),
+    "крт": ("комплексн развит территор",),
+}
+
 
 def _clean_fts_term(kw: str) -> str | None:
     """Очищает поисковый термин от спецсимволов и оборачивает фразы в кавычки."""
@@ -177,22 +207,112 @@ async def fetch_hybrid_rrf_candidates(
     return [(row[0], float(row[1] or 0.0)) for row in result.all()]
 
 
+def _tokenize_lower(text: str) -> list[str]:
+    """Разбивает строку на нормализованные буквенно-цифровые токены в нижнем регистре."""
+    return re.findall(r"[a-zа-яё0-9\-]+", text.lower())
+
+
+def _single_token_matches_text(tok: str, text_low: str) -> bool:
+    """
+    Проверяет вхождение одного слова/токена в текст с учетом:
+    - границ слов для коротких аббревиатур (BIM, КРТ, AI);
+    - префиксной основы (6 символов) для русских и латинских слов длиной >= 6;
+    - прямых доменных лексических эквивалентов ("стройка" <-> "строительство").
+    """
+    if not tok or not text_low:
+        return False
+
+    if len(tok) < 4:
+        if re.search(rf"(?<!\w){re.escape(tok)}(?!\w)", text_low):
+            return True
+        for eq in _DIRECT_LEXICAL_EQUIVALENTS.get(tok, ()):
+            if re.search(rf"(?<!\w){re.escape(eq)}", text_low):
+                return True
+        return False
+
+    if re.search(rf"(?<!\w){re.escape(tok)}", text_low):
+        return True
+
+    stem = tok[:6] if len(tok) >= 6 else tok
+    if len(stem) >= 6 and re.search(rf"(?<!\w){re.escape(stem)}", text_low):
+        return True
+
+    for eq in _DIRECT_LEXICAL_EQUIVALENTS.get(stem, ()) or _DIRECT_LEXICAL_EQUIVALENTS.get(tok, ()):
+        if re.search(rf"(?<!\w){re.escape(eq)}", text_low):
+            return True
+    return False
+
+
+def _keyword_matches_text(kw: str, text: str) -> bool:
+    """Проверяет совпадение ключевого слова или фразы с текстом (с поддержкой основ и аббревиатур)."""
+    kw_low = kw.strip().lower()
+    text_low = text.lower()
+    if not kw_low or not text_low:
+        return False
+
+    if len(kw_low) >= 4 and kw_low in text_low:
+        return True
+
+    tokens = [t for t in _tokenize_lower(kw_low) if len(t) >= 2]
+    if not tokens:
+        return False
+    if len(tokens) == 1:
+        return _single_token_matches_text(tokens[0], text_low)
+
+    significant = [t for t in tokens if len(t) >= 3] or tokens
+    return all(_single_token_matches_text(t, text_low) for t in significant)
+
+
 def _theme_matches_keywords(theme: str, keywords: Sequence[str]) -> bool:
     """Проверяет двустороннее вхождение тега мероприятия и ключевых слов профиля."""
-    t_low = theme.lower()
-    return any(kw.lower() in t_low or t_low in kw.lower() for kw in keywords)
+    t_low = theme.strip().lower()
+    if not t_low:
+        return False
+    for kw in keywords:
+        kw_low = kw.strip().lower()
+        if not kw_low:
+            continue
+        if _keyword_matches_text(kw_low, t_low) or (len(t_low) >= 4 and t_low in kw_low):
+            return True
+    return False
+
+
+def _count_thematic_hits(ev: Event, keywords: Sequence[str]) -> tuple[int, int]:
+    """
+    Возвращает (matched_in_themes, matched_in_text) — количество уникальных ключевых слов
+    профиля, совпавших с тегами `ev.themes` и с текстовым описанием (`canonical_title` + `summary`).
+    """
+    if not keywords:
+        return 0, 0
+    themes_list = [t for t in (ev.themes or []) if t]
+    theme_hits = sum(1 for kw in keywords if any(_theme_matches_keywords(t, [kw]) for t in themes_list))
+    text_blob = f"{ev.canonical_title or ''} {ev.summary or ''}"
+    text_hits = sum(1 for kw in keywords if _keyword_matches_text(kw, text_blob))
+    return theme_hits, text_hits
+
+
+def _has_fts_match(raw_rrf: float, has_query_vec: bool) -> bool:
+    """Определяет по SQL-оценке RRF, сработал ли полнотекстовый поиск FTS (fts_rank > 0)."""
+    if has_query_vec:
+        return raw_rrf > _MAX_VECTOR_ONLY_RRF
+    return raw_rrf > 0.0
 
 
 def _calculate_domain_bonus(ev: Event, profile: ClientQueryExtracted) -> float:
-    """Вычисляет дополнительный RRF-бонус за точное совпадение формата, города и тегов."""
+    """
+    Вычисляет дополнительный бонус за совпадение тематических тегов, текста события,
+    предпочтительного формата и города.
+    """
     bonus = 0.0
     if profile.preferred_formats and ev.event_format in profile.preferred_formats:
-        bonus += 0.004
+        bonus += FORMAT_BONUS_WEIGHT
     if profile.cities and ev.city in profile.cities:
-        bonus += 0.003
-    if profile.themes_keywords and ev.themes:
-        matched_kw = sum(1 for t in ev.themes if _theme_matches_keywords(t, profile.themes_keywords))
-        bonus += min(0.006, matched_kw * 0.002)
+        bonus += CITY_BONUS_WEIGHT
+    if profile.themes_keywords:
+        n_kw = len(profile.themes_keywords)
+        theme_hits, text_hits = _count_thematic_hits(ev, profile.themes_keywords)
+        bonus += min(0.036, theme_hits * THEME_TAG_MATCH_WEIGHT) + THEME_TAG_COVERAGE_WEIGHT * (theme_hits / n_kw)
+        bonus += min(0.018, text_hits * TEXT_MATCH_WEIGHT) + TEXT_COVERAGE_WEIGHT * (text_hits / n_kw)
     return bonus
 
 
@@ -214,13 +334,28 @@ async def _load_tariffs_by_event(
     return tariffs_by_event
 
 
+def _is_candidate_thematically_relevant(
+    ev: Event,
+    raw_rrf: float,
+    profile: ClientQueryExtracted,
+    has_query_vec: bool,
+) -> bool:
+    """Определяет, есть ли у кандидата тематическое совпадение (FTS, теги или текст)."""
+    if not profile.themes_keywords:
+        return True
+    if _has_fts_match(raw_rrf, has_query_vec):
+        return True
+    theme_hits, text_hits = _count_thematic_hits(ev, profile.themes_keywords)
+    return (theme_hits + text_hits) > 0
+
+
 async def _fetch_filtered_events_map(
     session: AsyncSession,
     profile: ClientQueryExtracted,
     query_vec: list[float] | None,
     fts_query_str: str,
     today: datetime.date,
-) -> dict[int, tuple[Event, float]]:
+) -> dict[int, tuple[Event, float, bool]]:
     """
     Выполняет каскадный гибридный RRF-поиск в PostgreSQL:
     1) Топ-15 строго в пределах бюджета и дат;
@@ -229,6 +364,7 @@ async def _fetch_filtered_events_map(
     """
     import app.services.matcher as matcher_pkg
 
+    has_query_vec = query_vec is not None
     strict_rows = await matcher_pkg.fetch_hybrid_rrf_candidates(
         session,
         profile,
@@ -239,8 +375,13 @@ async def _fetch_filtered_events_map(
         enforce_dates=True,
         budget_ceiling=profile.total_budget_max,
     )
-    events_map: dict[int, tuple[Event, float]] = {
-        ev.id: (ev, score + _calculate_domain_bonus(ev, profile)) for ev, score in strict_rows
+    events_map: dict[int, tuple[Event, float, bool]] = {
+        ev.id: (
+            ev,
+            score + _calculate_domain_bonus(ev, profile),
+            _is_candidate_thematically_relevant(ev, score, profile, has_query_vec),
+        )
+        for ev, score in strict_rows
     }
     if len(events_map) >= profile.target_events_count:
         return events_map
@@ -258,7 +399,11 @@ async def _fetch_filtered_events_map(
     )
     for ev, score in tolerance_rows:
         if ev.id not in events_map and len(events_map) < 15:
-            events_map[ev.id] = (ev, score + _calculate_domain_bonus(ev, profile))
+            events_map[ev.id] = (
+                ev,
+                score + _calculate_domain_bonus(ev, profile),
+                _is_candidate_thematically_relevant(ev, score, profile, has_query_vec),
+            )
     if len(events_map) >= profile.target_events_count:
         return events_map
 
@@ -274,7 +419,11 @@ async def _fetch_filtered_events_map(
     )
     for ev, score in relaxed_rows:
         if ev.id not in events_map and len(events_map) < 15:
-            events_map[ev.id] = (ev, (score + _calculate_domain_bonus(ev, profile)) * 0.85)
+            events_map[ev.id] = (
+                ev,
+                (score + _calculate_domain_bonus(ev, profile)) * 0.85,
+                _is_candidate_thematically_relevant(ev, score, profile, has_query_vec),
+            )
     return events_map
 
 
@@ -309,10 +458,13 @@ async def get_scored_candidates(
 
     tariffs_by_event = await _load_tariffs_by_event(session, list(events_map.keys()), today)
     candidates: list[ScoredEventCandidate] = []
-    for ev_id, (ev, total_rrf) in events_map.items():
+    relevant_ids: set[int] = set()
+    for ev_id, (ev, total_rrf, is_relevant) in events_map.items():
         all_t = tariffs_by_event.get(ev_id, [])
         if not all_t:
             continue
+        if is_relevant:
+            relevant_ids.add(ev_id)
         candidates.append(
             ScoredEventCandidate(
                 event=ev,
@@ -322,6 +474,9 @@ async def get_scored_candidates(
                 on_request_tariffs=[t for t in all_t if t.actual_price is None],
             )
         )
+
+    if profile.themes_keywords and relevant_ids:
+        candidates = [c for c in candidates if c.event.id in relevant_ids]
 
     candidates.sort(key=lambda c: c.rrf_score, reverse=True)
     return candidates

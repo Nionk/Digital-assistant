@@ -17,11 +17,19 @@ import {
   pluralizeRu,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { getEventPriceSummary, getEventMaxSavings } from "./catalogUtils";
+import {
+  CATALOG_ROLE_LABELS,
+  CATALOG_ROLE_PILL_CLASSES,
+  getEventPriceSummary,
+  getEventMaxSavings,
+  getEventRoles,
+  isPastEvent,
+} from "./catalogUtils";
 import { CatalogWarningsBadge } from "./CatalogWarningsBadge";
 
 interface CatalogTableProps {
   events: CatalogEventItemOut[];
+  todayIso: string;
   selectedEventId: number | null;
   copiedEventId: number | null;
   onSelectEvent: (eventId: number) => void;
@@ -30,6 +38,7 @@ interface CatalogTableProps {
 
 export function CatalogTable({
   events,
+  todayIso,
   selectedEventId,
   copiedEventId,
   onSelectEvent,
@@ -51,9 +60,10 @@ export function CatalogTable({
               <th className="py-2.5 pl-4 pr-3 font-semibold w-28">Сроки</th>
               <th className="py-2.5 px-3 font-semibold">Мероприятие и темы</th>
               <th className="py-2.5 px-3 font-semibold w-44">Формат и город</th>
-              <th className="py-2.5 px-3 font-semibold w-36">Стоимость</th>
-              <th className="py-2.5 px-3 font-semibold w-48">Спецтариф Early Bird</th>
-              <th className="py-2.5 pr-4 pl-2 font-semibold text-right w-24">Действие</th>
+              <th className="py-2.5 px-3 font-semibold w-40">Роли участия</th>
+              <th className="py-2.5 px-3 font-semibold w-44">Стоимость и Early Bird</th>
+              <th className="py-2.5 px-3 font-semibold w-36">Статус</th>
+              <th className="py-2.5 pr-4 pl-2 font-semibold text-right w-20">Действие</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#21262F] text-xs">
@@ -63,6 +73,8 @@ export function CatalogTable({
               const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
               const priceSummary = getEventPriceSummary(ev);
               const { savings, deadline } = getEventMaxSavings(ev);
+              const roles = getEventRoles(ev);
+              const isPast = isPastEvent(ev, todayIso);
               const isSelected = selectedEventId === ev.event_id;
 
               return (
@@ -70,10 +82,12 @@ export function CatalogTable({
                   key={ev.event_id}
                   onClick={() => onSelectEvent(ev.event_id)}
                   className={cn(
-                    "group cursor-pointer transition-colors duration-150 active:scale-[0.998]",
+                    "group cursor-pointer transition-all duration-150 active:scale-[0.998]",
                     isSelected
                       ? "bg-[#221A0E] text-[#E5C378]"
-                      : "hover:bg-[#1A2128]"
+                      : isPast
+                        ? "bg-[#12161A]/55 opacity-75 hover:bg-[#1A2128] hover:opacity-100"
+                        : "hover:bg-[#1A2128]"
                   )}
                 >
                   <td className="py-3 pl-4 pr-3 align-middle tabular-nums whitespace-nowrap">
@@ -81,7 +95,11 @@ export function CatalogTable({
                       <span
                         className={cn(
                           "font-semibold transition-colors",
-                          isSelected ? "text-[#E5C378]" : "text-white group-hover:text-[#E5C378]"
+                          isSelected
+                            ? "text-[#E5C378]"
+                            : isPast
+                              ? "text-[#D1D5DB] group-hover:text-[#E5C378]"
+                              : "text-white group-hover:text-[#E5C378]"
                         )}
                       >
                         {cal.dayText}
@@ -95,6 +113,11 @@ export function CatalogTable({
                         {cal.monthShortLabel}
                       </span>
                     </div>
+                    {isPast && (
+                      <span className="mt-1 inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-[#8E95A0]">
+                        Прошло
+                      </span>
+                    )}
                   </td>
 
                   <td className="py-3 px-3 align-middle">
@@ -102,15 +125,13 @@ export function CatalogTable({
                       <div className="flex items-center gap-2 min-w-0">
                         <span
                           title={ev.canonical_title}
-                          className="font-serif text-[13px] font-semibold text-white group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1 cursor-pointer"
+                          className={cn(
+                            "font-serif text-[13px] font-semibold group-hover:text-[#E5C378] transition-colors leading-snug line-clamp-1 cursor-pointer",
+                            isPast ? "text-[#D1D5DB]" : "text-white"
+                          )}
                         >
                           {ev.canonical_title}
                         </span>
-                        {ev.data_status === "needs_enrichment" && (
-                          <Badge variant="ebAmber" className="text-[9px] shrink-0">
-                            Требует обогащения
-                          </Badge>
-                        )}
                       </div>
                       {ev.missing_data_warnings.length > 0 && (
                         <div className="mt-1">
@@ -170,39 +191,80 @@ export function CatalogTable({
                     </div>
                   </td>
 
-                  <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
-                    {priceSummary.minPrice !== null ? (
-                      <div>
-                        <span className="font-sans font-bold text-white text-xs">
-                          {priceSummary.label}
-                        </span>
-                        {priceSummary.subLabel && (
-                          <span className="block text-[10px] text-[#E5C378]/85 leading-tight">
-                            {priceSummary.subLabel}
+                  <td className="py-3 px-3 align-middle">
+                    {roles.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {roles.map((role) => (
+                          <span
+                            key={role}
+                            className={cn(
+                              "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[10px] font-medium leading-tight",
+                              CATALOG_ROLE_PILL_CLASSES[role]
+                            )}
+                          >
+                            {CATALOG_ROLE_LABELS[role]}
                           </span>
-                        )}
-                        <span className="block text-[10px] text-[#727985] font-serif italic">
-                          {ev.tariffs.length}{" "}
-                          {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
-                        </span>
+                        ))}
                       </div>
                     ) : (
-                      <span className="text-xs text-[#8E95A0] font-serif italic">
-                        По запросу
+                      <span className="text-[11px] text-[#727985] font-serif italic">
+                        Не указаны
                       </span>
                     )}
                   </td>
 
+                  <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
+                    <div>
+                      {priceSummary.minPrice !== null ? (
+                        <>
+                          <span className="font-sans font-bold text-white text-xs">
+                            {priceSummary.label}
+                          </span>
+                          {priceSummary.subLabel && (
+                            <span className="block text-[10px] text-[#E5C378]/85 leading-tight">
+                              {priceSummary.subLabel}
+                            </span>
+                          )}
+                          <span className="block text-[10px] text-[#727985] font-serif italic">
+                            {ev.tariffs.length}{" "}
+                            {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-[#8E95A0] font-serif italic">
+                            По запросу
+                          </span>
+                          <span className="block text-[10px] text-[#727985] font-serif italic">
+                            {ev.tariffs.length}{" "}
+                            {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
+                          </span>
+                        </>
+                      )}
+                      {savings > 0 && (
+                        <div className="mt-1">
+                          <Badge variant="ebEmerald" asSlanted={false} className="text-[10px]">
+                            Выгода {formatRub(savings)}
+                            {deadline ? ` до ${formatDateShort(deadline).slice(0, 5)}` : ""}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
                   <td className="py-3 px-3 align-middle whitespace-nowrap">
-                    {savings > 0 ? (
-                      <Badge variant="ebEmerald" className="text-[9px]">
-                        Выгода {formatRub(savings)}
-                        {deadline ? ` до ${formatDateShort(deadline).slice(0, 5)}` : ""}
+                    {ev.data_status === "ready" ? (
+                      <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
+                        Готово к КП
+                      </Badge>
+                    ) : ev.data_status === "needs_enrichment" ? (
+                      <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
+                        Требует обогащения
                       </Badge>
                     ) : (
-                      <span className="text-[11px] text-[#727985] font-serif italic">
-                        Базовый тариф
-                      </span>
+                      <Badge variant="ebSlate" asSlanted={false} className="text-[11px]">
+                        В архиве
+                      </Badge>
                     )}
                   </td>
 

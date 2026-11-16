@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import {
   Search,
   Sparkles,
+  CalendarCheck,
   X,
   RotateCcw,
   LayoutList,
@@ -19,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   FORMAT_OPTIONS,
+  ROLE_FILTER_OPTIONS,
   DATA_STATUS_OPTIONS,
   SORT_OPTIONS,
 } from "./catalogUtils";
@@ -27,10 +29,15 @@ interface CatalogHeaderAndFiltersProps {
   totalCount: number;
   filteredCount: number;
   earlyBirdCount: number;
+  upcomingCount: number;
+  hiddenPastCount: number;
+  roleCounts: Record<string, number>;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   selectedFormat: string;
   onFormatChange: (value: string) => void;
+  selectedRole: string;
+  onRoleChange: (value: string) => void;
   cityOptions: MultiSelectOption[];
   selectedCities: string[];
   onCitiesChange: (values: string[]) => void;
@@ -48,6 +55,8 @@ interface CatalogHeaderAndFiltersProps {
   onSortByChange: (value: string) => void;
   onlyEarlyBird: boolean;
   onToggleEarlyBird: () => void;
+  onlyUpcoming: boolean;
+  onToggleUpcoming: () => void;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
   viewMode: "table" | "cards";
@@ -60,10 +69,15 @@ export function CatalogHeaderAndFilters({
   totalCount,
   filteredCount,
   earlyBirdCount,
+  upcomingCount,
+  hiddenPastCount,
+  roleCounts,
   searchQuery,
   onSearchQueryChange,
   selectedFormat,
   onFormatChange,
+  selectedRole,
+  onRoleChange,
   cityOptions,
   selectedCities,
   onCitiesChange,
@@ -81,6 +95,8 @@ export function CatalogHeaderAndFilters({
   onSortByChange,
   onlyEarlyBird,
   onToggleEarlyBird,
+  onlyUpcoming,
+  onToggleUpcoming,
   hasActiveFilters,
   onResetFilters,
   viewMode,
@@ -88,6 +104,13 @@ export function CatalogHeaderAndFilters({
   onOpenImportModal,
   onOpenScraperModal,
 }: CatalogHeaderAndFiltersProps) {
+  const roleSelectOptions = ROLE_FILTER_OPTIONS.map((opt) => ({
+    ...opt,
+    subLabel:
+      opt.value === "all"
+        ? String(totalCount)
+        : String(roleCounts[opt.value] ?? 0),
+  }));
   return (
     <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 sm:p-4 shadow-sm space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -168,6 +191,19 @@ export function CatalogHeaderAndFilters({
               onChange={(val) => onFormatChange(String(val))}
               options={FORMAT_OPTIONS}
               buttonClassName="h-7 min-w-[120px] text-xs"
+            />
+          </div>
+
+          {/* Селектор роли участия */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-serif italic text-[11px] text-[#8E95A0]">
+              Роль:
+            </span>
+            <CustomSelect
+              value={selectedRole}
+              onChange={(val) => onRoleChange(String(val))}
+              options={roleSelectOptions}
+              buttonClassName="h-7 min-w-[116px] text-xs"
             />
           </div>
 
@@ -266,6 +302,27 @@ export function CatalogHeaderAndFilters({
               buttonClassName="h-7 min-w-[155px] text-xs"
             />
           </div>
+
+          {/* Быстрый фильтр: Только предстоящие */}
+          <button
+            type="button"
+            onClick={onToggleUpcoming}
+            aria-pressed={onlyUpcoming}
+            title={
+              onlyUpcoming && hiddenPastCount > 0
+                ? `Скрыто прошедших: ${hiddenPastCount}. Нажмите, чтобы показать весь архив`
+                : "Показать только предстоящие мероприятия"
+            }
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[4px] px-2.5 py-1 text-xs font-serif italic transition-all duration-150 select-none cursor-pointer outline-none",
+              onlyUpcoming
+                ? "border border-[#E5C378] bg-[#261E0F] text-[#E5C378] font-bold shadow-[0_0_8px_rgba(229,195,120,0.2)]"
+                : "border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#38414F] hover:text-white"
+            )}
+          >
+            <CalendarCheck className="h-3 w-3 text-inherit shrink-0" strokeWidth={1.75} />
+            <span>Только предстоящие ({upcomingCount})</span>
+          </button>
 
           {/* Быстрый фильтр: Только Early Bird */}
           <button
