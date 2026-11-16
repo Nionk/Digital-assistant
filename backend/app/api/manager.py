@@ -10,16 +10,18 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
 from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import async_session_maker, get_async_session
+from app.core.config import settings
+from app.core.database import get_async_session
 from app.core.security import CurrentManagerDep
-from app.models.models import EventTariff
+from app.models.models import EventTariff, ScraperRun, ScraperSource
 from app.schemas.manager import (
     ClientCreateIn,
     ClientSummaryOut,
@@ -36,9 +38,19 @@ from app.schemas.manager import (
     MatchResponseOut,
     PublishSelectionIn,
     PublishSelectionOut,
+    ScraperPreviewCandidateOut,
+    ScraperRunDetailOut,
     ScraperRunIn,
     ScraperRunOut,
+    ScraperRunsListOut,
+    ScraperSourceCreateIn,
+    ScraperSourceDeleteOut,
+    ScraperSourceOut,
+    ScraperSourcePreviewIn,
+    ScraperSourcePreviewOut,
+    ScraperSourceUpdateIn,
     SelectionActivityOut,
+    slugify_source_key,
 )
 from app.services.manager_workspace import (
     EventDataStatusLiteral,
@@ -58,11 +70,16 @@ from app.services.manager_workspace import (
 )
 from app.services.matcher import run_client_matching_pipeline
 from app.services.scraper import (
-    CUSTOMER_SOURCES_REGISTRY,
+    CaptchaBlockedError,
+    CustomerSourceConfig,
+    HttpCatalogSourceScraper,
+    UnsafeUrlError,
+    ensure_builtin_scraper_sources,
     ingest_smart_event,
-    run_customer_sources_monitoring,
+    run_persisted_scraper_job,
+    try_enqueue_scraper_run,
+    validate_safe_public_url,
 )
-from app.services.telegram import format_monitoring_summary_alert, send_manager_alert
 
 logger = logging.getLogger(__name__)
 
@@ -70,26 +87,54 @@ router = APIRouter(prefix="/api/manager", tags=["Manager Cabinet"])
 
 AsyncSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 
+_UPLOAD_PDF_CHUNK_SIZE: int = 256 * 1024
 _is_scraper_running: bool = False
 
 
-async def _execute_background_monitoring(source_key: str | None) -> None:
-    """Фоновый воркер выполнения скрейпинга площадок с атомарным сбросом флага в finally."""
-    global _is_scraper_running
-    try:
-        async with async_session_maker() as session:
-            effective_key = None if source_key == "all" else source_key
-            summary = await run_customer_sources_monitoring(session, source_key=effective_key)
-            logger.info("Мониторинг площадок (%s) успешно завершен: %s", source_key, summary)
-            alert_text = format_monitoring_summary_alert(
-                ready_count=summary.ingested_ready_count,
-                needs_enrichment_titles=summary.needs_enrichment_titles,
-            )
-            await send_manager_alert(alert_text)
-    except Exception:
-        logger.exception("Ошибка при выполнении фонового скрейпинга для источника '%s'", source_key)
-    finally:
-        _is_scraper_running = False
+async def _execute_background_monitoring(
+    source_key: str | None,
+    *,
+    run_id: int | None = None,
+    dry_run: bool = False,
+    max_urls_per_source: int | None = None,
+) -> None:
+    """Фоновый воркер выполнения скрейпинга площадок через единый координатор runner.py."""
+    effective_key = source_key or "all"
+    await run_persisted_scraper_job(
+        run_id,
+        effective_key,
+        dry_run=dry_run,
+        max_urls_per_source=max_urls_per_source,
+    )
+
+
+async def _ensure_and_commit_builtin_sources(db: AsyncSession) -> list[ScraperSource]:
+    """Синхронизирует встроенные источники и коммитит новые записи (если они были добавлены)."""
+    rows = await ensure_builtin_scraper_sources(db)
+    session_new = getattr(db, "new", ())
+    new_sources: list[ScraperSource] = []
+    if isinstance(session_new, (list, tuple, set)) or hasattr(session_new, "__iter__"):
+        try:
+            new_sources = [obj for obj in session_new if isinstance(obj, ScraperSource)]
+        except TypeError:
+            new_sources = []
+    if new_sources:
+        await db.commit()
+        for src_row in new_sources:
+            await db.refresh(src_row)
+    return sorted(rows, key=lambda r: (not bool(r.is_builtin), r.id or 0))
+
+
+async def _validate_public_catalog_urls(urls: list[str]) -> None:
+    """Проверяет список catalog_urls на SSRF перед сохранением или обходом."""
+    for url in urls:
+        try:
+            await validate_safe_public_url(url)
+        except UnsafeUrlError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
 
 @router.get(
@@ -388,12 +433,33 @@ async def upload_event_material(
 ) -> EventUploadOut:
     pdf_bytes: bytes | None = None
     if file is not None:
-        pdf_bytes = await file.read()
-        if not pdf_bytes:
+        max_bytes = settings.SCRAPER_MAX_PDF_BYTES
+        limit_label = (
+            f"{max_bytes // (1024 * 1024)} МБ"
+            if max_bytes >= 1024 * 1024
+            else f"{max_bytes} байт"
+        )
+        buf = bytearray()
+        try:
+            while True:
+                chunk = await file.read(_UPLOAD_PDF_CHUNK_SIZE)
+                if not chunk:
+                    break
+                if len(buf) + len(chunk) > max_bytes:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"Размер PDF-файла превышает допустимый лимит ({limit_label}).",
+                    )
+                buf.extend(chunk)
+        finally:
+            await file.close()
+
+        if not buf:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Загруженный файл пуст.",
             )
+        pdf_bytes = bytes(buf)
 
     has_raw = bool(raw_text and raw_text.strip())
     has_url = bool(source_url and source_url.strip())
@@ -450,38 +516,394 @@ async def upload_event_material(
 @router.post(
     "/scraper/run",
     response_model=ScraperRunOut,
-    summary="Ручной запуск парсера по одной из утвержденных площадок",
-    description="Ставит в очередь фоновую задачу скрейпинга для выбранного источника.",
+    summary="Ручной запуск парсера по площадке из БД или по всем активным сразу",
+    description="Проверяет источник в таблице scraper_sources, создает запись ScraperRun и ставит задачу в фон.",
 )
 async def run_scraper_endpoint(
     payload: ScraperRunIn,
     background_tasks: BackgroundTasks,
     current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
 ) -> ScraperRunOut:
-    global _is_scraper_running
+    try:
+        source_rows = await _ensure_and_commit_builtin_sources(db)
+        if payload.source_key != "all":
+            target_row = next(
+                (r for r in source_rows if r.source_key == payload.source_key),
+                None,
+            )
+            if target_row is None:
+                valid_keys = ", ".join(sorted(r.source_key for r in source_rows) + ["all"])
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Неизвестный источник '{payload.source_key}'. Допустимые: {valid_keys}",
+                )
+            if target_row.adapter_type == "manual_only":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Источник работает только в режиме ручного Умного импорта",
+                )
+            if not target_row.is_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Источник отключен в настройках",
+                )
 
-    valid_sources = {s.source_key for s in CUSTOMER_SOURCES_REGISTRY} | {"all"}
-    if payload.source_key not in valid_sources:
+        triggered_by = "manual_dry_run" if payload.dry_run else "manual"
+        run_row, active_run_id = await try_enqueue_scraper_run(
+            db,
+            target_source_key=payload.source_key,
+            triggered_by=triggered_by,
+        )
+        if run_row is None:
+            return ScraperRunOut(
+                source_key=payload.source_key,
+                status="queued",
+                message="Задача мониторинга уже выполняется или поставлена в очередь. Повторный запуск отклонен.",
+                run_id=active_run_id,
+                dry_run=payload.dry_run,
+            )
+    except HTTPException:
+        raise
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запуске /scraper/run: %s", exc)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Неизвестный источник '{payload.source_key}'. Допустимые: {', '.join(sorted(valid_sources))}",
-        )
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
-    if _is_scraper_running:
-        return ScraperRunOut(
-            source_key=payload.source_key,
-            status="queued",
-            message="Задача мониторинга уже выполняется или поставлена в очередь. Повторный запуск отклонен.",
-        )
-
-    _is_scraper_running = True
-    background_tasks.add_task(_execute_background_monitoring, payload.source_key)
+    background_tasks.add_task(
+        _execute_background_monitoring,
+        payload.source_key,
+        run_id=run_row.id,
+        dry_run=payload.dry_run,
+        max_urls_per_source=payload.max_urls_per_source,
+    )
 
     return ScraperRunOut(
         source_key=payload.source_key,
         status="queued",
         message=f"Фоновая задача сбора данных для '{payload.source_key}' успешно поставлена в очередь.",
+        run_id=run_row.id,
+        dry_run=payload.dry_run,
     )
+
+
+@router.get(
+    "/scraper/sources",
+    response_model=list[ScraperSourceOut],
+    summary="Список всех источников мониторинга (встроенных и пользовательских)",
+)
+async def list_scraper_sources(
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> list[ScraperSourceOut]:
+    try:
+        rows = await _ensure_and_commit_builtin_sources(db)
+        return [ScraperSourceOut.model_validate(row) for row in rows]
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запросе /scraper/sources: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.post(
+    "/scraper/sources",
+    response_model=ScraperSourceOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создание новой пользовательской площадки мониторинга",
+)
+async def create_scraper_source(
+    payload: ScraperSourceCreateIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ScraperSourceOut:
+    await _validate_public_catalog_urls(payload.catalog_urls)
+    target_key = payload.source_key or slugify_source_key(payload.display_name)
+    if target_key == "all":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ключ 'all' зарезервирован системой.",
+        )
+
+    try:
+        existing_rows = await _ensure_and_commit_builtin_sources(db)
+        if any(r.source_key == target_key for r in existing_rows):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Источник с ключом '{target_key}' уже существует.",
+            )
+        dup_res = await db.execute(
+            select(ScraperSource).where(ScraperSource.source_key == target_key)
+        )
+        if dup_res.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Источник с ключом '{target_key}' уже существует.",
+            )
+
+        effective_enabled = False if payload.adapter_type == "manual_only" else payload.is_enabled
+        row = ScraperSource(
+            source_key=target_key,
+            display_name=payload.display_name,
+            catalog_urls=list(payload.catalog_urls),
+            adapter_type=payload.adapter_type,
+            card_url_patterns=list(payload.card_url_patterns),
+            exclude_url_patterns=list(payload.exclude_url_patterns),
+            b2b_filter_enabled=payload.b2b_filter_enabled,
+            russia_online_only=payload.russia_online_only,
+            use_jina_reader=payload.use_jina_reader,
+            encoding=payload.encoding,
+            required_cookies=dict(payload.required_cookies),
+            max_urls_per_run=payload.max_urls_per_run,
+            is_enabled=effective_enabled,
+            is_builtin=False,
+        )
+        db.add(row)
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Источник с ключом '{target_key}' уже существует.",
+            ) from exc
+        await db.refresh(row)
+        return ScraperSourceOut.model_validate(row)
+    except HTTPException:
+        raise
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при создании источника '%s': %s", target_key, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.post(
+    "/scraper/sources/preview",
+    response_model=ScraperSourcePreviewOut,
+    summary="Бесплатный предпросмотр Discovery по первому URL каталога (0 токенов LLM)",
+)
+async def preview_scraper_source(
+    payload: ScraperSourcePreviewIn,
+    current_manager: CurrentManagerDep,
+) -> ScraperSourcePreviewOut:
+    await _validate_public_catalog_urls(payload.catalog_urls)
+
+    if payload.adapter_type == "manual_only":
+        return ScraperSourcePreviewOut(
+            discovered_count=0,
+            checked_url=payload.catalog_urls[0],
+            total_catalog_urls=len(payload.catalog_urls),
+            error="Источник настроен в режиме manual_only: автоматический обход каталога отключен.",
+        )
+
+    preview_cfg = CustomerSourceConfig(
+        source_key="preview",
+        display_name="Preview",
+        catalog_urls=(payload.catalog_urls[0],),
+        card_url_patterns=tuple(payload.card_url_patterns),
+        exclude_url_patterns=tuple(payload.exclude_url_patterns),
+        adapter_type=payload.adapter_type,
+        b2b_filter_enabled=payload.b2b_filter_enabled,
+        russia_online_only=payload.russia_online_only,
+        encoding=payload.encoding,
+        use_jina_reader=payload.use_jina_reader,
+        required_cookies=tuple(payload.required_cookies.items()),
+    )
+
+    try:
+        discovery = await HttpCatalogSourceScraper().discover_catalog(preview_cfg)
+    except UnsafeUrlError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except (CaptchaBlockedError, httpx.HTTPError, ValueError, RuntimeError, OSError) as exc:
+        logger.warning("Ошибка предпросмотра Discovery (%s): %s", payload.catalog_urls[0], exc)
+        return ScraperSourcePreviewOut(
+            discovered_count=0,
+            rejected_b2c=0,
+            rejected_geo=0,
+            sample_candidates=[],
+            checked_url=payload.catalog_urls[0],
+            total_catalog_urls=len(payload.catalog_urls),
+            error=str(exc) or type(exc).__name__,
+        )
+
+    sample = [
+        ScraperPreviewCandidateOut(
+            url=cand.url,
+            title=cand.title,
+            snippet=cand.snippet,
+            is_digest=cand.is_digest,
+        )
+        for cand in discovery.candidates[:10]
+    ]
+    return ScraperSourcePreviewOut(
+        discovered_count=len(discovery.candidates),
+        rejected_b2c=discovery.rejected_b2c,
+        rejected_geo=discovery.rejected_geo,
+        sample_candidates=sample,
+        checked_url=payload.catalog_urls[0],
+        total_catalog_urls=len(payload.catalog_urls),
+        error=None,
+    )
+
+
+@router.patch(
+    "/scraper/sources/{source_key}",
+    response_model=ScraperSourceOut,
+    summary="Обновление настроек источника мониторинга",
+)
+async def update_scraper_source(
+    source_key: str,
+    payload: ScraperSourceUpdateIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ScraperSourceOut:
+    if payload.catalog_urls is not None:
+        await _validate_public_catalog_urls(payload.catalog_urls)
+
+    try:
+        rows = await _ensure_and_commit_builtin_sources(db)
+        row = next((r for r in rows if r.source_key == source_key), None)
+        if row is None:
+            res = await db.execute(
+                select(ScraperSource).where(ScraperSource.source_key == source_key)
+            )
+            row = res.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Источник '{source_key}' не найден.",
+            )
+
+        if row.source_key == "archdialog" and payload.adapter_type is not None and payload.adapter_type != "manual_only":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Площадка АрхДиалог (Timepad) работает только в режиме manual_only.",
+            )
+
+        effective_adapter = payload.adapter_type if payload.adapter_type is not None else row.adapter_type
+        if effective_adapter == "manual_only" and payload.is_enabled is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя включить автоматический мониторинг для источника в режиме manual_only.",
+            )
+
+        updates = payload.model_dump(exclude_unset=True)
+        for field_name, field_value in updates.items():
+            setattr(row, field_name, field_value)
+
+        if payload.adapter_type == "manual_only" and payload.is_enabled is None:
+            row.is_enabled = False
+
+        await db.commit()
+        await db.refresh(row)
+        return ScraperSourceOut.model_validate(row)
+    except HTTPException:
+        raise
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при обновлении источника '%s': %s", source_key, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.delete(
+    "/scraper/sources/{source_key}",
+    response_model=ScraperSourceDeleteOut,
+    summary="Удаление пользовательской площадки мониторинга",
+)
+async def delete_scraper_source(
+    source_key: str,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ScraperSourceDeleteOut:
+    try:
+        rows = await _ensure_and_commit_builtin_sources(db)
+        row = next((r for r in rows if r.source_key == source_key), None)
+        if row is None:
+            res = await db.execute(
+                select(ScraperSource).where(ScraperSource.source_key == source_key)
+            )
+            row = res.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Источник '{source_key}' не найден.",
+            )
+        if row.is_builtin:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Встроенные площадки заказчика нельзя удалить, но можно отключить.",
+            )
+
+        await db.delete(row)
+        await db.commit()
+        return ScraperSourceDeleteOut(deleted=True, source_key=source_key)
+    except HTTPException:
+        raise
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при удалении источника '%s': %s", source_key, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.get(
+    "/scraper/runs",
+    response_model=ScraperRunsListOut,
+    summary="История запусков парсера и статистика по площадкам",
+)
+async def list_scraper_runs(
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+    limit: int = Query(default=10, ge=1, le=50),
+) -> ScraperRunsListOut:
+    try:
+        res = await db.execute(
+            select(ScraperRun).order_by(ScraperRun.id.desc()).limit(limit)
+        )
+        rows = list(res.scalars().all())
+        return ScraperRunsListOut(
+            items=[ScraperRunDetailOut.model_validate(r) for r in rows]
+        )
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запросе /scraper/runs: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.get(
+    "/scraper/runs/latest",
+    response_model=ScraperRunDetailOut | None,
+    summary="Последний (или текущий выполняемый) прогон парсера",
+)
+async def get_latest_scraper_run(
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ScraperRunDetailOut | None:
+    try:
+        res = await db.execute(
+            select(ScraperRun).order_by(ScraperRun.id.desc()).limit(1)
+        )
+        row = res.scalar_one_or_none()
+        return ScraperRunDetailOut.model_validate(row) if row is not None else None
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при запросе /scraper/runs/latest: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
 
 
 @router.get(

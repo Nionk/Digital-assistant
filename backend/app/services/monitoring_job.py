@@ -2,40 +2,47 @@ import logging
 
 import app.api.manager as manager_module
 from app.core.database import async_session_maker
-from app.services.scraper import run_customer_sources_monitoring
-from app.services.telegram import format_monitoring_summary_alert, send_manager_alert
+from app.services.scraper.runner import (
+    is_scraper_busy,
+    run_persisted_scraper_job,
+    try_enqueue_scraper_run,
+)
 
 logger = logging.getLogger(__name__)
 
 
 async def run_nightly_monitoring_job() -> None:
     """
-    Фоновый регламентный джоб ночного мониторинга 9 площадок (get_data.md, Способ Б).
+    Фоновый регламентный джоб ночного мониторинга площадок (get_data.md, Способ Б).
     Запускается планировщиком APScheduler при ENABLE_SCHEDULER=true.
     """
-    if manager_module._is_scraper_running:
+    if await is_scraper_busy():
         logger.info("Пропуск планового ночного мониторинга: задача скрейпинга уже выполняется.")
         return
 
-    manager_module._is_scraper_running = True
     logger.info("Запуск планового фонового мониторинга площадок...")
+    run_id: int | None = None
     try:
         async with async_session_maker() as session:
-            summary = await run_customer_sources_monitoring(session)
-        logger.info(
-            "Мониторинг завершен: проверено источников=%d, новых=%d (готово=%d, требует проверки=%d)",
-            summary.checked_sources,
-            summary.discovered_urls,
-            summary.ingested_ready_count,
-            summary.needs_enrichment_count,
-        )
-        alert_text = format_monitoring_summary_alert(
-            ready_count=summary.ingested_ready_count,
-            needs_enrichment_titles=summary.needs_enrichment_titles,
-        )
-        await send_manager_alert(alert_text)
+            run_row, _ = await try_enqueue_scraper_run(
+                session,
+                target_source_key="all",
+                triggered_by="scheduler",
+            )
+            if run_row is None:
+                logger.info("Пропуск планового ночного мониторинга: активный прогон уже есть в БД.")
+                return
+            run_id = run_row.id
     except Exception:
-        logger.exception("Ошибка при выполнении ночного мониторинга площадок")
+        logger.exception("Ошибка при инициализации ночного мониторинга площадок")
+        return
+
+    try:
+        await run_persisted_scraper_job(
+            run_id,
+            "all",
+            dry_run=False,
+        )
     finally:
         manager_module._is_scraper_running = False
 

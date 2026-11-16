@@ -1,5 +1,8 @@
-from datetime import date
+import codecs
+import re
+from datetime import date, datetime
 from typing import Literal, Self, cast
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -433,30 +436,436 @@ class EventUploadOut(BaseModel):
     message: str = Field(..., description="Результат обработки")
 
 
+AdapterTypeLiteral = Literal["html_list", "rss", "html_digest", "manual_only"]
+
+_CYRILLIC_TRANSLIT_MAP: dict[str, str] = {
+    "а": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "д": "d",
+    "е": "e",
+    "ё": "e",
+    "ж": "zh",
+    "з": "z",
+    "и": "i",
+    "й": "y",
+    "к": "k",
+    "л": "l",
+    "м": "m",
+    "н": "n",
+    "о": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "у": "u",
+    "ф": "f",
+    "х": "kh",
+    "ц": "ts",
+    "ч": "ch",
+    "ш": "sh",
+    "щ": "shch",
+    "ъ": "",
+    "ы": "y",
+    "ь": "",
+    "э": "e",
+    "ю": "yu",
+    "я": "ya",
+}
+_SOURCE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,99}$")
+
+
+def slugify_source_key(display_name: str) -> str:
+    """Детерминированная транслитерация названия площадки в безопасный source_key."""
+    translit = "".join(_CYRILLIC_TRANSLIT_MAP.get(ch, ch) for ch in display_name.lower())
+    slug = re.sub(r"[^a-z0-9]+", "_", translit)
+    slug = re.sub(r"_+", "_", slug)[:90].strip("_")
+    if not slug:
+        return "custom_source"
+    if slug == "all":
+        return "all_source"
+    return slug
+
+
+def _validate_catalog_urls_list(urls: list[str]) -> list[str]:
+    cleaned_urls: list[str] = []
+    seen: set[str] = set()
+    for raw in urls:
+        u = raw.strip()
+        if not u:
+            raise ValueError("URL каталога не может быть пустым.")
+        parts = urlsplit(u)
+        if parts.scheme.lower() not in ("http", "https") or not parts.netloc or not parts.hostname:
+            raise ValueError(f"Некорректный URL каталога '{u}': ожидается http:// или https://.")
+        if u not in seen:
+            seen.add(u)
+            cleaned_urls.append(u)
+    if not cleaned_urls:
+        raise ValueError("Необходимо указать хотя бы один URL каталога.")
+    return cleaned_urls
+
+
+_MAX_REGEX_PATTERNS_COUNT = 20
+_MAX_REGEX_PATTERN_LENGTH = 300
+
+
+def _validate_regex_patterns_list(patterns: list[str]) -> list[str]:
+    if len(patterns) > _MAX_REGEX_PATTERNS_COUNT:
+        raise ValueError(
+            f"Слишком много regex-паттернов: допускается не более {_MAX_REGEX_PATTERNS_COUNT}."
+        )
+    validated: list[str] = []
+    for raw in patterns:
+        pat = raw.strip()
+        if not pat:
+            raise ValueError("Регулярное выражение не может быть пустой строкой.")
+        if len(pat) > _MAX_REGEX_PATTERN_LENGTH:
+            raise ValueError(
+                f"Регулярное выражение слишком длинное ({len(pat)} симв.): максимум {_MAX_REGEX_PATTERN_LENGTH} символов."
+            )
+        try:
+            re.compile(pat)
+        except re.error as exc:
+            raise ValueError(f"Некорректное регулярное выражение '{pat}': {exc}") from exc
+        validated.append(pat)
+    return validated
+
+
+def _validate_encoding_name(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Кодировка не может быть пустой.")
+    try:
+        codecs.lookup(cleaned)
+    except LookupError as exc:
+        raise ValueError(f"Неподдерживаемая кодировка '{cleaned}'.") from exc
+    return cleaned
+
+
+def _normalize_cookies_dict(cookies: dict[str, str]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for k, v in cookies.items():
+        key = str(k).strip()
+        if not key:
+            raise ValueError("Имя cookie не может быть пустым.")
+        normalized[key] = str(v)
+    return normalized
+
+
 class ScraperRunIn(BaseModel):
-    """Запрос на ручной запуск фонового парсера по конкретной площадке."""
-    source_key: Literal[
-        "expomap_construction",
-        "expomap_design",
-        "architime",
-        "archi_ru",
-        "helpinver",
-        "archdialog",
-        "design_mate",
-        "votkuda",
-        "archdaily",
-        "all",
-    ] = Field(
+    """Запрос на ручной запуск фонового парсера по конкретной площадке или всем сразу."""
+    source_key: str = Field(
         ...,
-        description="Ключ площадки (expomap_construction, expomap_design, architime, archi_ru, helpinver, archdialog, design_mate, votkuda, archdaily, all)",
+        min_length=1,
+        max_length=100,
+        description="Ключ площадки из scraper_sources или 'all' для обхода всех активных площадок",
     )
+    dry_run: bool = Field(
+        default=False,
+        description="Пробный запуск только стадии Discovery без вызова LLM и записи событий",
+    )
+    max_urls_per_source: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Временный лимит новых URL на один источник для этого запуска (1..50)",
+    )
+
+    @field_validator("source_key")
+    @classmethod
+    def validate_source_key(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Ключ площадки source_key не может быть пустым.")
+        return cleaned
 
 
 class ScraperRunOut(BaseModel):
     """Статус постановки задачи скрейпера в фоновый воркер."""
     source_key: str = Field(..., description="Ключ площадки")
-    status: Literal["queued", "completed", "failed"] = Field("queued", description="Статус запуска")
+    status: Literal["queued", "running", "completed", "failed"] = Field(
+        "queued", description="Статус запуска"
+    )
     message: str = Field(..., description="Информационное сообщение")
+    run_id: int | None = Field(default=None, description="ID записи прогона в scraper_runs")
+    dry_run: bool = Field(default=False, description="Признак пробного прогона")
+
+
+class ScraperSourceOut(BaseModel):
+    """Конфигурация площадки мониторинга из таблицы scraper_sources."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="ID источника")
+    source_key: str = Field(..., description="Уникальный ключ площадки")
+    display_name: str = Field(..., description="Отображаемое название площадки")
+    catalog_urls: list[str] = Field(default_factory=list, description="Список URL каталогов/RSS-лент")
+    adapter_type: AdapterTypeLiteral = Field(..., description="Тип адаптера сбора")
+    card_url_patterns: list[str] = Field(default_factory=list, description="Regex-паттерны ссылок карточек")
+    exclude_url_patterns: list[str] = Field(default_factory=list, description="Regex-паттерны исключений")
+    b2b_filter_enabled: bool = Field(default=False, description="Фильтрация B2C/непрофильных событий")
+    russia_online_only: bool = Field(default=True, description="Фильтр только РФ или онлайн")
+    use_jina_reader: bool = Field(default=False, description="Загружать страницы через r.jina.ai")
+    encoding: str = Field(default="utf-8", description="Кодировка страниц источника")
+    required_cookies: dict[str, str] = Field(default_factory=dict, description="Обязательные cookies")
+    max_urls_per_run: int = Field(default=10, description="Лимит новых URL за один прогон")
+    is_enabled: bool = Field(default=True, description="Включен ли источник в автоматический мониторинг")
+    is_builtin: bool = Field(default=False, description="Признак встроенной площадки заказчика")
+    created_at: datetime = Field(..., description="Дата создания")
+    updated_at: datetime = Field(..., description="Дата последнего обновления")
+
+
+class ScraperSourceCreateIn(BaseModel):
+    """Запрос на добавление новой площадки мониторинга (Вариант А + опциональные расширенные настройки)."""
+    display_name: str = Field(..., min_length=2, max_length=255, description="Название площадки")
+    catalog_urls: list[str] = Field(..., min_length=1, description="Список URL каталогов или RSS-лент")
+    adapter_type: AdapterTypeLiteral = Field(default="html_list", description="Тип адаптера сбора")
+    b2b_filter_enabled: bool = Field(default=False, description="Включить B2C/B2B фильтрацию")
+    russia_online_only: bool = Field(default=True, description="Оставлять только РФ и онлайн")
+    source_key: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Опциональный ключ площадки (если не указан — генерируется из названия)",
+    )
+    card_url_patterns: list[str] = Field(
+        default_factory=list, description="Опциональные regex-паттерны ссылок карточек"
+    )
+    exclude_url_patterns: list[str] = Field(
+        default_factory=list, description="Опциональные regex-паттерны исключений"
+    )
+    use_jina_reader: bool = Field(default=False, description="Использовать r.jina.ai")
+    encoding: str = Field(default="utf-8", min_length=1, max_length=50, description="Кодировка")
+    required_cookies: dict[str, str] = Field(default_factory=dict, description="Cookies для запросов")
+    max_urls_per_run: int = Field(default=10, ge=1, le=50, description="Максимум новых URL за запуск")
+    is_enabled: bool = Field(default=True, description="Активен ли источник")
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Название площадки должно содержать минимум 2 символа.")
+        return cleaned
+
+    @field_validator("source_key")
+    @classmethod
+    def validate_source_key(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip().lower()
+        if not cleaned:
+            return None
+        if cleaned == "all":
+            raise ValueError("Ключ 'all' зарезервирован системой.")
+        if not _SOURCE_KEY_RE.match(cleaned):
+            raise ValueError(
+                "source_key должен содержать только строчную латиницу, цифры, '_' или '-'."
+            )
+        return cleaned
+
+    @field_validator("catalog_urls")
+    @classmethod
+    def validate_catalog_urls(cls, v: list[str]) -> list[str]:
+        return _validate_catalog_urls_list(v)
+
+    @field_validator("card_url_patterns", "exclude_url_patterns")
+    @classmethod
+    def validate_regex_patterns(cls, v: list[str]) -> list[str]:
+        return _validate_regex_patterns_list(v)
+
+    @field_validator("encoding")
+    @classmethod
+    def validate_encoding(cls, v: str) -> str:
+        return _validate_encoding_name(v)
+
+    @field_validator("required_cookies")
+    @classmethod
+    def validate_cookies(cls, v: dict[str, str]) -> dict[str, str]:
+        return _normalize_cookies_dict(v)
+
+
+class ScraperSourceUpdateIn(BaseModel):
+    """Запрос на частичное обновление параметров площадки мониторинга."""
+    display_name: str | None = Field(default=None, min_length=2, max_length=255)
+    catalog_urls: list[str] | None = Field(default=None, min_length=1)
+    adapter_type: AdapterTypeLiteral | None = Field(default=None)
+    card_url_patterns: list[str] | None = Field(default=None)
+    exclude_url_patterns: list[str] | None = Field(default=None)
+    b2b_filter_enabled: bool | None = Field(default=None)
+    russia_online_only: bool | None = Field(default=None)
+    use_jina_reader: bool | None = Field(default=None)
+    encoding: str | None = Field(default=None, min_length=1, max_length=50)
+    required_cookies: dict[str, str] | None = Field(default=None)
+    max_urls_per_run: int | None = Field(default=None, ge=1, le=50)
+    is_enabled: bool | None = Field(default=None)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Название площадки должно содержать минимум 2 символа.")
+        return cleaned
+
+    @field_validator("catalog_urls")
+    @classmethod
+    def validate_catalog_urls(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_catalog_urls_list(v) if v is not None else None
+
+    @field_validator("card_url_patterns", "exclude_url_patterns")
+    @classmethod
+    def validate_regex_patterns(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_regex_patterns_list(v) if v is not None else None
+
+    @field_validator("encoding")
+    @classmethod
+    def validate_encoding(cls, v: str | None) -> str | None:
+        return _validate_encoding_name(v) if v is not None else None
+
+    @field_validator("required_cookies")
+    @classmethod
+    def validate_cookies(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        return _normalize_cookies_dict(v) if v is not None else None
+
+    @model_validator(mode="after")
+    def reject_explicit_nulls(self) -> Self:
+        for field_name in self.model_fields_set:
+            if getattr(self, field_name) is None:
+                raise ValueError(f"Поле '{field_name}' не может быть null.")
+        return self
+
+
+class ScraperSourceDeleteOut(BaseModel):
+    """Подтверждение удаления пользовательской площадки мониторинга."""
+    deleted: bool = True
+    source_key: str
+
+
+class ScraperSourcePreviewIn(BaseModel):
+    """Параметры для бесплатного тест-просмотра Discovery (без вызова LLM) на первом catalog_url."""
+    catalog_urls: list[str] = Field(..., min_length=1)
+    adapter_type: AdapterTypeLiteral = Field(default="html_list")
+    card_url_patterns: list[str] = Field(default_factory=list)
+    exclude_url_patterns: list[str] = Field(default_factory=list)
+    b2b_filter_enabled: bool = Field(default=False)
+    russia_online_only: bool = Field(default=True)
+    use_jina_reader: bool = Field(default=False)
+    encoding: str = Field(default="utf-8", min_length=1, max_length=50)
+    required_cookies: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("catalog_urls")
+    @classmethod
+    def validate_catalog_urls(cls, v: list[str]) -> list[str]:
+        return _validate_catalog_urls_list(v)
+
+    @field_validator("card_url_patterns", "exclude_url_patterns")
+    @classmethod
+    def validate_regex_patterns(cls, v: list[str]) -> list[str]:
+        return _validate_regex_patterns_list(v)
+
+    @field_validator("encoding")
+    @classmethod
+    def validate_encoding(cls, v: str) -> str:
+        return _validate_encoding_name(v)
+
+    @field_validator("required_cookies")
+    @classmethod
+    def validate_cookies(cls, v: dict[str, str]) -> dict[str, str]:
+        return _normalize_cookies_dict(v)
+
+
+class ScraperPreviewCandidateOut(BaseModel):
+    """Найденный кандидат мероприятия на этапе Discovery Preview."""
+    url: str
+    title: str = ""
+    snippet: str = ""
+    is_digest: bool = False
+
+
+class ScraperSourcePreviewOut(BaseModel):
+    """Результат бесплатного предпросмотра Discovery по первой ссылке каталога."""
+    discovered_count: int = Field(default=0, ge=0)
+    rejected_b2c: int = Field(default=0, ge=0)
+    rejected_geo: int = Field(default=0, ge=0)
+    sample_candidates: list[ScraperPreviewCandidateOut] = Field(default_factory=list)
+    checked_url: str | None = Field(
+        default=None,
+        description="Фактически проверенный первый URL каталога из списка",
+    )
+    total_catalog_urls: int = Field(
+        default=1,
+        ge=0,
+        description="Общее количество URL в catalog_urls (проверяется только первый)",
+    )
+    error: str | None = None
+
+
+class ScraperRunSavedEventOut(BaseModel):
+    """Конкретное мероприятие, созданное или обновленное в ходе прогона парсера."""
+    event_id: int | None = None
+    title: str
+    url: str | None = None
+    action: Literal["created", "updated"] = "created"
+    data_status: str = "ready"
+    start_date: str | None = None
+    city: str | None = None
+
+
+class ScraperRunSourceLogOut(BaseModel):
+    """Детальный отчет по одной площадке внутри прогона скрейпера."""
+    source_key: str
+    display_name: str = ""
+    adapter_type: str = "html_list"
+    catalog_urls: list[str] = Field(default_factory=list)
+    discovered_total: int = 0
+    selected_new_count: int = 0
+    events_created: int = 0
+    events_updated: int = 0
+    rejected_b2c: int = 0
+    rejected_geo: int = 0
+    rejected_past: int = 0
+    errors_count: int = 0
+    candidate_urls: list[str] = Field(default_factory=list)
+    saved_events: list[ScraperRunSavedEventOut] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ScraperRunDetailOut(BaseModel):
+    """Полная запись запуска скрейпера (история и live-прогресс)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: Literal["queued", "running", "completed", "failed"]
+    target_source_key: str
+    triggered_by: str
+    dry_run: bool = False
+    sources_total: int = 0
+    sources_done: int = 0
+    urls_discovered: int = 0
+    events_created: int = 0
+    events_updated: int = 0
+    rejected_b2c: int = 0
+    rejected_geo: int = 0
+    rejected_past: int = 0
+    errors_count: int = 0
+    source_logs: list[ScraperRunSourceLogOut] = Field(default_factory=list)
+    error_message: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def sync_dry_run_from_trigger(self) -> Self:
+        """Вычисляет признак пробного запуска из triggered_by без изменения схемы БД."""
+        if self.triggered_by == "manual_dry_run":
+            self.dry_run = True
+        return self
+
+
+class ScraperRunsListOut(BaseModel):
+    """Список последних прогонов парсера."""
+    items: list[ScraperRunDetailOut] = Field(default_factory=list)
 
 
 class SelectionItemReactionActivity(BaseModel):

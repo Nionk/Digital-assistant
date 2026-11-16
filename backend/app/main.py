@@ -10,9 +10,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import auth_router, manager_router, showcase_router
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import async_session_maker, engine
 from app.services.ai_client import embedding_client, raw_openai_client
 from app.services.monitoring_job import run_nightly_monitoring_job
+from app.services.scraper import recover_stale_scraper_runs
 from app.services.telegram import close_telegram_http_client
 
 logger = logging.getLogger("app.main")
@@ -22,9 +23,21 @@ logger = logging.getLogger("app.main")
 async def lifespan(app: FastAPI):
     """
     Управление жизненным циклом приложения FastAPI (lifespan).
+    При старте переводит зависшие после рестарта прогоны скрейпера в статус 'failed'.
     При ENABLE_SCHEDULER=true запускает фоновый планировщик ночного мониторинга площадок.
     При остановке корректно закрывает соединения с БД, пулы HTTP-клиентов и фоновые задачи.
     """
+    try:
+        async with async_session_maker() as session:
+            recovered = await recover_stale_scraper_runs(session)
+            if recovered:
+                logger.warning(
+                    "Восстановление после рестарта: сброшено зависших прогонов скрейпера в статус 'failed': %d.",
+                    recovered,
+                )
+    except (SQLAlchemyError, OSError) as exc:
+        logger.warning("Пропуск recover_stale_scraper_runs при старте (БД недоступна): %s", exc)
+
     scheduler: AsyncIOScheduler | None = None
     if settings.ENABLE_SCHEDULER:
         scheduler = AsyncIOScheduler(timezone=settings.APP_TIMEZONE)
