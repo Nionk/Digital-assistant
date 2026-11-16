@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { DateInput } from "@/components/ui/date-input";
 import {
   SearchableMultiSelectPopover,
   type MultiSelectOption,
@@ -136,16 +137,20 @@ export function CatalogHeaderAndFilters({
               strokeWidth={1.75}
             />
             <input
+              id="catalog-search"
+              name="catalog_search"
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder="Поиск по названию, КРТ, BIM..."
-              className="h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-7 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+              aria-label="Поиск мероприятий по названию или теме"
+              className="h-8 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-7 text-xs text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => onSearchQueryChange("")}
+                aria-label="Очистить поиск"
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                 title="Очистить поиск"
               >
@@ -257,33 +262,27 @@ export function CatalogHeaderAndFilters({
             <span className="font-serif italic text-[11px] text-[#8E95A0]">
               Период:
             </span>
-            <input
-              type="date"
+            <DateInput
+              id="catalog-date-from"
+              name="catalog_date_from"
               value={dateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
-              aria-label="Дата проведения с"
-              className={cn(
-                "h-7 rounded-[4px] border bg-[#12161A] px-2 text-xs text-white [color-scheme:dark] outline-none transition-colors",
-                isDateRangeInvalid
-                  ? "border-[#EF4444]"
-                  : "border-[#262D35] focus:border-[#E5C378]"
-              )}
+              onChange={onDateFromChange}
+              ariaLabel="Дата проведения с"
+              ariaInvalid={isDateRangeInvalid}
+              inputClassName="h-7 w-[124px] text-xs"
             />
-            <span className="text-[11px] text-[#6B7280]">—</span>
-            <input
-              type="date"
+            <span className="text-[11px] text-[#8E95A0]">—</span>
+            <DateInput
+              id="catalog-date-to"
+              name="catalog_date_to"
               value={dateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
-              aria-label="Дата проведения по"
-              className={cn(
-                "h-7 rounded-[4px] border bg-[#12161A] px-2 text-xs text-white [color-scheme:dark] outline-none transition-colors",
-                isDateRangeInvalid
-                  ? "border-[#EF4444]"
-                  : "border-[#262D35] focus:border-[#E5C378]"
-              )}
+              onChange={onDateToChange}
+              ariaLabel="Дата проведения по"
+              ariaInvalid={isDateRangeInvalid}
+              inputClassName="h-7 w-[124px] text-xs"
             />
             {isDateRangeInvalid && (
-              <span className="text-[11px] text-[#F87171]">
+              <span className="text-[11px] text-[#FCA5A5]">
                 Дата «по» раньше даты «с»
               </span>
             )}
@@ -338,7 +337,7 @@ export function CatalogHeaderAndFilters({
             <Sparkles className="h-3 w-3 text-inherit shrink-0" strokeWidth={1.75} />
             <span>Только со скидкой Early Bird</span>
             {onlyEarlyBird && (
-              <span className="ml-0.5 rounded bg-[#E5C378]/20 px-1 py-0.5 text-[10px] text-[#E5C378]">
+              <span className="ml-0.5 rounded bg-[#E5C378]/20 px-1.5 py-0.5 text-[11px] text-[#E5C378]">
                 {earlyBirdCount}
               </span>
             )}

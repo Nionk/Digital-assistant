@@ -279,11 +279,11 @@ export function PublishedShowcaseMonitor({
         <div className="flex items-center gap-2.5">
           <span className="text-[#34D399] text-xs select-none">✦</span>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378]">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378]">
                 Мониторинг согласования витрины
               </h2>
-              <Badge variant="ebEmerald" className="text-[9px]">
+              <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                 Опубликовано
               </Badge>
             </div>
@@ -309,18 +309,18 @@ export function PublishedShowcaseMonitor({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 mr-2 text-xs tabular-nums">
-            <Badge variant="ebTeal" className="text-[9px]">
+            <Badge variant="ebTeal" asSlanted={false} className="text-[11px]">
               В плане: {approvedCount}
             </Badge>
             {rejectedCount > 0 && (
-              <Badge variant="ebRose" className="text-[9px]">
+              <Badge variant="ebRose" asSlanted={false} className="text-[11px]">
                 Запрос замены: {rejectedCount}
               </Badge>
             )}
             {pendingQuestions.length > 0 && (
-              <Badge variant="ebAmber" className="text-[9px]">
+              <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                 Вопросы: {pendingQuestions.length}
               </Badge>
             )}
@@ -389,23 +389,23 @@ export function PublishedShowcaseMonitor({
                         {ROLE_BADGE_LABELS[item.role]}
                       </Badge>
                     ) : (
-                      <span className="text-[10px] font-serif italic text-[#8E95A0]">
+                      <span className="text-[11px] font-serif italic text-[#8E95A0]">
                         Реакция клиента
                       </span>
                     )}
 
                     {isInterested ? (
-                      <Badge variant="ebEmerald" className="text-[9px]">
+                      <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                         <Check className="h-3 w-3 stroke-[2.5]" />
                         В плане
                       </Badge>
                     ) : isRejected ? (
-                      <Badge variant="ebRose" className="text-[9px]">
+                      <Badge variant="ebRose" asSlanted={false} className="text-[11px]">
                         <RefreshCcw className="h-3 w-3 stroke-[2.5]" />
                         Запрос замены
                       </Badge>
                     ) : (
-                      <Badge variant="ebSlate" className="text-[9px]">
+                      <Badge variant="ebSlate" asSlanted={false} className="text-[11px]">
                         <Clock className="h-3 w-3" strokeWidth={2} />
                         Ожидает решения
                       </Badge>
@@ -445,14 +445,14 @@ export function PublishedShowcaseMonitor({
                     )}
                     {parsedComment.parsedServices.length > 0 && (
                       <div className="space-y-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#34D399]">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#34D399]">
                           Опции сопровождения:
                         </span>
                         <div className="flex flex-wrap gap-1">
                           {parsedComment.parsedServices.map((srv) => (
                             <span
                               key={srv}
-                              className="inline-flex items-center rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-1.5 py-0.5 text-[10px] font-medium text-[#A7F3D0]"
+                              className="inline-flex items-center rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-1.5 py-0.5 text-[11px] font-medium text-[#A7F3D0]"
                             >
                               {srv}
                             </span>
@@ -479,7 +479,7 @@ export function PublishedShowcaseMonitor({
             <Badge
               variant={pendingQuestions.length > 0 ? "ebAmber" : "darkSubtle"}
               asSlanted={false}
-              className="text-[10px]"
+              className="text-[11px]"
             >
               {pendingQuestions.length > 0
                 ? `Ожидают ответа: ${pendingQuestions.length}`
@@ -518,6 +518,9 @@ export function PublishedShowcaseMonitor({
 
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 pt-1">
                     <textarea
+                      id={`monitor-reply-${q.message_id}`}
+                      name={`reply_${q.message_id}`}
+                      aria-label={`Официальный ответ клиенту по вопросу: ${q.event_title || "подборка"}`}
                       rows={2}
                       value={draftValue}
                       disabled={isSending}
@@ -528,7 +531,7 @@ export function PublishedShowcaseMonitor({
                         }))
                       }
                       placeholder="Напишите официальный ответ клиенту (он сразу появится в шторке витрины)..."
-                      className="flex-1 rounded-[6px] border border-[#262D35] bg-[#161B22] p-2 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
+                      className="flex-1 rounded-[6px] border border-[#262D35] bg-[#161B22] p-2 text-xs text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
                     />
                     <Button
                       type="submit"
@@ -558,7 +561,7 @@ export function PublishedShowcaseMonitor({
             })}
           </div>
         ) : (
-          <p className="mt-1.5 text-[11px] text-[#727985]">
+          <p className="mt-1.5 text-[11px] text-[#8E95A0]">
             Когда клиент передаст сложный вопрос куратору через чат на витрине, он появится здесь с формой прямого ответа.
           </p>
         )}
@@ -624,7 +627,7 @@ export function PublishedShowcaseMonitor({
                               key={reply.reply_message_id}
                               className="rounded-[6px] border border-[#1E5241] bg-[#0E241E]/75 p-2.5 space-y-1"
                             >
-                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                              <div className="flex items-center justify-between gap-2 text-[11px]">
                                 <span className="inline-flex items-center gap-1 font-semibold text-[#34D399]">
                                   <UserCheck className="h-3 w-3 shrink-0" strokeWidth={2} />
                                   <span>Ответ куратора</span>

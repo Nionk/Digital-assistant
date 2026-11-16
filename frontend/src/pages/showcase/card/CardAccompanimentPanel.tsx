@@ -1,3 +1,4 @@
+import * as React from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ export function CardAccompanimentPanel({
   onClose,
   onSubmit,
 }: CardAccompanimentPanelProps) {
+  const noteInputId = React.useId();
+
   return (
     <motion.div
       initial={{ opacity: 0, height: 0 }}
@@ -64,6 +67,7 @@ export function CardAccompanimentPanel({
               >
                 <input
                   type="checkbox"
+                  name={`agency_service_${srv.id}`}
                   checked={checked}
                   onChange={() => onToggleService(srv.shortTag)}
                   className="mt-0.5 h-3.5 w-3.5 rounded accent-[#34D399]"
@@ -82,11 +86,14 @@ export function CardAccompanimentPanel({
         </div>
 
         <input
+          id={noteInputId}
+          name="accompaniment_note"
           type="text"
           value={interestedNote}
           onChange={(e) => onChangeInterestedNote(e.target.value)}
           placeholder="Комментарий куратору (необязательно)..."
-          className="mt-2.5 h-8 w-full rounded-[6px] border border-[#1E5241]/70 bg-[#0A1914] px-2.5 text-xs text-white placeholder:text-[#6B8F82] focus:border-[#34D399] focus:outline-none"
+          aria-label="Комментарий куратору по опциям сопровождения"
+          className="mt-2.5 h-8 w-full rounded-[6px] border border-[#1E5241]/70 bg-[#0A1914] px-2.5 text-xs text-white placeholder:text-[#8E95A0] focus:border-[#34D399] focus:outline-none"
         />
 
         <Button

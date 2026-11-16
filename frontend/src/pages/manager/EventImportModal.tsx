@@ -233,7 +233,8 @@ export function EventImportModal({
                             ? "ebEmerald"
                             : "ebAmber"
                         }
-                        className="text-[9px] shrink-0"
+                        asSlanted={false}
+                        className="text-[11px] shrink-0"
                       >
                         {uploadResult.data_status === "ready"
                           ? "Готово к подбору"
@@ -252,11 +253,16 @@ export function EventImportModal({
 
                 {/* Загрузка PDF-брошюры */}
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+                  <label
+                    htmlFor="event-import-file"
+                    className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]"
+                  >
                     PDF-брошюра / регламент (опционально)
                   </label>
                   <input
                     ref={fileInputRef}
+                    id="event-import-file"
+                    name="file"
                     type="file"
                     accept=".pdf,application/pdf"
                     disabled={uploadMutation.isPending}
@@ -315,7 +321,7 @@ export function EventImportModal({
                           выберите файл
                         </span>
                       </p>
-                      <p className="mt-0.5 text-[11px] text-[#727985]">
+                      <p className="mt-0.5 text-[11px] text-[#8E95A0]">
                         ИИ извлечет даты, описание, тарифы организатора и Early Bird
                       </p>
                     </div>
@@ -334,12 +340,13 @@ export function EventImportModal({
                     <Link2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8E95A0]" />
                     <input
                       id="event-import-url"
+                      name="source_url"
                       type="url"
                       value={sourceUrl}
                       disabled={uploadMutation.isPending}
                       onChange={(e) => setSourceUrl(e.target.value)}
                       placeholder="https://forum-example.ru/program"
-                      className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-3 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
+                      className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] pl-8 pr-3 text-xs text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
                     />
                   </div>
                 </div>
@@ -354,12 +361,13 @@ export function EventImportModal({
                   </label>
                   <textarea
                     id="event-import-text"
+                    name="raw_text"
                     rows={4}
                     value={rawText}
                     disabled={uploadMutation.isPending}
                     onChange={(e) => setRawText(e.target.value)}
                     placeholder="Вставьте описание площадки, расценки участия (делегат/спикер/стенд) и дедлайны скидок..."
-                    className="w-full rounded-[6px] border border-[#262D35] bg-[#12161A] p-2.5 text-xs leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors scrollbar-thin"
+                    className="w-full rounded-[6px] border border-[#262D35] bg-[#12161A] p-2.5 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors scrollbar-thin"
                   />
                 </div>
 

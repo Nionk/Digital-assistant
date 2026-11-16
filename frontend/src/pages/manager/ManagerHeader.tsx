@@ -54,11 +54,11 @@ export function ManagerHeader({
   }, [isDeadlinesOpen]);
 
   return (
-    <header className="sticky top-0 z-30 flex h-[67px] shrink-0 items-center justify-between border-b border-[#1A2026] bg-[#0E1215] px-4 sm:px-6 shadow-sm relative">
+    <header className="sticky top-0 z-30 flex flex-wrap md:flex-nowrap min-h-[67px] md:h-[67px] shrink-0 items-center justify-between gap-x-2 gap-y-2 border-b border-[#1A2026] bg-[#0E1215] px-3 py-2 md:py-0 sm:px-6 shadow-sm relative">
       {/* Деликатная бронзово-золотая нить переплёта, отделяющая хедер от контента */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
 
-      <div className="flex items-center">
+      <div className="order-1 flex items-center shrink-0">
         <button
           type="button"
           onClick={() => onModeChange("matching")}
@@ -67,19 +67,19 @@ export function ManagerHeader({
         >
           <img
             src={logoImage}
-            alt="Логотип платформы"
-            className="h-8 sm:h-[34px] w-auto object-contain shrink-0"
+            alt="EXEDRA"
+            className="h-7 sm:h-[34px] w-auto object-contain shrink-0"
           />
         </button>
       </div>
 
-      <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner z-10">
+      <nav className="order-3 w-full md:order-2 md:w-auto lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 flex items-center justify-center rounded-[8px] border border-[#232931] bg-[#12161A]/90 p-1 gap-1 shadow-inner z-10">
         {/* Вкладка: Подбор клиентам */}
         <button
           type="button"
           onClick={() => onModeChange("matching")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-150 outline-none",
+            "group relative flex flex-1 md:flex-initial items-center justify-center gap-2 rounded-[6px] px-3 sm:px-3.5 py-1.5 text-xs font-medium whitespace-nowrap select-none cursor-pointer transition-colors duration-150 outline-none",
             workspaceMode === "matching"
               ? "bg-[#1A2128] text-white shadow-sm"
               : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white"
@@ -113,7 +113,7 @@ export function ManagerHeader({
           type="button"
           onClick={() => onModeChange("catalog")}
           className={cn(
-            "group relative flex items-center gap-2 rounded-[6px] px-3.5 py-1.5 text-xs font-medium select-none cursor-pointer transition-colors duration-150 outline-none",
+            "group relative flex flex-1 md:flex-initial items-center justify-center gap-2 rounded-[6px] px-3 sm:px-3.5 py-1.5 text-xs font-medium whitespace-nowrap select-none cursor-pointer transition-colors duration-150 outline-none",
             workspaceMode === "catalog"
               ? "bg-[#1A2128] text-white shadow-sm"
               : "bg-transparent text-[#8E95A0] hover:bg-[#1A2128]/70 hover:text-white"
@@ -143,25 +143,25 @@ export function ManagerHeader({
         </button>
       </nav>
 
-      <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
+      <div className="order-2 md:order-3 flex items-center gap-2 sm:gap-2.5 ml-auto md:ml-0">
         {/* Кнопка дедлайнов Early Bird */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDeadlinesOpen((prev) => !prev)}
-            className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#11161B] px-3 py-1.5 text-xs font-medium text-[#D1D5DB] transition-all hover:border-[#3E4957] hover:bg-[#161C22] tabular-nums shadow-sm"
+            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-[8px] border border-[#262D35] bg-[#11161B] px-2.5 sm:px-3 py-1.5 text-xs font-medium text-[#D1D5DB] transition-all hover:border-[#3E4957] hover:bg-[#161C22] tabular-nums shadow-sm whitespace-nowrap"
           >
             <img
               src={fireImage}
               alt="Огонь"
               className="h-4 w-auto object-contain shrink-0"
             />
-            <span className="hidden sm:inline">Дедлайны Early Bird:</span>
-            <span className="sm:hidden">Дедлайны:</span>
+            <span className="hidden lg:inline">Дедлайны Early Bird:</span>
+            <span className="lg:hidden">Дедлайны:</span>
             <span className="font-bold text-[#E5C378]">
               {burningDeadlines.length}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-[#7E8794]" strokeWidth={1.75} />
+            <ChevronDown className="h-3.5 w-3.5 text-[#8E95A0]" strokeWidth={1.75} />
           </button>
 
           {/* Выпадающий список дедлайнов с плавной анимацией */}
@@ -172,18 +172,18 @@ export function ManagerHeader({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="absolute right-0 mt-2 w-[340px] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none"
+                className="absolute -right-11 sm:right-0 mt-2 w-[min(calc(100vw-1.5rem),340px)] sm:w-[440px] rounded-[12px] border border-[#262B33] bg-[#0E1116] p-4 sm:p-5 shadow-2xl shadow-black/80 z-50 text-white select-none"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-[11px] font-serif italic font-semibold text-[#8E95A0]">
                       Контроль условий Early Bird
                     </h3>
-                    <p className="mt-1 text-xs text-[#727985]">
+                    <p className="mt-1 text-xs text-[#8E95A0]">
                       Ближайшие даты истечения льготных тарифов организаторов
                     </p>
                   </div>
-                  <Badge variant="ebAmber" className="text-[11px]">
+                  <Badge variant="ebAmber" asSlanted={false} className="text-[11px] shrink-0">
                     {burningDeadlines.length} активных
                   </Badge>
                 </div>
@@ -215,9 +215,9 @@ export function ManagerHeader({
                                 {item.event_title}
                               </p>
                             </div>
-                            <Badge variant="ebEmerald" className="shrink-0 py-1 px-3">
+                            <Badge variant="ebEmerald" asSlanted={false} className="shrink-0 py-1 px-3">
                               <span className="flex flex-col items-center leading-tight">
-                                <span className="text-[9px] uppercase tracking-wider opacity-90 font-semibold">
+                                <span className="text-[11px] uppercase tracking-wider opacity-90 font-semibold">
                                   Выгода
                                 </span>
                                 <span className="whitespace-nowrap font-bold text-xs">

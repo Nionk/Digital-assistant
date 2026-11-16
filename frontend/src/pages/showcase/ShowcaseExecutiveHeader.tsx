@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Layers, Check, Mail, Copy } from "lucide-react";
+import { Layers, Check, Mail, Copy, ArrowDown } from "lucide-react";
 import type { ShowcaseViewOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -92,7 +92,7 @@ export function ShowcaseExecutiveHeader({
         <div className="flex items-center">
           <img
             src={logoImage}
-            alt="Логотип платформы"
+            alt="EXEDRA"
             className="h-8 sm:h-[34px] w-auto object-contain shrink-0"
           />
         </div>
@@ -107,7 +107,7 @@ export function ShowcaseExecutiveHeader({
             />
           </div>
           <div className="text-left leading-tight">
-            <span className="block font-serif italic text-[10px] text-[#8E95A0]">
+            <span className="block font-serif italic text-[11px] text-[#8E95A0]">
               С вами работает персональный куратор
             </span>
             <span className="mt-0.5 block text-xs font-semibold text-white">
@@ -143,7 +143,7 @@ export function ShowcaseExecutiveHeader({
       </div>
 
       {/* Основной двухколоночный блок: План участия и Сводный бюджет */}
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-stretch">
           {/* Левая колонка (7 из 12): План участия и обращение куратора */}
           <div className="flex flex-col justify-between rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 lg:col-span-7 shadow-sm">
@@ -167,57 +167,57 @@ export function ShowcaseExecutiveHeader({
           </div>
 
           {/* Правая колонка (5 из 12): Сводный бюджет участия (в стиле панели менеджера) */}
-          <div className="flex flex-col justify-between rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 text-white shadow-sm sm:p-6 lg:col-span-5">
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] pb-3">
-                <div>
-                  <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
-                    Сводный бюджет участия
-                  </span>
-                  <h3 className="mt-0.5 font-serif text-base font-semibold text-white">
-                    {showcase.company_name}
-                  </h3>
-                </div>
-
-                {/* Интуитивные счетчики площадок (как в кабинете менеджера) */}
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 select-none">
-                    <Layers
-                      className="h-3.5 w-3.5 text-[#E5C378] shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span className="font-serif italic text-[11px] leading-none text-[#8E95A0]">
-                      Площадок:
-                    </span>
-                    <span className="inline-flex min-w-[22px] h-[18px] items-center justify-center rounded-[4px] bg-[#1E252E] px-1.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
-                      {showcase.total_events_count}
-                    </span>
-                  </div>
-
-                  {approvedCount > 0 && (
-                    <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#1E5241] bg-[#0E241E] px-2.5 py-1 select-none">
-                      <Check
-                        className="h-3 w-3 text-[#34D399] shrink-0"
-                        strokeWidth={2.25}
-                      />
-                      <span className="font-serif italic text-[11px] leading-none text-[#A7F3D0]">
-                        В плане:
-                      </span>
-                      <span className="inline-flex min-w-[22px] h-[18px] items-center justify-center rounded-[4px] bg-[#14352B] px-1.5 font-sans font-bold text-xs text-[#34D399] tabular-nums leading-none">
-                        {approvedCount}
-                      </span>
-                    </div>
-                  )}
-                </div>
+          <div className="flex flex-col gap-3.5 rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 text-white shadow-sm sm:p-6 lg:col-span-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] pb-3">
+              <div>
+                <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
+                  Сводный бюджет участия
+                </span>
+                <h2 className="mt-0.5 font-serif text-base font-semibold text-white">
+                  {showcase.company_name}
+                </h2>
               </div>
 
-              {/* Сумма организационных взносов */}
-              <div className="mt-4">
+              {/* Интуитивные счетчики площадок (как в кабинете менеджера) */}
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 select-none">
+                  <Layers
+                    className="h-3.5 w-3.5 text-[#E5C378] shrink-0"
+                    strokeWidth={1.5}
+                  />
+                  <span className="font-serif italic text-[11px] leading-none text-[#8E95A0]">
+                    Площадок:
+                  </span>
+                  <span className="inline-flex min-w-[22px] h-[18px] items-center justify-center rounded-[4px] bg-[#1E252E] px-1.5 font-sans font-bold text-xs text-white tabular-nums leading-none">
+                    {showcase.total_events_count}
+                  </span>
+                </div>
+
+                {approvedCount > 0 && (
+                  <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#1E5241] bg-[#0E241E] px-2.5 py-1 select-none">
+                    <Check
+                      className="h-3 w-3 text-[#34D399] shrink-0"
+                      strokeWidth={2.25}
+                    />
+                    <span className="font-serif italic text-[11px] leading-none text-[#A7F3D0]">
+                      В плане:
+                    </span>
+                    <span className="inline-flex min-w-[22px] h-[18px] items-center justify-center rounded-[4px] bg-[#14352B] px-1.5 font-sans font-bold text-xs text-[#34D399] tabular-nums leading-none">
+                      {approvedCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Сумма организационных взносов и выгода */}
+            <div className="flex-1 flex flex-col justify-center gap-3">
+              <div>
                 <div className="flex items-baseline justify-between text-xs text-[#8E95A0]">
                   <span>Организационные взносы площадок:</span>
                   {showcase.total_savings > 0 &&
                     totalBasePrice > showcase.total_actual_price && (
-                      <span className="text-[#727985] line-through tabular-nums">
+                      <span className="text-[#8E95A0] line-through tabular-nums">
                         {formatRub(totalBasePrice)}
                       </span>
                     )}
@@ -238,7 +238,7 @@ export function ShowcaseExecutiveHeader({
                   )}
 
                   {onRequestCount > 0 && (
-                    <Badge variant="ebAmber" className="text-[10px]">
+                    <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                       + {onRequestCount}{" "}
                       {pluralizeRu(onRequestCount, [
                         "спецпроект",
@@ -281,12 +281,12 @@ export function ShowcaseExecutiveHeader({
 
               {/* Выгода по спецтарифам Early Bird */}
               {showcase.total_savings > 0 && (
-                <div className="mt-3.5 rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-3">
+                <div className="rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-3">
                   <div className="flex items-center justify-between gap-2 tabular-nums">
                     <span className="font-serif italic text-xs font-semibold text-[#D1D5DB]">
                       Выгода по спецтарифам:
                     </span>
-                    <Badge variant="ebEmerald">
+                    <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                       −{formatRub(showcase.total_savings)}
                     </Badge>
                   </div>
@@ -302,10 +302,28 @@ export function ShowcaseExecutiveHeader({
               )}
             </div>
 
-            {/* Лаконичная сноска для клиента */}
-            <p className="mt-4 border-t border-[#21262F] pt-3 text-[11px] leading-relaxed text-[#727985]">
-              Расчет включает официальные взносы организаторов. Опции подготовки спикера и стенда выбираются индивидуально на карточках.
-            </p>
+            {/* Нижняя сноска и быстрый переход к выбору площадок */}
+            <div className="border-t border-[#21262F] pt-3 flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
+              <p className="text-[11px] leading-relaxed text-[#8E95A0]">
+                Расчет включает официальные взносы организаторов. Опции подготовки спикера и стенда выбираются индивидуально на карточках.
+              </p>
+
+              {showcase.items.length > 0 && (
+                <a
+                  href="#showcase-events"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document
+                      .getElementById("showcase-events")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[7px] border border-[#7C5A20]/70 bg-[#1E190E] px-3 py-1.5 text-xs font-semibold text-[#E5C378] transition-colors hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white whitespace-nowrap tabular-nums"
+                >
+                  <span>К мероприятиям ({showcase.items.length})</span>
+                  <ArrowDown className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -55,7 +55,7 @@ export function EventSelectorDropdown({
         )}
       >
         <div className="min-w-0 flex-1">
-          <span className="block text-[10px] text-[#8E95A0]">Мероприятие:</span>
+          <span className="block text-[11px] text-[#8E95A0]">Мероприятие:</span>
           <span className="mt-0.5 block truncate font-medium text-white">
             {activeEvent.canonical_title}{" "}
             <span className="text-[#8E95A0]">
@@ -100,7 +100,7 @@ export function EventSelectorDropdown({
                 >
                   <div className="min-w-0 flex-1">
                     <span className="block truncate">{ev.canonical_title}</span>
-                    <span className="mt-0.5 block text-[10px] text-[#8E95A0]">
+                    <span className="mt-0.5 block text-[11px] text-[#8E95A0]">
                       {ev.is_online ? "Онлайн" : ev.city} ·{" "}
                       {formatDateRange(ev.start_date, ev.end_date)}
                     </span>

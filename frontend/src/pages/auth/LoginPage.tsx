@@ -98,17 +98,17 @@ export function LoginPage() {
           <div className="flex items-center gap-3">
             <img
               src={logoImage}
-              alt="Сколково Арт"
+              alt="EXEDRA"
               className="h-8 w-auto object-contain"
             />
             <div className="h-5 w-[1px] bg-[#262D35]" />
             <div>
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8E95A0]">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[#94A3B8]">
                 Менеджерский терминал
               </span>
-              <span className="font-serif italic text-[18px] leading-tight text-[#E5C378]">
+              <h1 className="font-serif italic text-[18px] leading-tight text-[#E5C378]">
                 Вход в рабочую среду
-              </span>
+              </h1>
             </div>
           </div>
         </div>
@@ -132,16 +132,17 @@ export function LoginPage() {
               Email куратора
             </label>
             <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8E95A0]" />
               <input
                 id="login-email"
+                name="email"
                 type="email"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@skolkovo-art.ru"
+                placeholder="name@exedra.ru"
                 disabled={loginMutation.isPending}
-                className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#12161A] pl-9 pr-3.5 text-sm text-[#F1F5F9] placeholder:text-[#64748B] transition-colors focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] focus:outline-none disabled:opacity-60"
+                className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#12161A] pl-9 pr-3.5 text-sm text-[#F1F5F9] placeholder:text-[#8E95A0] transition-colors focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] focus:outline-none disabled:opacity-60"
               />
             </div>
           </div>
@@ -154,21 +155,22 @@ export function LoginPage() {
               Пароль
             </label>
             <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8E95A0]" />
               <input
                 id="login-password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Введите пароль"
                 disabled={loginMutation.isPending}
-                className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#12161A] pl-9 pr-10 text-sm text-[#F1F5F9] placeholder:text-[#64748B] transition-colors focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] focus:outline-none disabled:opacity-60"
+                className="h-10 w-full rounded-[8px] border border-[#38414F] bg-[#12161A] pl-9 pr-10 text-sm text-[#F1F5F9] placeholder:text-[#8E95A0] transition-colors focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] focus:outline-none disabled:opacity-60"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-[#64748B] transition-colors hover:text-[#CBD5E1]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-[#94A3B8] transition-colors hover:text-[#CBD5E1]"
                 aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
               >
                 {showPassword ? (
@@ -201,7 +203,7 @@ export function LoginPage() {
         </form>
       </motion.div>
 
-      <p className="mt-5 text-center text-xs text-[#64748B]">
+      <p className="mt-5 text-center text-xs text-[#94A3B8]">
         Клиентские витрины открываются по персональной ссылке без авторизации.
       </p>
     </div>

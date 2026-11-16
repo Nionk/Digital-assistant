@@ -114,7 +114,7 @@ export function FinancialAndPitchPanel({
               Организационные взносы площадок:
             </span>
             {summary.totalSavings > 0 && (
-              <span className="text-xs text-[#727985] line-through tabular-nums">
+              <span className="text-xs text-[#8E95A0] line-through tabular-nums">
                 {formatRub(summary.totalBasePrice)}
               </span>
             )}
@@ -139,7 +139,7 @@ export function FinancialAndPitchPanel({
               <span className="font-serif italic text-xs font-semibold text-[#D1D5DB]">
                 Выгода по спецтарифам:
               </span>
-              <Badge variant="ebEmerald">
+              <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                 −{formatRub(summary.totalSavings)}{" "}
                 {savingsPct > 0 ? `(${savingsPct}%)` : ""}
               </Badge>
@@ -188,7 +188,7 @@ export function FinancialAndPitchPanel({
         )}
 
         {/* Пояснение по Слайду 10 */}
-        <p className="mt-3 text-[11px] leading-relaxed text-[#727985]">
+        <p className="mt-3 text-[11px] leading-relaxed text-[#8E95A0]">
           Сопровождение агентства (подготовка спикера, целевые встречи, интерактив на стенде) рассчитывается отдельно под выбранные клиентом задачи на витрине.
         </p>
       </div>
@@ -196,10 +196,10 @@ export function FinancialAndPitchPanel({
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[#21262F]">
           <div className="flex items-baseline gap-2.5 min-w-0">
-            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
+            <span className="font-serif italic font-bold text-lg text-[#E5C378] select-none leading-none">
               03
             </span>
-            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378] leading-snug">
+            <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378] leading-snug">
               Персональное обращение к клиенту
             </h2>
           </div>
@@ -217,11 +217,14 @@ export function FinancialAndPitchPanel({
 
         <textarea
           ref={textareaRef}
+          id="client-pitch-text"
+          name="client_pitch_text"
+          aria-label="Персональное обращение к клиенту"
           value={pitchText}
           onChange={(e) => onPitchChange(e.target.value)}
           placeholder="Напишите сопроводительное письмо или нажмите кнопку синхронизации цифр..."
           style={{ minHeight: "130px", maxHeight: "400px" }}
-          className="mt-2.5 w-full resize-y rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-[border-color,box-shadow] duration-150 overflow-y-auto scrollbar-thin"
+          className="mt-2.5 w-full resize-y rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-[border-color,box-shadow] duration-150 overflow-y-auto scrollbar-thin"
         />
 
         <div className="mt-3 space-y-2">
@@ -252,7 +255,7 @@ export function FinancialAndPitchPanel({
                     Персональная витрина активна
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-[#8E95A0] truncate max-w-[130px]">
+                <span className="text-[11px] font-mono text-[#8E95A0] truncate max-w-[130px]">
                   {publishedUrl}
                 </span>
               </div>

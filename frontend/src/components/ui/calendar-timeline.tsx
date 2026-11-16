@@ -92,7 +92,7 @@ export function CalendarTimeline({
                 <span className="text-[11px] font-bold leading-none">
                   {cal.dayText}
                 </span>
-                <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/80 leading-none">
+                <span className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-white/85 leading-none">
                   {cal.monthText}
                 </span>
               </div>

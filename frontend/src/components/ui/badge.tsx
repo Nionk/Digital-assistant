@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * плотный книжный фон и тонкая деликатная окантовка без шаблонного нейросетевого дефолта.
  */
 const badgeVariants = cva(
-  "inline-flex items-center justify-center text-[10px] sm:text-[11px] font-serif italic font-bold tracking-normal transition-colors select-none tabular-nums",
+  "inline-flex items-center justify-center text-[11px] font-serif italic font-bold tracking-normal transition-colors select-none tabular-nums",
   {
     variants: {
       variant: {

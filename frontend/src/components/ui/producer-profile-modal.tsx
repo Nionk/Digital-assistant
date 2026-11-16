@@ -103,13 +103,13 @@ export function ProducerProfileModal({
                       <span className="block font-serif text-sm font-semibold text-white truncate">
                         {profile.displayName}
                       </span>
-                      <span className="mt-0.5 inline-block rounded-[2px] border border-[#7C5A20]/50 bg-[#161B21] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
+                      <span className="mt-0.5 inline-block rounded-[2px] border border-[#7C5A20]/50 bg-[#161B21] px-1.5 py-0.5 text-[11px] font-serif italic text-[#E5C378]">
                         {profile.roleLabel}
                       </span>
                     </div>
                   </div>
 
-                  <span className="shrink-0 inline-flex items-center gap-1 rounded-[3px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[10px] font-serif italic text-[#E5C378]">
+                  <span className="shrink-0 inline-flex items-center gap-1 rounded-[3px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[11px] font-serif italic text-[#E5C378]">
                     ✦ Активен
                   </span>
                 </div>

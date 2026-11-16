@@ -21,7 +21,7 @@ export function CatalogWarningsBadge({
     <span
       title={tooltip}
       className={cn(
-        "inline-flex items-center gap-1 rounded-[4px] border border-[#7C4A19]/70 bg-[#22160C]/80 px-1.5 py-0.5 text-[10px] font-medium text-[#E59837] cursor-help",
+        "inline-flex items-center gap-1 rounded-[4px] border border-[#7C4A19]/70 bg-[#22160C]/80 px-1.5 py-0.5 text-[11px] font-medium text-[#E59837] cursor-help",
         className
       )}
     >

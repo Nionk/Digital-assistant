@@ -16,6 +16,7 @@ import type {
 } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { DateInput } from "@/components/ui/date-input";
 import {
   SearchableMultiSelectPopover,
   type MultiSelectOption,
@@ -216,7 +217,7 @@ export function ExtractedProfilePanel({
               "ebGold"
             }
             asSlanted={false}
-            className="text-[10px]"
+            className="text-[11px]"
           >
             {PROFILE_SOURCE_LABELS[editableProfile.profile_source]?.label ??
               editableProfile.profile_source}
@@ -225,7 +226,7 @@ export function ExtractedProfilePanel({
             <Badge
               variant="ebAmber"
               asSlanted={false}
-              className="text-[10px]"
+              className="text-[11px]"
               title="В конспекте не был явно указан бюджет — применен ориентир по умолчанию"
             >
               Ориентир бюджета подобран системой
@@ -248,14 +249,19 @@ export function ExtractedProfilePanel({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-[#262D35] md:grid-cols-5 md:divide-x md:divide-y-0">
+      <div className="grid grid-cols-1 gap-px bg-[#262D35] sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {/* Ячейка 1: Бюджет и кол-во событий */}
         <div className="p-3 bg-[#161B22]">
-          <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+          <label
+            htmlFor="profile-budget-max"
+            className="block font-serif italic uppercase text-[11px] font-semibold tracking-wider text-[#8E95A0]"
+          >
             1. Лимит бюджета (₽)
-          </span>
+          </label>
           <div className="relative mt-1.5 flex items-center">
             <input
+              id="profile-budget-max"
+              name="total_budget_max"
               type="number"
               step={50000}
               min={1}
@@ -288,6 +294,7 @@ export function ExtractedProfilePanel({
                     budget_is_assumed: false,
                   }))
                 }
+                aria-label="Увеличить лимит бюджета на 50 000 рублей"
                 className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                 title="Увеличить на 50 000 ₽"
               >
@@ -305,6 +312,7 @@ export function ExtractedProfilePanel({
                     budget_is_assumed: false,
                   }))
                 }
+                aria-label="Уменьшить лимит бюджета на 50 000 рублей"
                 className="h-3 w-4 flex items-center justify-center text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                 title="Уменьшить на 50 000 ₽"
               >
@@ -313,7 +321,7 @@ export function ExtractedProfilePanel({
             </div>
           </div>
           {isBudgetInvalid && (
-            <p className="mt-1 flex items-center gap-1 text-[10px] text-[#FCA5A5]">
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-[#FCA5A5]">
               <AlertTriangle className="h-3 w-3 shrink-0 text-[#F87171]" />
               <span>Укажите сумму больше 0 ₽</span>
             </p>
@@ -341,12 +349,17 @@ export function ExtractedProfilePanel({
         {/* Ячейка 2: География и Онлайн */}
         <div className="p-3 bg-[#161B22] relative flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between">
-              <span className="font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-serif italic uppercase text-[11px] font-semibold tracking-wider text-[#8E95A0]">
                 2. География
               </span>
-              <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB]">
+              <label
+                htmlFor="profile-include-online"
+                className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#D1D5DB] whitespace-nowrap shrink-0"
+              >
                 <input
+                  id="profile-include-online"
+                  name="include_online"
                   type="checkbox"
                   checked={editableProfile.include_online}
                   onChange={(e) =>
@@ -362,7 +375,7 @@ export function ExtractedProfilePanel({
             </div>
 
             {/* Отображение выбранных городов в ячейке */}
-            <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
+            <div className="mt-1.5 flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin">
               {editableProfile.cities.map((city) => (
                 <span
                   key={city}
@@ -372,6 +385,7 @@ export function ExtractedProfilePanel({
                   <button
                     type="button"
                     onClick={() => handleRemoveCity(city)}
+                    aria-label={`Удалить город ${city}`}
                     className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
                     title="Удалить город"
                   >
@@ -380,7 +394,7 @@ export function ExtractedProfilePanel({
                 </span>
               ))}
               {editableProfile.cities.length === 0 && (
-                <span className="text-[11px] font-serif italic text-[#6B7280]">
+                <span className="text-[11px] font-serif italic text-[#8E95A0]">
                   Все города (без ограничений)
                 </span>
               )}
@@ -426,52 +440,50 @@ export function ExtractedProfilePanel({
 
         {/* Ячейка 3: Период планирования */}
         <div className="p-3 bg-[#161B22]">
-          <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+          <span className="block font-serif italic uppercase text-[11px] font-semibold tracking-wider text-[#8E95A0]">
             3. Период календаря
           </span>
           <div className="mt-1.5 space-y-1.5">
-            <div className="flex items-center justify-between gap-1 text-[11px]">
-              <span className="text-[#8E95A0]">С:</span>
-              <input
-                type="date"
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <label htmlFor="profile-date-from" className="text-[#8E95A0] shrink-0">
+                С:
+              </label>
+              <DateInput
+                id="profile-date-from"
+                name="date_from"
                 value={editableProfile.date_from || ""}
-                onChange={(e) =>
+                onChange={(val) =>
                   onUpdateProfile((prev) => ({
                     ...prev,
-                    date_from: e.target.value || null,
+                    date_from: val || null,
                   }))
                 }
-                aria-invalid={isDateRangeInvalid}
-                className={cn(
-                  "h-6 rounded-[4px] border bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none transition-colors duration-150",
-                  isDateRangeInvalid
-                    ? "border-[#EF4444] focus:border-[#EF4444]"
-                    : "border-[#262D35] focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
-                )}
+                ariaLabel="Дата начала периода"
+                ariaInvalid={isDateRangeInvalid}
+                inputClassName="h-6 w-[132px]"
               />
             </div>
-            <div className="flex items-center justify-between gap-1 text-[11px]">
-              <span className="text-[#8E95A0]">По:</span>
-              <input
-                type="date"
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <label htmlFor="profile-date-to" className="text-[#8E95A0] shrink-0">
+                По:
+              </label>
+              <DateInput
+                id="profile-date-to"
+                name="date_to"
                 value={editableProfile.date_to || ""}
-                onChange={(e) =>
+                onChange={(val) =>
                   onUpdateProfile((prev) => ({
                     ...prev,
-                    date_to: e.target.value || null,
+                    date_to: val || null,
                   }))
                 }
-                aria-invalid={isDateRangeInvalid}
-                className={cn(
-                  "h-6 rounded-[4px] border bg-[#12161A] px-1.5 text-[11px] text-white tabular-nums [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none transition-colors duration-150",
-                  isDateRangeInvalid
-                    ? "border-[#EF4444] focus:border-[#EF4444]"
-                    : "border-[#262D35] focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]"
-                )}
+                ariaLabel="Дата окончания периода"
+                ariaInvalid={isDateRangeInvalid}
+                inputClassName="h-6 w-[132px]"
               />
             </div>
             {isDateRangeInvalid && (
-              <p className="flex items-center gap-1 text-[10px] text-[#FCA5A5]">
+              <p className="flex items-center gap-1 text-[11px] text-[#FCA5A5]">
                 <AlertTriangle className="h-3 w-3 shrink-0 text-[#F87171]" />
                 <span>Дата «По» раньше даты «С»</span>
               </p>
@@ -482,7 +494,7 @@ export function ExtractedProfilePanel({
         {/* Ячейка 4: Роли участия, спикерство и форматы событий */}
         <div className="p-3 bg-[#161B22] flex flex-col justify-between">
           <div>
-            <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+            <span className="block font-serif italic uppercase text-[11px] font-semibold tracking-wider text-[#8E95A0]">
               4. Роли и форматы
             </span>
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -508,7 +520,7 @@ export function ExtractedProfilePanel({
               })}
             </div>
 
-            <div className="mt-2 flex items-center justify-between text-[11px] text-[#8E95A0]">
+            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-[#8E95A0]">
               <span>Мин. докладов спикером:</span>
               <CustomSelect
                 value={editableProfile.min_speaker_events}
@@ -535,16 +547,17 @@ export function ExtractedProfilePanel({
 
           <div className="mt-2 border-t border-[#21262F] pt-2">
             {editableProfile.preferred_formats.length > 0 && (
-              <div className="mb-1.5 flex flex-wrap gap-1 max-h-14 overflow-y-auto scrollbar-thin">
+              <div className="mb-1.5 flex flex-wrap gap-1">
                 {editableProfile.preferred_formats.map((fmt) => (
                   <span
                     key={fmt}
-                    className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-white"
+                    className="inline-flex items-center gap-1 rounded-[4px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-white"
                   >
                     <span>{FORMAT_LABELS[fmt] || fmt}</span>
                     <button
                       type="button"
                       onClick={() => handleRemovePreferredFormat(fmt)}
+                      aria-label={`Убрать формат ${FORMAT_LABELS[fmt] || fmt}`}
                       className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
                       title="Убрать формат"
                     >
@@ -592,20 +605,20 @@ export function ExtractedProfilePanel({
         </div>
 
         {/* Ячейка 5: Отраслевые темы и ЦА */}
-        <div className="p-3 bg-[#161B22] relative flex flex-col justify-between">
+        <div className="p-3 bg-[#161B22] relative flex flex-col justify-between sm:col-span-2 lg:col-span-2 2xl:col-span-1">
           <div>
-            <div className="flex items-center justify-between">
-              <span className="block font-serif italic uppercase text-[10px] font-semibold tracking-wider text-[#8E95A0]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="block font-serif italic uppercase text-[11px] font-semibold tracking-wider text-[#8E95A0]">
                 5. Темы, продукт и ЦА
               </span>
               {editableProfile.themes_keywords.length > 0 && (
-                <span className="font-serif italic text-[10px] text-[#E5C378]">
+                <span className="font-serif italic text-[11px] text-[#E5C378] whitespace-nowrap shrink-0">
                   {editableProfile.themes_keywords.length} выбрано
                 </span>
               )}
             </div>
 
-            <div className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
+            <div className="mt-1.5 flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin">
               {editableProfile.themes_keywords.map((tag) => (
                 <span
                   key={tag}
@@ -615,6 +628,7 @@ export function ExtractedProfilePanel({
                   <button
                     type="button"
                     onClick={() => handleRemoveTheme(tag)}
+                    aria-label={`Удалить тему ${tag}`}
                     className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
                     title="Удалить тему"
                   >
@@ -623,7 +637,7 @@ export function ExtractedProfilePanel({
                 </span>
               ))}
               {editableProfile.themes_keywords.length === 0 && (
-                <span className="text-[11px] font-serif italic text-[#6B7280]">
+                <span className="text-[11px] font-serif italic text-[#8E95A0]">
                   Темы не выбраны
                 </span>
               )}
@@ -667,7 +681,7 @@ export function ExtractedProfilePanel({
       </div>
 
       <div className="border-t border-[#21262F] bg-[#12161A] px-4 py-2 flex items-center justify-end text-[11px] text-[#8E95A0] rounded-b-[12px]">
-        <span className="font-serif italic uppercase tracking-wider text-[10px] text-[#8E95A0] mr-2">
+        <span className="font-serif italic uppercase tracking-wider text-[11px] text-[#8E95A0] mr-2">
           Ориентир бюджета:
         </span>
         <span className="tabular-nums font-semibold text-[#E5C378]">

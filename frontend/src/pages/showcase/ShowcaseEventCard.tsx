@@ -235,7 +235,7 @@ export function ShowcaseEventCard({
               <span className="text-xs font-bold leading-none">
                 {cal.dayText}
               </span>
-              <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#E5C378]">
+              <span className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-[#E5C378]">
                 {cal.monthText}
               </span>
             </div>
@@ -272,12 +272,12 @@ export function ShowcaseEventCard({
             </button>
 
             {isInterested && (
-              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#1E5241] bg-[#0E241E]/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#34D399] shadow-md backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#1E5241] bg-[#0E241E]/95 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#34D399] shadow-md backdrop-blur-md">
                 <Check className="h-3 w-3" strokeWidth={2.5} />В ПЛАНЕ УЧАСТИЯ
               </span>
             )}
             {isRejected && (
-              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#5E2242] bg-[#28131E]/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#F472B6] shadow-md backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#5E2242] bg-[#28131E]/95 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#F472B6] shadow-md backdrop-blur-md">
                 ЗАПРОШЕНА ЗАМЕНА
               </span>
             )}
@@ -362,7 +362,7 @@ export function ShowcaseEventCard({
               <div className="shrink-0 text-right">
                 <div className="flex items-baseline justify-end gap-1.5">
                   {item.savings > 0 && item.base_price && (
-                    <span className="text-xs text-[#727985] line-through">
+                    <span className="text-xs text-[#8E95A0] line-through">
                       {formatRub(item.base_price)}
                     </span>
                   )}
@@ -372,14 +372,14 @@ export function ShowcaseEventCard({
                 </div>
 
                 {item.savings > 0 ? (
-                  <span className="mt-0.5 inline-block shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-2 py-0.5 text-[10px] font-bold text-[#34D399] tabular-nums">
+                  <span className="mt-0.5 inline-block shrink-0 rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-2 py-0.5 text-[11px] font-bold text-[#34D399] tabular-nums">
                     ВЫГОДА {formatRub(item.savings)}
                     {item.early_bird_deadline
                       ? ` до ${formatDateShort(item.early_bird_deadline).slice(0, 5)}`
                       : ""}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-[#727985]">
+                  <span className="text-[11px] text-[#8E95A0]">
                     Фиксированный взнос
                   </span>
                 )}
@@ -524,7 +524,7 @@ export function ShowcaseEventCard({
             {cleanClientComment && (
               <span
                 className={cn(
-                  "max-w-[155px] truncate rounded-[4px] border px-2 py-0.5 text-[10px]",
+                  "max-w-[155px] truncate rounded-[4px] border px-2 py-0.5 text-[11px]",
                   isInterested
                     ? "border-[#1E5241] bg-[#0E241E] text-[#A7F3D0]"
                     : "border-[#262D35] bg-[#161B22] text-[#8E95A0]"

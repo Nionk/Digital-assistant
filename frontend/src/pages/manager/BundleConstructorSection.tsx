@@ -85,10 +85,10 @@ export function BundleConstructorSection({
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#21262F]">
           <div className="flex items-baseline gap-2.5 min-w-0">
-            <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
+            <span className="font-serif italic font-bold text-lg text-[#E5C378] select-none leading-none">
               02
             </span>
-            <h2 className="font-serif italic text-sm sm:text-[15px] font-semibold tracking-tight text-[#E5C378] leading-snug">
+            <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378] leading-snug">
               Сравнение вариантов и выбор тарифов
             </h2>
           </div>
@@ -123,7 +123,7 @@ export function BundleConstructorSection({
                   </span>
                   <span
                     className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-[3px] border text-[10px]",
+                      "flex h-4 w-4 items-center justify-center rounded-[3px] border text-[11px]",
                       isActive
                         ? "border-[#E5C378] bg-[#E5C378] text-[#1A1405]"
                         : "border-[#262D35] bg-[#12161A]"
@@ -142,7 +142,7 @@ export function BundleConstructorSection({
                       {formatRub(v.total_actual_price)}
                     </span>
                     {v.total_savings > 0 && (
-                      <Badge variant="ebEmerald" className="text-[9px]">
+                      <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                         Выгода {formatRub(v.total_savings)}
                       </Badge>
                     )}
@@ -294,10 +294,10 @@ function EventBuilderRow({
             )}
           >
             <span className="text-sm font-bold leading-none">{cal.dayText}</span>
-            <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider opacity-85 leading-none">
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider opacity-85 leading-none">
               {cal.monthText}
             </span>
-            <span className="mt-1 text-[9px] opacity-70 leading-none">{cal.durationText}</span>
+            <span className="mt-1 text-[11px] opacity-75 leading-none">{cal.durationText}</span>
           </div>
 
           {/* Основная информация о площадке */}
@@ -324,14 +324,15 @@ function EventBuilderRow({
                 </>
               )}
               {isBonusSlot && (
-                <Badge variant="ebGold" className="ml-1 text-[9px]">
+                <Badge variant="ebGold" className="ml-1 text-[11px]">
                   Спецпроект
                 </Badge>
               )}
               {item.data_status === "needs_enrichment" && (
                 <Badge
                   variant="ebAmber"
-                  className="ml-1 text-[9px]"
+                  asSlanted={false}
+                  className="ml-1 text-[11px]"
                   title={
                     humanizedWarnings.join(" • ") ||
                     "Карточка требует обогащения данных"
@@ -413,7 +414,7 @@ function EventBuilderRow({
             {/* Блок «Аргументы выбора и целевая аудитория» (Слайд 04) с редактированием по клику */}
             <div className="mt-2 rounded-[6px] border-l-2 border-[#E5C378] bg-[#161B21] pl-2.5 pr-2 py-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                   Аргументы выбора площадки и ЦА
                 </span>
                 <button
@@ -428,6 +429,9 @@ function EventBuilderRow({
 
               {isEditingRationale ? (
                 <textarea
+                  id={`bundle-rationale-${item.event_id}`}
+                  name={`rationale_${item.event_id}`}
+                  aria-label={`Аргументы выбора площадки ${item.canonical_title}`}
                   rows={2}
                   value={rationale}
                   onChange={(e) => onUpdateRationale(e.target.value)}
@@ -482,7 +486,7 @@ function EventBuilderRow({
                 {formatRub(selectedTariff.actual_price)}
               </span>
               {selectedTariff.savings > 0 && selectedTariff.base_price && (
-                <span className="text-xs text-[#727985] line-through">
+                <span className="text-xs text-[#8E95A0] line-through">
                   {formatRub(selectedTariff.base_price)}
                 </span>
               )}
@@ -490,7 +494,7 @@ function EventBuilderRow({
 
             {selectedTariff.savings > 0 ? (
               <div className="flex items-center">
-                <Badge variant="ebEmerald">
+                <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                   Выгода {formatRub(selectedTariff.savings)}
                   {selectedTariff.early_bird_deadline
                     ? ` до ${formatDateShort(selectedTariff.early_bird_deadline).slice(0, 5)}`
@@ -498,7 +502,7 @@ function EventBuilderRow({
                 </Badge>
               </div>
             ) : (
-              <span className="text-[11px] text-[#727985]">Базовый тариф</span>
+              <span className="text-[11px] text-[#8E95A0]">Базовый тариф</span>
             )}
           </div>
 

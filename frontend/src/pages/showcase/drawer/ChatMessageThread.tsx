@@ -112,12 +112,12 @@ export function ChatMessageThread({
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {hasManagerReply && (
-                        <Badge variant="ebEmerald" className="text-[9px]">
+                        <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                           Ответ куратора
                         </Badge>
                       )}
                       {ex.createdAtLabel && (
-                        <span className="text-[10px] text-[#727985] tabular-nums">
+                        <span className="text-[11px] text-[#8E95A0] tabular-nums">
                           {ex.createdAtLabel}
                         </span>
                       )}
@@ -173,7 +173,7 @@ export function ChatMessageThread({
                               <span>Куратор: {cleanManagerName}</span>
                             </span>
                             {reply.createdAtLabel && (
-                              <span className="text-[10px] text-[#A7F3D0]/80 tabular-nums">
+                              <span className="text-[11px] text-[#A7F3D0]/85 tabular-nums">
                                 {reply.createdAtLabel}
                               </span>
                             )}
@@ -260,7 +260,7 @@ export function ChatMessageThread({
                     <span>Комментарий куратора ({cleanManagerName})</span>
                   </span>
                   {reply.createdAtLabel && (
-                    <span className="text-[10px] text-[#A7F3D0]/80 tabular-nums">
+                    <span className="text-[11px] text-[#A7F3D0]/85 tabular-nums">
                       {reply.createdAtLabel}
                     </span>
                   )}

@@ -239,16 +239,20 @@ export function SearchableMultiSelectPopover({
                 <Search className="absolute left-2.5 h-3.5 w-3.5 text-[#8E95A0]" />
                 <input
                   ref={searchInputRef}
+                  id={`multi-select-search-${label}`}
+                  name={`multi_select_search_${label}`}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={placeholder}
-                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#0E1215] pl-8 pr-7 text-xs text-white placeholder:text-[#6B7280] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
+                  aria-label={placeholder}
+                  className="h-7 w-full rounded-[4px] border border-[#262D35] bg-[#0E1215] pl-8 pr-7 text-xs text-white placeholder:text-[#8E95A0] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
+                    aria-label="Очистить поиск"
                     className="absolute right-2 text-[#8E95A0] hover:text-white"
                   >
                     <X className="h-3 w-3" />
@@ -260,13 +264,13 @@ export function SearchableMultiSelectPopover({
             {selectedValues.length > 0 && (
               <div className="px-2.5 py-1.5 border-b border-[#21262F] bg-[#161510]/80">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-serif italic text-[10px] text-[#8E95A0]">
+                  <span className="font-serif italic text-[11px] text-[#8E95A0]">
                     Выбрано ({selectedValues.length}):
                   </span>
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="text-[10px] text-[#8E95A0] hover:text-[#EF4444] transition-colors"
+                    className="text-[11px] text-[#8E95A0] hover:text-[#EF4444] transition-colors"
                   >
                     Сбросить все
                   </button>
@@ -278,12 +282,13 @@ export function SearchableMultiSelectPopover({
                     return (
                       <span
                         key={val}
-                        className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/50 bg-[#1E190E] px-1.5 py-0.5 text-[10px] font-medium text-[#E5C378]"
+                        className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/50 bg-[#1E190E] px-1.5 py-0.5 text-[11px] font-medium text-[#E5C378]"
                       >
                         <span className="truncate max-w-[140px]">{title}</span>
                         <button
                           type="button"
                           onClick={() => removeValue(val)}
+                          aria-label={`Удалить ${title}`}
                           className="text-[#8E95A0] hover:text-[#EF4444] transition-colors"
                         >
                           <X className="h-2.5 w-2.5" />
@@ -312,7 +317,7 @@ export function SearchableMultiSelectPopover({
 
             <div className="max-h-56 overflow-y-auto p-1 scrollbar-thin space-y-0.5">
               {filteredOptions.length === 0 && !canCreateNew ? (
-                <div className="py-4 text-center text-xs text-[#6B7280]">
+                <div className="py-4 text-center text-xs text-[#8E95A0]">
                   {emptyMessage}
                 </div>
               ) : (
@@ -347,8 +352,8 @@ export function SearchableMultiSelectPopover({
                       {opt.count !== undefined && (
                         <span
                           className={cn(
-                            "shrink-0 font-serif italic text-[10px] tabular-nums",
-                            isSelected ? "text-[#E5C378]/80" : "text-[#8E95A0]"
+                            "shrink-0 font-serif italic text-[11px] tabular-nums",
+                            isSelected ? "text-[#E5C378]/85" : "text-[#8E95A0]"
                           )}
                         >
                           {opt.count}
@@ -360,8 +365,8 @@ export function SearchableMultiSelectPopover({
               )}
             </div>
 
-            <div className="border-t border-[#21262F] bg-[#12161A] px-2.5 py-1.5 flex items-center justify-between text-[10px] text-[#8E95A0]">
-              <span className="font-serif italic text-[#727985]">
+            <div className="border-t border-[#21262F] bg-[#12161A] px-2.5 py-1.5 flex items-center justify-between text-[11px] text-[#8E95A0]">
+              <span className="font-serif italic text-[#8E95A0]">
                 Esc для закрытия
               </span>
               <button

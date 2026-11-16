@@ -177,11 +177,11 @@ export function EventDetailsDrawer({
                         {formatLabel}
                       </span>
                       {event.data_status === "needs_enrichment" ? (
-                        <Badge variant="ebAmber" className="text-[9px]">
+                        <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                           Требует обогащения
                         </Badge>
                       ) : event.data_status === "ready" ? (
-                        <Badge variant="ebEmerald" className="text-[9px]">
+                        <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                           Готово
                         </Badge>
                       ) : null}
@@ -203,10 +203,10 @@ export function EventDetailsDrawer({
                       <span className="text-sm font-bold leading-none text-white">
                         {cal.dayText}
                       </span>
-                      <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 leading-none">
+                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 leading-none">
                         {cal.monthText}
                       </span>
-                      <span className="mt-1 text-[9px] text-[#8E95A0] leading-none">
+                      <span className="mt-1 text-[11px] text-[#8E95A0] leading-none">
                         {cal.durationText}
                       </span>
                     </div>
@@ -302,13 +302,13 @@ export function EventDetailsDrawer({
                         {priceSummary.label}
                       </strong>
                       {priceSummary.subLabel && (
-                        <span className="text-[10px] text-[#E5C378]/85">
+                        <span className="text-[11px] text-[#E5C378]/90">
                           ({priceSummary.subLabel})
                         </span>
                       )}
                     </div>
                     {maxSavings > 0 && (
-                      <Badge variant="ebEmerald" className="text-[10px]">
+                      <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                         Выгода до {formatRub(maxSavings)}
                       </Badge>
                     )}
@@ -412,7 +412,7 @@ export function EventDetailsDrawer({
                                       ? "ebRose"
                                       : "ebBlue"
                                 }
-                                className="text-[9px] shrink-0"
+                                className="text-[11px] shrink-0"
                               >
                                 {ROLE_BADGE_LABELS[t.participation_role] ||
                                   t.participation_role}
@@ -426,21 +426,21 @@ export function EventDetailsDrawer({
                                   {formatRub(t.actual_price)}
                                 </span>
                                 {t.savings > 0 && t.base_price && (
-                                  <span className="text-xs text-[#727985] line-through">
+                                  <span className="text-xs text-[#8E95A0] line-through">
                                     {formatRub(t.base_price)}
                                   </span>
                                 )}
                               </div>
 
                               {t.savings > 0 ? (
-                                <Badge variant="ebEmerald" className="text-[10px]">
+                                <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                                   Выгода {formatRub(t.savings)}
                                   {t.early_bird_deadline
                                     ? ` до ${formatDateShort(t.early_bird_deadline)}`
                                     : ""}
                                 </Badge>
                               ) : (
-                                <span className="text-xs text-[#727985] font-serif italic">
+                                <span className="text-xs text-[#8E95A0] font-serif italic">
                                   Базовый тариф
                                 </span>
                               )}
