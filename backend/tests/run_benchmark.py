@@ -26,9 +26,13 @@ if hasattr(sys.stdout, "reconfigure"):
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("benchmark")
 
+from dataclasses import dataclass, field
+
+from sqlalchemy import delete, func, select
+
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
-from app.models.models import Event, LLMCache, SelectionItem
+from app.models.models import ChatMessage, Event, LLMCache, SelectionItem
 from app.schemas.manager import (
     ClientQueryExtracted,
     MatchRequestIn,
@@ -49,7 +53,74 @@ from app.services.rag import (
     _is_quote_grounded,
     ask_regulation_question,
 )
-from sqlalchemy import select
+
+
+@dataclass
+class TrackedChatScope:
+    """Область отслеживания тестовых ChatMessage, созданных в ходе одного шага бенчмарка."""
+
+    min_id: int
+    selection_id: int
+    event_id: int
+    questions: set[str] = field(default_factory=set)
+    answers: set[str] = field(default_factory=set)
+
+
+async def _get_max_chat_message_id(session) -> int:
+    max_id = await session.scalar(select(func.coalesce(func.max(ChatMessage.id), 0)))
+    return int(max_id or 0)
+
+
+async def _cleanup_benchmark_chat_messages(scopes: list[TrackedChatScope]) -> int:
+    """
+    Безопасно удаляет ТОЛЬКО ChatMessage, созданные текущим прогоном бенчмарка
+    (в рамках зафиксированных min_id, selection_id, event_id и тестовых вопросов).
+    """
+    if not scopes:
+        return 0
+
+    ids_to_delete: set[int] = set()
+    async with async_session_maker() as cleanup_session:
+        for scope in scopes:
+            if not scope.questions:
+                continue
+            rows = (
+                await cleanup_session.execute(
+                    select(ChatMessage)
+                    .where(
+                        ChatMessage.id > scope.min_id,
+                        ChatMessage.selection_id == scope.selection_id,
+                        ChatMessage.event_id == scope.event_id,
+                    )
+                    .order_by(ChatMessage.id.asc())
+                )
+            ).scalars().all()
+
+            matched_timestamps = set()
+            matched_client_ids: set[int] = set()
+            for msg in rows:
+                if msg.sender_role == "client" and msg.message_text in scope.questions:
+                    ids_to_delete.add(msg.id)
+                    matched_client_ids.add(msg.id)
+                    if msg.created_at is not None:
+                        matched_timestamps.add(msg.created_at)
+
+            for msg in rows:
+                if msg.sender_role == "ai_assistant" and (
+                    msg.message_text in scope.answers
+                    or (msg.id - 1) in matched_client_ids
+                    or (msg.created_at is not None and msg.created_at in matched_timestamps)
+                ):
+                    ids_to_delete.add(msg.id)
+
+        if not ids_to_delete:
+            return 0
+
+        await cleanup_session.execute(
+            delete(ChatMessage).where(ChatMessage.id.in_(ids_to_delete))
+        )
+        await cleanup_session.commit()
+    return len(ids_to_delete)
 
 
 def calc_p50(vals: list[float]) -> float:
@@ -85,7 +156,10 @@ def calc_mean(vals: list[float]) -> float:
 # BLOCK 1: LATENCY & THROUGHPUT
 # ============================================================================
 
-async def benchmark_block_1(session) -> dict[str, Any]:
+async def benchmark_block_1(
+    session,
+    chat_tracker: list[TrackedChatScope] | None = None,
+) -> dict[str, Any]:
     print("\n=======================================================")
     print("▶ БЛОК 1. ТЕСТЫ СКОРОСТИ И ВРЕМЕНИ ОТКЛИКА (LATENCY & THROUGHPUT)")
     print("=======================================================")
@@ -235,6 +309,15 @@ async def benchmark_block_1(session) -> dict[str, Any]:
 
     # Cold question (fresh timestamp to avoid cache collision)
     cold_q = f"Каковы ключевые цели и основные направления конференции? (ts_{int(time.time())})"
+    cold_scope = TrackedChatScope(
+        min_id=await _get_max_chat_message_id(session),
+        selection_id=test_sel_id,
+        event_id=test_ev_id,
+        questions={cold_q},
+    )
+    if chat_tracker is not None:
+        chat_tracker.append(cold_scope)
+
     t0 = time.perf_counter()
     cold_resp = await ask_regulation_question(
         session=session,
@@ -243,11 +326,22 @@ async def benchmark_block_1(session) -> dict[str, Any]:
         question_text=cold_q,
     )
     cold_time_s = time.perf_counter() - t0
+    cold_scope.answers.add(cold_resp.answer_text)
     print(f"  - Холодный запрос к LLM: {cold_time_s:.2f}с (from_cache={cold_resp.from_cache}, answer_found={cold_resp.is_answer_found})")
 
     # Hot questions from SHA-256 cache (using seeded FAQ question)
     hot_q = "Что входит в рекомендованный тариф?"
+    hot_scope = TrackedChatScope(
+        min_id=await _get_max_chat_message_id(session),
+        selection_id=test_sel_id,
+        event_id=test_ev_id,
+        questions={hot_q},
+    )
+    if chat_tracker is not None:
+        chat_tracker.append(hot_scope)
+
     hot_latencies_ms = []
+    last_hot_answer: str | None = None
     for _ in range(30):
         t0 = time.perf_counter()
         _hot_resp = await ask_regulation_question(
@@ -258,6 +352,9 @@ async def benchmark_block_1(session) -> dict[str, Any]:
         )
         dt_ms = (time.perf_counter() - t0) * 1000.0
         hot_latencies_ms.append(dt_ms)
+        last_hot_answer = _hot_resp.answer_text
+    if last_hot_answer:
+        hot_scope.answers.add(last_hot_answer)
 
     results["rag_cold_s"] = cold_time_s
     results["rag_hot_mean_ms"] = calc_mean(hot_latencies_ms)
@@ -623,7 +720,10 @@ async def benchmark_block_2(session) -> dict[str, Any]:
 # BLOCK 3: SAFETY & FAITHFULNESS
 # ============================================================================
 
-async def benchmark_block_3(session) -> dict[str, Any]:
+async def benchmark_block_3(
+    session,
+    chat_tracker: list[TrackedChatScope] | None = None,
+) -> dict[str, Any]:
     print("\n=======================================================")
     print("▶ БЛОК 3. ТЕСТЫ НАДЕЖНОСТИ RAG И ЗАЩИТЫ ОТ ГАЛЛЮЦИНАЦИЙ (SAFETY & FAITHFULNESS)")
     print("=======================================================")
@@ -710,6 +810,15 @@ async def benchmark_block_3(session) -> dict[str, Any]:
     zero_hallucinations = 0
     total_prov = len(provocative_questions)
 
+    prov_scope = TrackedChatScope(
+        min_id=await _get_max_chat_message_id(session),
+        selection_id=120,
+        event_id=event_3.id,
+        questions=set(provocative_questions),
+    )
+    if chat_tracker is not None:
+        chat_tracker.append(prov_scope)
+
     for idx, q in enumerate(provocative_questions, 1):
         t0 = time.perf_counter()
         live_prov_resp = await ask_regulation_question(
@@ -719,6 +828,7 @@ async def benchmark_block_3(session) -> dict[str, Any]:
             question_text=q,
         )
         dt_live_prov = time.perf_counter() - t0
+        prov_scope.answers.add(live_prov_resp.answer_text)
         is_safe = (live_prov_resp.is_answer_found is False and live_prov_resp.source_quote is None)
         if is_safe:
             safe_refusals += 1
@@ -793,15 +903,21 @@ async def main():
     print("🚀 ЗАПУСК КОМПЛЕКСНОГО БЕНЧМАРКА DIGITAL ASSISTANT BACKEND")
     print("==================================================================")
 
-    async with async_session_maker() as session:
-        # Run Block 1
-        b1 = await benchmark_block_1(session)
+    chat_tracker: list[TrackedChatScope] = []
+    try:
+        async with async_session_maker() as session:
+            # Run Block 1
+            b1 = await benchmark_block_1(session, chat_tracker=chat_tracker)
 
-        # Run Block 2
-        b2 = await benchmark_block_2(session)
+            # Run Block 2
+            b2 = await benchmark_block_2(session)
 
-        # Run Block 3
-        b3 = await benchmark_block_3(session)
+            # Run Block 3
+            b3 = await benchmark_block_3(session, chat_tracker=chat_tracker)
+    finally:
+        deleted_count = await _cleanup_benchmark_chat_messages(chat_tracker)
+        if deleted_count > 0:
+            print(f"\n[CLEANUP] Удалено тестовых ChatMessage бенчмарка: {deleted_count}")
 
     # Format Markdown
     report_md = format_markdown_report(b1, b2, b3)

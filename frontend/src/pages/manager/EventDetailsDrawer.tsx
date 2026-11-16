@@ -25,8 +25,9 @@ import {
   formatDateShort,
   formatDateRange,
   formatRub,
-  formatMinPrice,
 } from "@/lib/formatters";
+import { humanizeMissingDataWarnings } from "@/lib/warnings";
+import { getEventPriceSummary } from "./catalog/catalogUtils";
 
 interface EventDetailsDrawerProps {
   event: CatalogEventItemOut | null;
@@ -112,16 +113,17 @@ export function EventDetailsDrawer({
   const locationLabel = event.is_online ? "Онлайн" : event.city || "Россия";
   const safeWebsiteUrl = getSafeHttpUrl(event.website_url);
 
-  const minPrice = event.tariffs.reduce<number | null>((acc, t) => {
-    if (t.actual_price === null) return acc;
-    if (acc === null) return t.actual_price;
-    return Math.min(acc, t.actual_price);
-  }, null);
-
+  const priceSummary = getEventPriceSummary(event);
+  const humanizedWarnings = humanizeMissingDataWarnings(
+    event.missing_data_warnings
+  );
   const maxSavings = Math.max(0, ...event.tariffs.map((t) => t.savings || 0));
 
   const handleCopySummary = async () => {
-    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}${safeWebsiteUrl ? `Сайт: ${safeWebsiteUrl}\n` : ""}Тарифы: ${formatMinPrice(minPrice)}\n\nОписание:\n${event.summary}`;
+    const priceLabel = priceSummary.subLabel
+      ? `${priceSummary.label} (${priceSummary.subLabel})`
+      : priceSummary.label;
+    const text = `${event.canonical_title}\nДаты: ${formatDateRange(event.start_date, event.end_date)}\nФормат: ${formatLabel} (${locationLabel})\n${event.venue ? `Площадка: ${event.venue}\n` : ""}${safeWebsiteUrl ? `Сайт: ${safeWebsiteUrl}\n` : ""}Тарифы: ${priceLabel}\n\nОписание:\n${event.summary}`;
     const ok = await copyTextToClipboard(text, {
       successMessage: "Описание площадки и тарифов скопировано",
     });
@@ -297,8 +299,13 @@ export function EventDetailsDrawer({
                     <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-[11px] text-[#8E95A0]">
                       <span>Входной порог:</span>
                       <strong className="text-white font-bold tabular-nums">
-                        {formatMinPrice(minPrice)}
+                        {priceSummary.label}
                       </strong>
+                      {priceSummary.subLabel && (
+                        <span className="text-[10px] text-[#E5C378]/85">
+                          ({priceSummary.subLabel})
+                        </span>
+                      )}
                     </div>
                     {maxSavings > 0 && (
                       <Badge variant="ebEmerald" className="text-[10px]">
@@ -310,7 +317,7 @@ export function EventDetailsDrawer({
 
                 <div className="flex-1 space-y-5 overflow-y-auto p-5 scrollbar-thin">
                   {(event.data_status === "needs_enrichment" ||
-                    event.missing_data_warnings.length > 0) && (
+                    humanizedWarnings.length > 0) && (
                       <div className="rounded-[8px] border border-[#7C4A19] bg-[#22160C] p-3 text-xs space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 font-semibold text-[#E59837]">
@@ -326,10 +333,10 @@ export function EventDetailsDrawer({
                             <span>Дополнить из PDF / URL</span>
                           </button>
                         </div>
-                        {event.missing_data_warnings.length > 0 ? (
+                        {humanizedWarnings.length > 0 ? (
                           <ul className="list-disc pl-4 space-y-0.5 text-[#FDE68A]/90">
-                            {event.missing_data_warnings.map((w, idx) => (
-                              <li key={`${idx}-${w}`}>{w}</li>
+                            {humanizedWarnings.map((w) => (
+                              <li key={w}>{w}</li>
                             ))}
                           </ul>
                         ) : (

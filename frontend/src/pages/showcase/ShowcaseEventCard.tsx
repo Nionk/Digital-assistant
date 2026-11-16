@@ -31,7 +31,10 @@ import {
 import { getEventCoverVisual } from "@/lib/eventCovers";
 import { cn } from "@/lib/utils";
 import { CardAccompanimentPanel } from "./card/CardAccompanimentPanel";
-import { CardReplacementPanel } from "./card/CardReplacementPanel";
+import {
+  CardReplacementPanel,
+  mergeReplaceQuickReason,
+} from "./card/CardReplacementPanel";
 
 interface ShowcaseEventCardProps {
   item: ShowcaseEventItemOut;
@@ -557,8 +560,9 @@ export function ShowcaseEventCard({
               isReacting={isReacting}
               onChangeReplaceComment={setReplaceComment}
               onSelectQuickReason={(reason) => {
-                setReplaceComment(reason);
-                handleSubmitReplacement(reason);
+                setReplaceComment((prev) =>
+                  mergeReplaceQuickReason(prev, reason)
+                );
               }}
               onSubmit={() => handleSubmitReplacement()}
               onClose={() => setActiveExpandPanel("none")}

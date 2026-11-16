@@ -127,6 +127,7 @@ def test_cors_security(client):
 def test_rag_save_chat_message_flags():
     """Проверка правильной расстановки флага needs_manager_attention в chat_messages."""
     import asyncio
+
     from app.services.rag import _save_chat_message
 
     async def _test():
@@ -198,6 +199,7 @@ def test_matcher_fts_fallback_and_none_score_protection():
     """Проверка FTS-фолбэка при query_vec is None и защиты от каста None-оценки."""
     import asyncio
     import datetime
+
     from app.models.models import Event
     from app.schemas.manager import ClientQueryExtracted
     from app.services.matcher import fetch_hybrid_rrf_candidates
@@ -251,9 +253,10 @@ def test_matcher_fts_fallback_and_none_score_protection():
 def test_upload_event_material_safely_queries_tariffs():
     """Проверка вызова ingest_smart_event и безопасного SQL-подсчета тарифов без обращения к event.tariffs."""
     import asyncio
+
     import app.api.manager as manager_module
-    from app.models.models import Event
     from app.core.security import get_current_manager
+    from app.models.models import Event
 
     async def _test():
         mock_mgr = User(
@@ -301,8 +304,9 @@ def test_rag_grounding_rejects_punctuation_only_quotes():
 
 def test_upload_event_material_url_and_http_errors(client):
     """Некорректный URL возвращает 400, а сбой загрузки внешнего сайта — 502."""
-    import app.api.manager as manager_module
     import httpx
+
+    import app.api.manager as manager_module
     from app.core.security import get_current_manager
 
     mock_mgr = User(
@@ -378,6 +382,7 @@ def test_telegram_masks_bot_token_in_error_logs(caplog):
     import logging
 
     import httpx
+
     from app.services.telegram import HttpTelegramTransport
 
     secret_token = "123456:ABC-SECRET-BOT-TOKEN"
@@ -396,3 +401,244 @@ def test_telegram_masks_bot_token_in_error_logs(caplog):
 
     assert secret_token not in caplog.text
     assert "***" in caplog.text
+
+
+def test_selection_activity_filters_out_non_client_pending_questions(client):
+    """GET /api/manager/selections/{id}/activity возвращает только сообщения клиента (sender_role='client')."""
+    import datetime
+
+    from app.core.security import get_current_manager
+    from app.models.models import ChatMessage, Client, Event, Selection
+
+    mock_mgr = User(
+        id=1,
+        email="mgr@skart.ru",
+        password_hash="fakehash",
+        full_name="Менеджер",
+        telegram_chat_id=111,
+    )
+    app.dependency_overrides[get_current_manager] = lambda: mock_mgr
+
+    test_event = Event(
+        id=7,
+        canonical_title="Форум КРТ 2026",
+        normalized_title="форум крт 2026",
+        event_format="forum",
+        city="Москва",
+        is_online=False,
+        start_date=datetime.date(2026, 11, 20),
+        end_date=datetime.date(2026, 11, 21),
+        summary="Описание форума",
+    )
+    now = datetime.datetime(2026, 11, 16, 12, 0, tzinfo=datetime.UTC)
+    ai_msg = ChatMessage(
+        id=101,
+        selection_id=55,
+        event_id=7,
+        sender_role="ai_assistant",
+        message_text="Точных данных по этому вопросу нет в открытом регламенте.",
+        needs_manager_attention=True,
+        created_at=now,
+    )
+    client_msg = ChatMessage(
+        id=102,
+        selection_id=55,
+        event_id=7,
+        sender_role="client",
+        message_text="Возможна ли скидка при участии двух спикеров?",
+        needs_manager_attention=True,
+        created_at=now + datetime.timedelta(seconds=5),
+    )
+
+    captured_chat_sql: list[str] = []
+
+    async def override_session():
+        mock_session = AsyncMock()
+
+        async def _get(model, ident):
+            if model is Selection and ident == 55:
+                return Selection(
+                    id=55,
+                    client_id=10,
+                    status="published",
+                    total_budget_limit=200000.0,
+                )
+            if model is Client and ident == 10:
+                return Client(
+                    id=10,
+                    manager_id=1,
+                    company_name="Девелопмент-Юг",
+                    raw_manager_notes="Тестовая заметка",
+                )
+            return None
+
+        async def _execute(stmt):
+            sql_str = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+            mock_res = MagicMock()
+            if "FROM chat_messages" in sql_str:
+                captured_chat_sql.append(sql_str)
+                rows = [(ai_msg, test_event), (client_msg, test_event)]
+                filtered = [
+                    (msg, ev)
+                    for msg, ev in rows
+                    if ("sender_role = 'client'" not in sql_str or msg.sender_role == "client")
+                    and ("needs_manager_attention IS true" not in sql_str or msg.needs_manager_attention)
+                ]
+                mock_res.all.return_value = filtered
+                return mock_res
+            mock_res.all.return_value = []
+            return mock_res
+
+        mock_session.get = _get
+        mock_session.execute = _execute
+        yield mock_session
+
+    app.dependency_overrides[get_async_session] = override_session
+
+    res = client.get("/api/manager/selections/55/activity")
+    assert res.status_code == 200, res.text
+    assert len(captured_chat_sql) == 1
+    assert "chat_messages.sender_role = 'client'" in captured_chat_sql[0]
+
+    data = res.json()
+    assert data["selection_id"] == 55
+    assert len(data["pending_questions"]) == 1
+    assert data["pending_questions"][0]["message_id"] == 102
+    assert data["pending_questions"][0]["question_text"] == "Возможна ли скидка при участии двух спикеров?"
+    assert data["pending_questions"][0]["event_title"] == "Форум КРТ 2026"
+
+
+def test_benchmark_cleanup_deletes_only_tracked_messages():
+    """Очистка бенчмарка удаляет только отслеживаемые тестовые строки, не трогая обычные диалоги."""
+    import asyncio
+    import datetime
+
+    import tests.run_benchmark as bench_mod
+    from app.models.models import ChatMessage
+
+    now = datetime.datetime(2026, 11, 16, 12, 0, tzinfo=datetime.UTC)
+    existing_client = ChatMessage(
+        id=10, selection_id=128, event_id=16, sender_role="client", message_text="Реальный вопрос", created_at=now
+    )
+    existing_ai = ChatMessage(
+        id=11, selection_id=128, event_id=16, sender_role="ai_assistant", message_text="Реальный ответ", created_at=now
+    )
+    bench_client = ChatMessage(
+        id=50,
+        selection_id=128,
+        event_id=16,
+        sender_role="client",
+        message_text="Тест (ts_123)",
+        created_at=now + datetime.timedelta(seconds=10),
+    )
+    bench_ai = ChatMessage(
+        id=51,
+        selection_id=128,
+        event_id=16,
+        sender_role="ai_assistant",
+        message_text="Ответ ИИ",
+        created_at=now + datetime.timedelta(seconds=10),
+    )
+    concurrent_real = ChatMessage(
+        id=52,
+        selection_id=128,
+        event_id=16,
+        sender_role="client",
+        message_text="Живой вопрос клиента",
+        created_at=now + datetime.timedelta(seconds=12),
+    )
+
+    all_rows = [existing_client, existing_ai, bench_client, bench_ai, concurrent_real]
+    deleted_stmts: list[str] = []
+
+    class FakeCtx:
+        def __init__(self, session):
+            self._s = session
+
+        async def __aenter__(self):
+            return self._s
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def _test():
+        mock_session = AsyncMock()
+
+        async def _execute(stmt):
+            sql_str = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+            mock_res = MagicMock()
+            if sql_str.startswith("DELETE"):
+                deleted_stmts.append(sql_str)
+                return mock_res
+            mock_res.scalars.return_value.all.return_value = [m for m in all_rows if m.id > 11]
+            return mock_res
+
+        mock_session.execute = _execute
+        scope = bench_mod.TrackedChatScope(
+            min_id=11,
+            selection_id=128,
+            event_id=16,
+            questions={"Тест (ts_123)"},
+            answers={"Ответ ИИ"},
+        )
+        with patch.object(bench_mod, "async_session_maker", return_value=FakeCtx(mock_session)):
+            deleted_count = await bench_mod._cleanup_benchmark_chat_messages([scope])
+
+        assert deleted_count == 2
+        assert len(deleted_stmts) == 1
+        assert "50" in deleted_stmts[0] and "51" in deleted_stmts[0]
+        assert "52" not in deleted_stmts[0]
+        assert "10" not in deleted_stmts[0]
+
+    asyncio.run(_test())
+
+
+def test_fallback_pitch_without_themes_has_no_tautology():
+    """При пустом themes_keywords шаблон КП не содержит тавтологии 'по направлениям: ключевым отраслевым направлениям'."""
+    import datetime
+
+    from app.models.models import Event
+    from app.schemas.manager import ClientQueryExtracted, TariffOptionOut
+    from app.services.matcher import (
+        EvaluatedCombo,
+        ScoredEventCandidate,
+        build_fallback_pitch,
+    )
+
+    ev = Event(
+        id=1,
+        canonical_title="Форум КРТ",
+        city="Москва",
+        is_online=False,
+        start_date=datetime.date(2026, 11, 20),
+        end_date=datetime.date(2026, 11, 20),
+    )
+    tariff = TariffOptionOut(
+        tariff_id=10,
+        tariff_name="Делегат",
+        participation_role="delegate",
+        actual_price=50000.0,
+        base_price=50000.0,
+    )
+    cand = ScoredEventCandidate(
+        event=ev, rrf_score=0.5, all_tariffs=[tariff], priced_tariffs=[tariff], on_request_tariffs=[]
+    )
+    combo = EvaluatedCombo(
+        candidates=(cand,),
+        chosen_tariffs=(tariff,),
+        total_actual_price=50000.0,
+        total_base_price=50000.0,
+        total_savings=0.0,
+        earliest_deadline=None,
+        combo_score=0.5,
+        is_over_budget_tolerance=False,
+        matched_speaker_count=0,
+    )
+    profile = ClientQueryExtracted(
+        themes_keywords=[],
+        total_budget_max=100000.0,
+        semantic_search_query="профильные форумы",
+    )
+    pitch = build_fallback_pitch("ГК Тест", profile, combo)
+    assert "по ключевым отраслевым направлениям." in pitch
+    assert "по направлениям: ключевым" not in pitch

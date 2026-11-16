@@ -427,6 +427,7 @@ async def get_selection_activity_summary(
         .outerjoin(Event, ChatMessage.event_id == Event.id)
         .where(
             ChatMessage.selection_id == selection_id,
+            ChatMessage.sender_role == "client",
             ChatMessage.needs_manager_attention.is_(True),
         )
         .order_by(ChatMessage.created_at.asc())
