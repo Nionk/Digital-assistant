@@ -114,7 +114,7 @@ export function CatalogTable({
                       </span>
                     </div>
                     {isPast && (
-                      <span className="mt-1 inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-[#8E95A0]">
+                      <span className="mt-1 inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-[#8E95A0]">
                         Прошло
                       </span>
                     )}
@@ -141,7 +141,7 @@ export function CatalogTable({
                       {ev.themes.length > 0 && (
                         <p
                           title={ev.themes.join(" · ")}
-                          className="mt-0.5 text-[11px] text-[#727985] truncate font-serif italic"
+                          className="mt-0.5 text-[11px] text-[#8E95A0] truncate font-serif italic"
                         >
                           {ev.themes.slice(0, 3).join(" · ")}
                           {ev.themes.length > 3 && (
@@ -198,7 +198,7 @@ export function CatalogTable({
                           <span
                             key={role}
                             className={cn(
-                              "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[10px] font-medium leading-tight",
+                              "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[11px] font-medium leading-tight",
                               CATALOG_ROLE_PILL_CLASSES[role]
                             )}
                           >
@@ -207,7 +207,7 @@ export function CatalogTable({
                         ))}
                       </div>
                     ) : (
-                      <span className="text-[11px] text-[#727985] font-serif italic">
+                      <span className="text-[11px] text-[#8E95A0] font-serif italic">
                         Не указаны
                       </span>
                     )}
@@ -221,11 +221,11 @@ export function CatalogTable({
                             {priceSummary.label}
                           </span>
                           {priceSummary.subLabel && (
-                            <span className="block text-[10px] text-[#E5C378]/85 leading-tight">
+                            <span className="block text-[11px] text-[#E5C378]/90 leading-tight">
                               {priceSummary.subLabel}
                             </span>
                           )}
-                          <span className="block text-[10px] text-[#727985] font-serif italic">
+                          <span className="block text-[11px] text-[#8E95A0] font-serif italic">
                             {ev.tariffs.length}{" "}
                             {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
                           </span>
@@ -235,7 +235,7 @@ export function CatalogTable({
                           <span className="text-xs text-[#8E95A0] font-serif italic">
                             По запросу
                           </span>
-                          <span className="block text-[10px] text-[#727985] font-serif italic">
+                          <span className="block text-[11px] text-[#8E95A0] font-serif italic">
                             {ev.tariffs.length}{" "}
                             {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}
                           </span>
@@ -243,7 +243,7 @@ export function CatalogTable({
                       )}
                       {savings > 0 && (
                         <div className="mt-1">
-                          <Badge variant="ebEmerald" asSlanted={false} className="text-[10px]">
+                          <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                             Выгода {formatRub(savings)}
                             {deadline ? ` до ${formatDateShort(deadline).slice(0, 5)}` : ""}
                           </Badge>

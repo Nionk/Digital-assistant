@@ -243,9 +243,9 @@ export function ScraperRunModal({ isOpen, onClose }: ScraperRunModalProps) {
                 </p>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
+                  <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                     Источник сбора данных
-                  </label>
+                  </span>
                   <CustomSelect<ScraperSourceKey>
                     value={selectedSource}
                     onChange={setSelectedSource}
@@ -298,7 +298,8 @@ export function ScraperRunModal({ isOpen, onClose }: ScraperRunModalProps) {
                                 ? "ebAmber"
                                 : "ebRose"
                           }
-                          className="text-[9px] shrink-0"
+                          asSlanted={false}
+                          className="text-[11px] shrink-0"
                         >
                           {feedback.statusBadge}
                         </Badge>

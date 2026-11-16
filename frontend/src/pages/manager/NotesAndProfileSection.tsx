@@ -87,38 +87,38 @@ export function NotesAndProfileSection({
   return (
     <section className="rounded-[12px] border border-[#262D35] bg-[#161B22] shadow-sm relative">
       {/* Шапка блока Шага 01–03 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5 rounded-t-[12px]">
-        <div className="flex items-baseline gap-2.5 min-w-0">
-          <span className="font-serif italic font-bold text-base sm:text-lg text-[#E5C378] select-none leading-none">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 border-b border-[#21262F] bg-[#12161A] px-4 py-2.5 rounded-t-[12px]">
+        <div className="flex items-baseline gap-2.5 min-w-0 flex-1">
+          <span className="font-serif italic font-bold text-lg text-[#E5C378] select-none leading-none shrink-0">
             01
           </span>
-          <h2 className="font-serif italic text-sm font-semibold tracking-tight text-[#E5C378] sm:text-[15px] leading-snug">
+          <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378] leading-snug shrink-0">
             Запрос клиента и аналитика задач
           </h2>
           {hasMatchResult && isCollapsed && (
-            <span className="hidden truncate text-xs text-[#8E95A0] md:inline max-w-[380px]">
+            <span className="hidden min-w-0 flex-1 truncate text-xs text-[#8E95A0] md:inline">
               · «{notes.slice(0, 68)}...»
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {hasMatchResult && (
+        {hasMatchResult && (
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => onToggleCollapsed(!isCollapsed)}
-              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-colors hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-[#E5C378]"
+              className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#161B21] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] whitespace-nowrap transition-colors hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-[#E5C378]"
             >
-              <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               <span>{isCollapsed ? "Развернуть бриф" : "Свернуть бриф"}</span>
               {isCollapsed ? (
-                <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               ) : (
-                <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <ChevronUp className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               )}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Раскрываемая область ввода конспекта установочной встречи с плавной анимацией */}
@@ -134,11 +134,14 @@ export function NotesAndProfileSection({
           >
             <div className="p-4 border-b border-[#21262F] bg-[#161B22]">
               <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-[#D1D5DB]">
+                <label
+                  htmlFor="client-meeting-notes"
+                  className="text-xs font-semibold text-[#D1D5DB]"
+                >
                   Конспект установочной встречи с клиентом:
                 </label>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-[#727985]">Готовые кейсы:</span>
+                  <span className="text-[11px] font-medium text-[#8E95A0]">Готовые кейсы:</span>
                   {DEMO_NOTE_PRESETS.map((preset) => (
                     <button
                       key={preset.category}
@@ -146,7 +149,7 @@ export function NotesAndProfileSection({
                       onClick={() => onNotesChange(preset.text)}
                       className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#E5C378] hover:bg-[#161E28]"
                     >
-                      <Badge variant="ebAmber" className="text-[9px]">
+                      <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                         {preset.category}
                       </Badge>
                       <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
@@ -157,11 +160,13 @@ export function NotesAndProfileSection({
               </div>
 
               <textarea
+                id="client-meeting-notes"
+                name="client_meeting_notes"
                 rows={3}
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
                 placeholder="Вводные встречи: задачи участия, ключевые темы, спикерство/стенд, география и лимит бюджета..."
-                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
+                className="w-full rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-sm leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors duration-150"
               />
 
               <div className="mt-3 flex items-center justify-end">

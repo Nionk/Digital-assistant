@@ -21,7 +21,7 @@ export function EventBenefitsTab({
           <span className="font-serif italic text-xs font-semibold text-[#E5C378]">
             Программа и фокус площадки
           </span>
-          <Badge variant="darkSubtle" className="text-[10px]">
+          <Badge variant="darkSubtle" asSlanted={false} className="text-[11px]">
             {FORMAT_LABELS[activeEvent.event_format] ||
               activeEvent.event_format}
           </Badge>

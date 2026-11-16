@@ -97,7 +97,7 @@ export function ClientsSelectorDropdown({
           <span className="transition-colors duration-150">Список клиентов</span>
           <span
             className={cn(
-              "rounded bg-[#1A252A] px-1.5 py-0.5 text-[10px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
+              "rounded bg-[#1A252A] px-1.5 py-0.5 text-[11px] font-semibold text-[#529E85] tabular-nums transition-colors duration-150",
               "group-hover:bg-[#1E252E] group-hover:text-[#34D399]"
             )}
           >
@@ -125,11 +125,11 @@ export function ClientsSelectorDropdown({
                   <h3 className="text-[11px] font-serif italic font-semibold text-[#8E95A0]">
                     Выбор клиента
                   </h3>
-                  <p className="mt-1 text-xs text-[#727985]">
+                  <p className="mt-1 text-xs text-[#8E95A0]">
                     Активные компании и согласование пакетов
                   </p>
                 </div>
-                <Badge variant="ebAmber" className="text-[11px]">
+                <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                   {clients.length}{" "}
                   {pluralizeRu(clients.length, [
                     "компания",
@@ -148,6 +148,9 @@ export function ClientsSelectorDropdown({
                   strokeWidth={2}
                 />
                 <input
+                  id="clients-dropdown-search"
+                  name="clients_search"
+                  aria-label="Поиск компании или контакта"
                   type="text"
                   value={clientSearchQuery}
                   onChange={(e) => onSearchQueryChange(e.target.value)}
@@ -206,17 +209,17 @@ export function ClientsSelectorDropdown({
                             </p>
                           </div>
 
-                          {/* Авторские скошенные ячейки-ленты статусов клиента */}
+                          {/* Статусы клиента */}
                           {isPublished ? (
-                            <Badge variant="ebEmerald" className="text-[10px]">
+                            <Badge variant="ebEmerald" asSlanted={false} className="text-[11px] shrink-0">
                               КП активно
                             </Badge>
                           ) : isDraft ? (
-                            <Badge variant="ebAmber" className="text-[10px]">
+                            <Badge variant="ebAmber" asSlanted={false} className="text-[11px] shrink-0">
                               Черновик
                             </Badge>
                           ) : (
-                            <Badge variant="ebBlue" className="text-[10px]">
+                            <Badge variant="ebBlue" asSlanted={false} className="text-[11px] shrink-0">
                               Новый
                             </Badge>
                           )}
@@ -233,12 +236,12 @@ export function ClientsSelectorDropdown({
                                 <span className="truncate">{client.contact_person}</span>
                               </>
                             ) : (
-                              <span className="text-[#636B78]">Контакт не указан</span>
+                              <span className="text-[#8E95A0]">Контакт не указан</span>
                             )}
                           </span>
                           <div className="flex items-center gap-1.5">
                             {isSelected && (
-                              <Badge variant="ebGold" className="text-[9px]">
+                              <Badge variant="ebGold" className="text-[11px]">
                                 Выбран
                               </Badge>
                             )}

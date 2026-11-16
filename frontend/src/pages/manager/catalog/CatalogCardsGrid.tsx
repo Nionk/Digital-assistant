@@ -82,10 +82,10 @@ export function CatalogCardsGrid({
                   <span className="text-sm font-bold leading-none text-white">
                     {cal.dayText}
                   </span>
-                  <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 leading-none">
+                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 leading-none">
                     {cal.monthText}
                   </span>
-                  <span className="mt-1 text-[9px] text-[#8E95A0] leading-none">
+                  <span className="mt-1 text-[11px] text-[#8E95A0] leading-none">
                     {cal.durationText}
                   </span>
                 </div>
@@ -131,16 +131,16 @@ export function CatalogCardsGrid({
                     )}
                     <div className="ml-auto flex items-center gap-1.5 shrink-0">
                       {isPast && (
-                        <span className="inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-[#8E95A0]">
+                        <span className="inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-medium text-[#8E95A0]">
                           Прошло
                         </span>
                       )}
                       {ev.data_status === "ready" ? (
-                        <Badge variant="ebEmerald" asSlanted={false} className="text-[10px]">
+                        <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                           Готово к КП
                         </Badge>
                       ) : ev.data_status === "needs_enrichment" ? (
-                        <Badge variant="ebAmber" asSlanted={false} className="text-[10px]">
+                        <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
                           Требует обогащения
                         </Badge>
                       ) : null}
@@ -176,7 +176,7 @@ export function CatalogCardsGrid({
                     <span
                       key={role}
                       className={cn(
-                        "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[10px] font-medium leading-tight",
+                        "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[11px] font-medium leading-tight",
                         CATALOG_ROLE_PILL_CLASSES[role]
                       )}
                     >
@@ -187,7 +187,7 @@ export function CatalogCardsGrid({
                     <span
                       key={t}
                       title={t}
-                      className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
+                      className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-serif italic text-[#8E95A0] hover:text-[#E5C378] transition-colors"
                     >
                       {t}
                     </span>
@@ -195,7 +195,7 @@ export function CatalogCardsGrid({
                   {ev.themes.length > 4 && (
                     <span
                       title={ev.themes.slice(4).join(", ")}
-                      className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-serif italic text-[#E5C378]/80 cursor-help"
+                      className="rounded-[3px] border border-[#262D35] bg-[#12161A] px-1.5 py-0.5 text-[11px] font-serif italic text-[#E5C378]/90 cursor-help"
                     >
                       +{ev.themes.length - 4}
                     </span>
@@ -216,7 +216,7 @@ export function CatalogCardsGrid({
                   </span>
                 )}
                 {savings > 0 && (
-                  <Badge variant="ebEmerald" className="text-[9px]">
+                  <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                     Выгода {formatRub(savings)}
                   </Badge>
                 )}

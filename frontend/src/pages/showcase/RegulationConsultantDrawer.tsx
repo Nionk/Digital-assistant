@@ -190,22 +190,28 @@ export function RegulationConsultantDrawer({
       footer={
         activeTab === "regulation" ? (
           <form onSubmit={handleFormSubmit} className="space-y-2">
-            <label className="block text-[11px] font-medium text-[#8E95A0]">
+            <label
+              htmlFor="regulation-question-input"
+              className="block text-[11px] font-medium text-[#8E95A0]"
+            >
               Задайте вопрос по условиям участия, программе или логистике:
             </label>
             <div className="flex gap-2">
               <input
+                id="regulation-question-input"
+                name="question_text"
                 type="text"
                 value={inputQuestion}
                 onChange={(e) => setInputQuestion(e.target.value)}
                 placeholder="Например: какие требования к презентации спикера?"
-                className="h-9 flex-1 rounded-[8px] border border-[#262D35] bg-[#161B22] px-3 text-xs text-white placeholder:text-[#727985] focus:border-[#E5C378] focus:outline-none transition-colors"
+                className="h-9 flex-1 rounded-[8px] border border-[#262D35] bg-[#161B22] px-3 text-xs text-white placeholder:text-[#8E95A0] focus:border-[#E5C378] focus:outline-none transition-colors"
               />
               <Button
                 type="submit"
                 variant="monolith"
                 size="md"
                 disabled={isAsking || inputQuestion.trim().length < 3}
+                aria-label="Отправить вопрос"
                 className="shrink-0"
               >
                 {isAsking ? (
@@ -283,7 +289,7 @@ export function RegulationConsultantDrawer({
                   <span className="relative z-10 truncate">{tab.label}</span>
                   {tab.id === "regulation" &&
                     mergedConversation.items.length > 0 && (
-                      <span className="relative z-10 rounded bg-[#12161A]/80 px-1.5 py-0.5 text-[10px] font-semibold text-[#E5C378] tabular-nums">
+                      <span className="relative z-10 rounded bg-[#12161A]/80 px-1.5 py-0.5 text-[11px] font-semibold text-[#E5C378] tabular-nums">
                         {mergedConversation.items.length}
                       </span>
                     )}
@@ -328,7 +334,7 @@ export function RegulationConsultantDrawer({
                   </span>
                   {activeEvent.savings > 0 && (
                     <div className="mt-1">
-                      <Badge variant="ebEmerald" className="text-[10px]">
+                      <Badge variant="ebEmerald" asSlanted={false} className="text-[11px]">
                         Выгода {formatRub(activeEvent.savings)}
                         {activeEvent.early_bird_deadline
                           ? ` до ${formatDateShort(activeEvent.early_bird_deadline)}`

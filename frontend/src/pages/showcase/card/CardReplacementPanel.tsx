@@ -56,6 +56,7 @@ export function CardReplacementPanel({
   onClose,
 }: CardReplacementPanelProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const inputId = React.useId();
 
   const handleChipClick = (reason: string) => {
     onSelectQuickReason(reason);
@@ -130,11 +131,14 @@ export function CardReplacementPanel({
         >
           <input
             ref={inputRef}
+            id={inputId}
+            name="replace_comment"
             type="text"
             value={replaceComment}
             onChange={(e) => onChangeReplaceComment(e.target.value)}
             placeholder="Ваш комментарий (например, другие даты)..."
-            className="h-8 flex-1 rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 text-xs text-white placeholder:text-[#727985] focus:border-[#F472B6] focus:outline-none"
+            aria-label="Пожелания для замены мероприятия"
+            className="h-8 flex-1 rounded-[6px] border border-[#262D35] bg-[#161B22] px-2.5 text-xs text-white placeholder:text-[#8E95A0] focus:border-[#F472B6] focus:outline-none"
           />
           <Button
             type="submit"

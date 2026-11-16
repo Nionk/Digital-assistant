@@ -216,13 +216,14 @@ export function ClientFormModal({
                   </label>
                   <input
                     id="client-form-company"
+                    name="company_name"
                     type="text"
                     required
                     value={companyName}
                     disabled={isBusy}
                     onChange={(e) => setCompanyName(e.target.value)}
                     placeholder="Например: ГК «Эталон»"
-                    className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-3 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
+                    className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-3 text-xs text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
                   />
                 </div>
 
@@ -236,12 +237,13 @@ export function ClientFormModal({
                   </label>
                   <input
                     id="client-form-contact"
+                    name="contact_person"
                     type="text"
                     value={contactPerson}
                     disabled={isBusy}
                     onChange={(e) => setContactPerson(e.target.value)}
                     placeholder="Например: Мария Соколова (Директор по маркетингу)"
-                    className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-3 text-xs text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
+                    className="h-9 w-full rounded-[6px] border border-[#262D35] bg-[#12161A] px-3 text-xs text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors"
                   />
                 </div>
 
@@ -255,12 +257,13 @@ export function ClientFormModal({
                   </label>
                   <textarea
                     id="client-form-notes"
+                    name="raw_manager_notes"
                     rows={3}
                     value={rawNotes}
                     disabled={isBusy}
                     onChange={(e) => setRawNotes(e.target.value)}
                     placeholder="Задачи участия, города, бюджет, желаемые роли (спикер/делегат/стенд)..."
-                    className="w-full rounded-[6px] border border-[#262D35] bg-[#12161A] p-2.5 text-xs leading-relaxed text-white placeholder:text-[#6B7280] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors scrollbar-thin"
+                    className="w-full rounded-[6px] border border-[#262D35] bg-[#12161A] p-2.5 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-colors scrollbar-thin"
                   />
                 </div>
 

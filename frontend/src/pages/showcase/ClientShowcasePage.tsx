@@ -271,7 +271,7 @@ export function ClientShowcasePage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-20 overflow-x-hidden selection:bg-[#E5C378]/25 selection:text-white">
+    <div className="relative min-h-screen bg-[#0B0E12] text-[#F3F4F6] pb-24 sm:pb-20 overflow-x-hidden selection:bg-[#E5C378]/25 selection:text-white">
       {/* ВАРИАНТ 1: АТМОСФЕРНЫЙ АРХИТЕКТУРНЫЙ СВЕТ И ДЕЛИКАТНЫЙ ЭМБИЕНТ           */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute -top-[12%] left-1/2 -translate-x-1/2 h-[680px] w-[1200px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(229,195,120,0.065)_0%,rgba(124,90,32,0.025)_45%,transparent_72%)] blur-2xl" />
@@ -292,7 +292,7 @@ export function ClientShowcasePage() {
           <CalendarTimeline items={timelineItems} />
         </div>
 
-      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+      <section id="showcase-events" className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 scroll-mt-4">
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-5 sm:p-6 shadow-sm">
           {/* Верхняя панель: Заголовок + Плавные селекторы без вспышек */}
           <div className="flex flex-col justify-between gap-4 border-b border-[#21262F] pb-4 lg:flex-row lg:items-center">
@@ -551,19 +551,23 @@ export function ClientShowcasePage() {
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             type="button"
             onClick={() => openEventDrawer(items[0].event_id, "regulation")}
-            className="group fixed bottom-8 right-0 z-30 flex items-center gap-2.5 rounded-l-[10px] border border-r-0 border-[#7C5A20]/60 bg-[#12161A]/95 py-2.5 pl-3 pr-4 text-left shadow-[-6px_6px_24px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200 hover:border-[#E5C378] hover:bg-[#181E25] hover:pr-5 active:scale-[0.99] cursor-pointer"
+            aria-label="Вопросы по условиям: тарифы и документация"
+            className="group fixed bottom-4 right-4 sm:bottom-8 sm:right-0 z-30 flex items-center gap-2 sm:gap-2.5 rounded-full sm:rounded-l-[10px] sm:rounded-r-none border sm:border-r-0 border-[#7C5A20]/70 sm:border-[#7C5A20]/60 bg-[#12161A]/95 px-3.5 py-2.5 sm:py-2.5 sm:pl-3 sm:pr-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.75)] sm:shadow-[-6px_6px_24px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200 hover:border-[#E5C378] hover:bg-[#181E25] sm:hover:pr-5 active:scale-[0.99] cursor-pointer"
           >
-            {/* Золотой корешок закладки */}
-            <span className="h-6 w-[3px] shrink-0 rounded-full bg-gradient-to-b from-[#E5C378] to-[#8C6A28]" />
+            {/* Золотой корешок закладки (на экранах >= sm) */}
+            <span className="hidden sm:block h-6 w-[3px] shrink-0 rounded-full bg-gradient-to-b from-[#E5C378] to-[#8C6A28]" />
             <MessageSquareText
               className="h-4 w-4 shrink-0 text-[#E5C378] transition-transform duration-200 group-hover:scale-105"
               strokeWidth={1.75}
             />
-            <div className="leading-tight">
+            <span className="sm:hidden text-xs font-semibold text-[#F4EFE6]">
+              Вопросы
+            </span>
+            <div className="hidden sm:block leading-tight">
               <span className="block text-xs font-semibold text-[#F4EFE6] transition-colors group-hover:text-white">
                 Вопросы по условиям
               </span>
-              <span className="mt-0.5 block font-serif italic text-[10px] text-[#8E95A0]">
+              <span className="mt-0.5 block font-serif italic text-[11px] text-[#8E95A0]">
                 Тарифы и документация
               </span>
             </div>
