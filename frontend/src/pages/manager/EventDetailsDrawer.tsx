@@ -169,8 +169,14 @@ export function EventDetailsDrawer({
                 <div className="border-b border-[#21262F] bg-[#12161A] p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-serif italic text-[#E5C378]">
-                        ✦ Паспорт площадки
+                      <span className="inline-flex items-center gap-1.5 font-serif italic text-[#E5C378]">
+                        <span
+                          className="not-italic leading-none select-none shrink-0"
+                          aria-hidden="true"
+                        >
+                          ✦
+                        </span>
+                        <span>Паспорт площадки</span>
                       </span>
                       <span className="text-[#3A4553]">·</span>
                       <span className="font-medium text-[#D1D5DB]">
@@ -375,9 +381,6 @@ export function EventDetailsDrawer({
                     <div className="mb-3 flex items-center justify-between">
                       <span className="font-serif italic text-xs font-semibold tracking-wide text-[#E5C378]">
                         Тарифная сетка и условия участия
-                      </span>
-                      <span className="font-serif italic text-[11px] text-[#8E95A0]">
-                        Цены организатора без наценок
                       </span>
                     </div>
 

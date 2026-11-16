@@ -9,7 +9,6 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import type { ClientQueryExtracted } from "@/api/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ExtractedProfilePanel } from "./notes/ExtractedProfilePanel";
 
 interface NotesAndProfileSectionProps {
@@ -26,27 +25,6 @@ interface NotesAndProfileSectionProps {
   onRunInitialMatch: () => void;
   onRematchWithOverride: () => void;
 }
-
-const DEMO_NOTE_PRESETS = [
-  {
-    category: "Девелопмент",
-    focus: "КРТ · Спикер",
-    budget: "400 000 ₽",
-    text: "Установочная встреча с ГК Пионер. Продукт: жилые кварталы и проекты КРТ. Ищут на осень–зиму в Москве или Санкт-Петербурге 3 профильных мероприятия (форумы и камерные круглые столы) по КРТ, урбанистике и девелопменту. Минимум на одной площадке хотят выступить спикером в целевой сессии для укрепления экспертной позиции, на остальных — деловые знакомства с застройщиками и ведомствами. Общий бюджет на взносы организаторов — до 400 000 руб.",
-  },
-  {
-    category: "Архитектура",
-    focus: "Урбанистика · Конкурсы",
-    budget: "300 000 ₽",
-    text: "Созвонились с архитектурным бюро. Интересуют 3 площадки в Москве, СПб или онлайн по темам: архитектура, градостроительство, BIM-проектирование и профессиональные конкурсы. Важен выход на главных архитекторов и директоров по продукту девелоперских компаний. Минимум 1 экспертное выступление спикером. Бюджет до 300 000 руб.",
-  },
-  {
-    category: "Производство",
-    focus: "Стенд · Встречи",
-    budget: "650 000 ₽",
-    text: "Производитель фасадных и инженерных систем. Задача: выход на застройщиков жилья, подрядчиков и проектные институты в Москве и регионах. Рассматривают 3 мероприятия: крупный строительный форум (возможен партнёрский пакет со стендом и деловой игрой) + закрытые деловые завтраки руководителей. Общий ориентир бюджета — 650 000 руб.",
-  },
-];
 
 const MATCHING_STATUS_STEPS = [
   "Анализ заметки и извлечение параметров...",
@@ -133,31 +111,12 @@ export function NotesAndProfileSection({
             className="overflow-hidden"
           >
             <div className="p-4 border-b border-[#21262F] bg-[#161B22]">
-              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                <label
-                  htmlFor="client-meeting-notes"
-                  className="text-xs font-semibold text-[#D1D5DB]"
-                >
-                  Конспект установочной встречи с клиентом:
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-[#8E95A0]">Готовые кейсы:</span>
-                  {DEMO_NOTE_PRESETS.map((preset) => (
-                    <button
-                      key={preset.category}
-                      type="button"
-                      onClick={() => onNotesChange(preset.text)}
-                      className="inline-flex items-center gap-1.5 rounded-[4px] border border-[#262D35] bg-[#12161A] px-2 py-0.5 text-[11px] transition-all hover:border-[#E5C378] hover:bg-[#161E28]"
-                    >
-                      <Badge variant="ebAmber" asSlanted={false} className="text-[11px]">
-                        {preset.category}
-                      </Badge>
-                      <span className="text-[#D1D5DB] font-medium">{preset.focus}</span>
-                      <span className="text-[#8E95A0]">· {preset.budget}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <label
+                htmlFor="client-meeting-notes"
+                className="mb-2 block text-xs font-semibold text-[#D1D5DB]"
+              >
+                Конспект установочной встречи с клиентом:
+              </label>
 
               <textarea
                 id="client-meeting-notes"

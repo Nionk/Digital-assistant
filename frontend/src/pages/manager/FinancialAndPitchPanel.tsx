@@ -2,7 +2,6 @@ import {
   Copy,
   ExternalLink,
   Loader2,
-  Sparkles,
   Send,
   ShieldCheck,
   AlertTriangle,
@@ -189,60 +188,65 @@ export function FinancialAndPitchPanel({
             )}
           </div>
         )}
-
-        {/* Пояснение по Слайду 10 */}
-        <p className="mt-3 text-[11px] leading-relaxed text-[#8E95A0]">
-          Сопровождение агентства (подготовка спикера, целевые встречи, интерактив на стенде) рассчитывается отдельно под выбранные клиентом задачи на витрине.
-        </p>
       </div>
 
       <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[#21262F]">
-          <div className="flex items-baseline gap-2.5 min-w-0">
-            <span className="font-serif italic font-bold text-lg text-[#E5C378] select-none leading-none">
-              03
-            </span>
-            <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378] leading-snug">
-              Персональное обращение к клиенту
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            disabled={isGeneratingPitch || summary.includedRows.length === 0}
-            onClick={onGeneratePitch}
-            title={
-              summary.includedRows.length === 0
-                ? "Выберите хотя бы одно мероприятие в конструкторе, чтобы обновить письмо"
-                : "Пересчитать состав пакета и сгенерировать живое сопроводительное письмо через ИИ"
-            }
-            className="group relative inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-[11px] font-medium text-[#D1D5DB] select-none cursor-pointer overflow-hidden shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#262D35] disabled:hover:bg-[#12161A] disabled:hover:text-[#D1D5DB] disabled:hover:shadow-none"
-          >
-            {isGeneratingPitch ? (
-              <>
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#E5C378]" strokeWidth={2} />
-                <span>Генерация...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-3 w-3 shrink-0 text-[#E5C378] transition-colors duration-150" strokeWidth={2} />
-                <span className="transition-colors duration-150">Обновить письмо (ИИ)</span>
-              </>
-            )}
-          </button>
+        <div className="flex items-baseline gap-2.5 pb-2.5 border-b border-[#21262F]">
+          <span className="font-serif italic font-bold text-lg text-[#E5C378] select-none leading-none">
+            03
+          </span>
+          <h2 className="font-serif italic text-[17px] sm:text-[18px] font-semibold tracking-tight text-[#E5C378] leading-snug">
+            Персональное обращение к клиенту
+          </h2>
         </div>
 
-        <textarea
-          ref={textareaRef}
-          id="client-pitch-text"
-          name="client_pitch_text"
-          aria-label="Персональное обращение к клиенту"
-          value={pitchText}
-          onChange={(e) => onPitchChange(e.target.value)}
-          placeholder="Напишите сопроводительное письмо или нажмите кнопку синхронизации цифр..."
-          style={{ minHeight: "130px", maxHeight: "400px" }}
-          className="mt-2.5 w-full resize-y rounded-[8px] border border-[#262D35] bg-[#12161A] p-3 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none focus:border-[#E5C378] focus:shadow-[0_0_0_1px_rgba(229,195,120,0.25)] transition-[border-color,box-shadow] duration-150 overflow-y-auto scrollbar-thin"
-        />
+        <div className="mt-2.5 overflow-hidden rounded-[8px] border border-[#262D35] bg-[#12161A] transition-[border-color,box-shadow] duration-150 focus-within:border-[#E5C378] focus-within:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]">
+          <textarea
+            ref={textareaRef}
+            id="client-pitch-text"
+            name="client_pitch_text"
+            aria-label="Персональное обращение к клиенту"
+            value={pitchText}
+            onChange={(e) => onPitchChange(e.target.value)}
+            placeholder="Напишите сопроводительное письмо или нажмите «✦ Обновить письмо»..."
+            style={{ minHeight: "130px", maxHeight: "400px" }}
+            className="block w-full resize-y bg-transparent p-3 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none overflow-y-auto scrollbar-thin"
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#21262F] bg-[#0E1215]/75 px-3 py-2">
+            <span className="text-[11px] text-[#8E95A0] tabular-nums select-none">
+              {pitchText.trim().length > 0
+                ? `${pitchText.trim().length} симв.`
+                : "Текст пока пуст"}
+            </span>
+
+            <button
+              type="button"
+              disabled={isGeneratingPitch || summary.includedRows.length === 0}
+              onClick={onGeneratePitch}
+              title={
+                summary.includedRows.length === 0
+                  ? "Выберите хотя бы одно мероприятие в конструкторе, чтобы обновить письмо"
+                  : "Пересчитать состав пакета и сгенерировать живое сопроводительное письмо через ИИ"
+              }
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[#7C5A20]/70 bg-[#1E190E] px-2.5 py-1 text-[11px] font-medium text-[#E5C378] select-none cursor-pointer shadow-sm transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#7C5A20]/70 disabled:hover:bg-[#1E190E] disabled:hover:text-[#E5C378] disabled:hover:shadow-none"
+            >
+              {isGeneratingPitch ? (
+                <>
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#E5C378]" strokeWidth={2} />
+                  <span>Обновляем...</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] leading-none text-[#E5C378]" aria-hidden="true">
+                    ✦
+                  </span>
+                  <span>Обновить письмо</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
 
         <div className="mt-3 space-y-2">
           <Button

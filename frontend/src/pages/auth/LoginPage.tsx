@@ -202,10 +202,6 @@ export function LoginPage() {
           </div>
         </form>
       </motion.div>
-
-      <p className="mt-5 text-center text-xs text-[#94A3B8]">
-        Клиентские витрины открываются по персональной ссылке без авторизации.
-      </p>
     </div>
   );
 }

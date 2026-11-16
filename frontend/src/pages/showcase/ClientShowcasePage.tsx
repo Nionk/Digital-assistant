@@ -10,7 +10,6 @@ import {
   GalleryHorizontalEnd,
   MessageSquareText,
   AlertCircle,
-  Sparkles,
 } from "lucide-react";
 import {
   useAskRegulationMutation,
@@ -297,7 +296,12 @@ export function ClientShowcasePage() {
           {/* Верхняя панель: Заголовок + Плавные селекторы без вспышек */}
           <div className="flex flex-col justify-between gap-4 border-b border-[#21262F] pb-4 lg:flex-row lg:items-center">
             <div className="flex items-center gap-2.5">
-              <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
+              <span
+                className="text-sm not-italic leading-none text-[#E5C378] select-none shrink-0"
+                aria-hidden="true"
+              >
+                ✦
+              </span>
               <h2 className="font-serif text-lg font-bold tracking-tight text-white sm:text-xl">
                 Рекомендовано для вас
               </h2>

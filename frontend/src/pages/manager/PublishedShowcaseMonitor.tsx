@@ -488,7 +488,7 @@ export function PublishedShowcaseMonitor({
           </div>
         </div>
 
-        {pendingQuestions.length > 0 ? (
+        {pendingQuestions.length > 0 && (
           <div className="mt-2.5 space-y-2.5">
             {pendingQuestions.map((q) => {
               const draftValue = replyDrafts[q.message_id] ?? "";
@@ -560,10 +560,6 @@ export function PublishedShowcaseMonitor({
               );
             })}
           </div>
-        ) : (
-          <p className="mt-1.5 text-[11px] text-[#8E95A0]">
-            Когда клиент передаст сложный вопрос куратору через чат на витрине, он появится здесь с формой прямого ответа.
-          </p>
         )}
 
         {resolvedQuestions.length > 0 && (

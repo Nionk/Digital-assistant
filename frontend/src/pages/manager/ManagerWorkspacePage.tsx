@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   useClientWorkspace,
@@ -41,6 +41,7 @@ export function ManagerWorkspacePage() {
   const workspaceMode = useManagerStore((s) => s.workspaceMode);
   const selectedClientId = useManagerStore((s) => s.selectedClientId);
   const clientSearchQuery = useManagerStore((s) => s.clientSearchQuery);
+  const clientStatusFilter = useManagerStore((s) => s.clientStatusFilter);
   const isNotesCollapsed = useManagerStore((s) => s.isNotesCollapsed);
   const activeNotesOverride = useManagerStore((s) =>
     s.selectedClientId !== null ? s.notesByClient[s.selectedClientId] : undefined
@@ -99,6 +100,7 @@ export function ManagerWorkspacePage() {
     (s) => s.removeClientWorkspace
   );
   const setClientSearchQuery = useManagerStore((s) => s.setClientSearchQuery);
+  const setClientStatusFilter = useManagerStore((s) => s.setClientStatusFilter);
   const setClientNotes = useManagerStore((s) => s.setClientNotes);
   const syncClientNotes = useManagerStore((s) => s.syncClientNotes);
   const setNotesCollapsed = useManagerStore((s) => s.setNotesCollapsed);
@@ -495,12 +497,14 @@ export function ManagerWorkspacePage() {
                 clients={clients}
                 selectedClientId={selectedClientId}
                 clientSearchQuery={clientSearchQuery}
+                clientStatusFilter={clientStatusFilter}
                 isOpen={isClientsDropdownOpen}
                 draftClientIdSet={draftClientIdSet}
                 publishedClientIdSet={publishedClientIdSet}
                 onToggleOpen={handleToggleClientsDropdown}
                 onClose={handleCloseClientsDropdown}
                 onSearchQueryChange={setClientSearchQuery}
+                onStatusFilterChange={setClientStatusFilter}
                 onSelectClient={(client) =>
                   selectClient(client.id, client.raw_manager_notes)
                 }
@@ -575,82 +579,76 @@ export function ManagerWorkspacePage() {
                           onRematchWithOverride={handleRematchWithOverride}
                         />
 
-                        <AnimatePresence mode="wait">
-                          {activeMatchResult && computedSummary ? (
-                            <motion.div
-                              key={`bundle-section-${activeMatchResult.selection_id}`}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -8 }}
-                              transition={{ duration: 0.24, ease: "easeOut" }}
+                        {activeMatchResult && computedSummary ? (
+                          <motion.div
+                            key={`bundle-section-${activeMatchResult.selection_id}`}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                          >
+                            <BundleConstructorSection
+                              variants={activeMatchResult.bundle_variants}
+                              selectedVariantGroup={activeVariantGroup}
+                              onSelectVariantGroup={handleSelectVariantGroup}
+                              summary={computedSummary}
+                              onToggleEventIncluded={(evId) =>
+                                toggleEventIncluded(activeClient.id, evId)
+                              }
+                              onChangeEventTariff={(evId, tarId) =>
+                                changeEventTariff(activeClient.id, evId, tarId)
+                              }
+                              onUpdateEventRationale={(evId, text) =>
+                                updateEventRationale(activeClient.id, evId, text)
+                              }
+                              onOpenEventDetails={(evId) =>
+                                setSelectedEventIdForDrawer(evId)
+                              }
+                            />
+                          </motion.div>
+                        ) : (
+                          !matchMutation.isPending &&
+                          (needsWorkspaceSync && isWorkspaceFetching ? (
+                            <div
+                              key="bundle-hydrating"
+                              className="flex h-40 items-center justify-center rounded-[12px] border border-[#262D35] bg-[#161B22] text-xs text-[#8E95A0]"
                             >
-                              <BundleConstructorSection
-                                variants={activeMatchResult.bundle_variants}
-                                selectedVariantGroup={activeVariantGroup}
-                                onSelectVariantGroup={handleSelectVariantGroup}
-                                summary={computedSummary}
-                                onToggleEventIncluded={(evId) =>
-                                  toggleEventIncluded(activeClient.id, evId)
-                                }
-                                onChangeEventTariff={(evId, tarId) =>
-                                  changeEventTariff(activeClient.id, evId, tarId)
-                                }
-                                onUpdateEventRationale={(evId, text) =>
-                                  updateEventRationale(activeClient.id, evId, text)
-                                }
-                                onOpenEventDetails={(evId) =>
-                                  setSelectedEventIdForDrawer(evId)
-                                }
-                              />
-                            </motion.div>
+                              Загрузка сохранённой подборки клиента...
+                            </div>
                           ) : (
-                            !matchMutation.isPending &&
-                            (needsWorkspaceSync && isWorkspaceFetching ? (
-                              <div
-                                key="bundle-hydrating"
-                                className="flex h-40 items-center justify-center rounded-[12px] border border-[#262D35] bg-[#161B22] text-xs text-[#8E95A0]"
-                              >
-                                Загрузка сохранённой подборки клиента...
-                              </div>
-                            ) : (
-                              <BundleOnboardingEmptyState key="bundle-empty" />
-                            ))
-                          )}
-                        </AnimatePresence>
+                            <BundleOnboardingEmptyState key="bundle-empty" />
+                          ))
+                        )}
                       </div>
 
                       {/* Правая закрепленная колонка итога и публикации (4 из 12 = ~33-38%, sticky) */}
                       <div className="xl:col-span-4">
-                        <AnimatePresence mode="wait">
-                          {activeMatchResult && computedSummary ? (
-                            <motion.div
-                              key={`pitch-panel-${activeMatchResult.selection_id}`}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -8 }}
-                              transition={{ duration: 0.24, ease: "easeOut" }}
-                            >
-                              <FinancialAndPitchPanel
-                                companyName={activeClient.company_name}
-                                summary={computedSummary}
-                                pitchText={activePitchText}
-                                onPitchChange={(text) =>
-                                  setPitchText(activeClient.id, text)
-                                }
-                                onGeneratePitch={handleGeneratePitch}
-                                isGeneratingPitch={
-                                  generatePitchMutation.isPending
-                                }
-                                onPublish={handlePublishSelection}
-                                isPublishing={publishMutation.isPending}
-                                publishedUrl={activePublishedUrl}
-                                onCopyLink={handleCopyShowcaseLink}
-                              />
-                            </motion.div>
-                          ) : (
-                            <PitchWaitingEmptyState key="pitch-empty" />
-                          )}
-                        </AnimatePresence>
+                        {activeMatchResult && computedSummary ? (
+                          <motion.div
+                            key={`pitch-panel-${activeMatchResult.selection_id}`}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                          >
+                            <FinancialAndPitchPanel
+                              companyName={activeClient.company_name}
+                              summary={computedSummary}
+                              pitchText={activePitchText}
+                              onPitchChange={(text) =>
+                                setPitchText(activeClient.id, text)
+                              }
+                              onGeneratePitch={handleGeneratePitch}
+                              isGeneratingPitch={
+                                generatePitchMutation.isPending
+                              }
+                              onPublish={handlePublishSelection}
+                              isPublishing={publishMutation.isPending}
+                              publishedUrl={activePublishedUrl}
+                              onCopyLink={handleCopyShowcaseLink}
+                            />
+                          </motion.div>
+                        ) : (
+                          <PitchWaitingEmptyState key="pitch-empty" />
+                        )}
                       </div>
                     </div>
                   </motion.div>

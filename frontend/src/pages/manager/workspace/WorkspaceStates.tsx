@@ -103,15 +103,11 @@ export function BundleOnboardingEmptyState() {
       className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-8 text-center shadow-sm"
     >
       <Compass className="mx-auto h-9 w-9 text-[#E5C378]" strokeWidth={1.5} />
-      <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
-        Готово к формированию пакетов участия
+      <h3 className="mt-3 text-sm font-semibold text-[#E5C378]">
+        Варианты пакетов не сформированы
       </h3>
-      <p className="mx-auto mt-1.5 max-w-lg text-xs leading-relaxed text-[#8E95A0]">
-        Проверьте конспект установочной встречи выше и нажмите{" "}
-        <strong className="font-semibold text-white">
-          «Подобрать варианты пакетов»
-        </strong>
-        . Система извлечет критерии отбора, сверит календарь без накладок и сформирует 2 пакета с расчетом выгоды Early Bird.
+      <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-[#8E95A0]">
+        Заполните конспект встречи выше и запустите подбор.
       </p>
     </motion.div>
   );
@@ -127,14 +123,11 @@ export function PitchWaitingEmptyState() {
       transition={{ duration: 0.2 }}
       className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-5 shadow-sm"
     >
-      <span className="font-serif italic font-semibold text-xs tracking-wide text-[#E5C378]">
-        Сводка и публикация КП
-      </span>
-      <h3 className="mt-1 font-serif italic text-sm font-semibold text-white">
-        Ожидание расчёта подборки
+      <h3 className="text-sm font-semibold text-white">
+        Сводка и письмо КП
       </h3>
-      <p className="mt-1.5 font-serif italic text-xs leading-relaxed text-white/90">
-        После запуска подбора здесь появится финансовая сводка пакета (внешние взносы организаторов и выгода Early Bird), редактор персонального письма и выпуск ссылки на витрину клиента.
+      <p className="mt-1.5 text-xs leading-relaxed text-[#8E95A0]">
+        Появятся после расчёта подборки.
       </p>
     </motion.div>
   );

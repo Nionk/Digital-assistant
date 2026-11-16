@@ -21,6 +21,7 @@ export type { ComputedBundleItem, ComputedFinancialSummary };
 export { computeClientFinancialSummary };
 
 export type ManagerWorkspaceMode = "matching" | "catalog";
+export type ClientStatusFilter = "all" | "published" | "draft" | "new";
 
 export interface PublishedSelectionInfo {
   selectionId?: number | null;
@@ -39,6 +40,7 @@ interface ManagerState {
   isSidebarCollapsed: boolean;
   selectedClientId: number | null;
   clientSearchQuery: string;
+  clientStatusFilter: ClientStatusFilter;
 
   // Черновики заметок и свернутость конспекта по клиентам
   notesByClient: Record<number, string>;
@@ -73,6 +75,7 @@ interface ManagerState {
   clearSelectedClient: () => void;
   removeClientWorkspace: (clientId: number) => void;
   setClientSearchQuery: (q: string) => void;
+  setClientStatusFilter: (filter: ClientStatusFilter) => void;
   setClientNotes: (clientId: number, notes: string) => void;
   syncClientNotes: (clientId: number, notes: string) => void;
   setNotesCollapsed: (collapsed: boolean) => void;
@@ -222,6 +225,7 @@ export const useManagerStore = create<ManagerState>()(
     (set) => ({
       isProducerModalOpen: false,
       clientSearchQuery: "",
+      clientStatusFilter: "all",
       catalogTargetEventId: null,
       sessionMatchedSelectionByClient: {},
       sessionDirtyDraftByClient: {},
@@ -295,6 +299,7 @@ export const useManagerStore = create<ManagerState>()(
         })),
 
       setClientSearchQuery: (q) => set({ clientSearchQuery: q }),
+      setClientStatusFilter: (filter) => set({ clientStatusFilter: filter }),
 
       setClientNotes: (clientId, notes) =>
         set((state) => ({
@@ -677,6 +682,7 @@ export const useManagerStore = create<ManagerState>()(
         set({
           isProducerModalOpen: false,
           clientSearchQuery: "",
+          clientStatusFilter: "all",
           catalogTargetEventId: null,
           sessionMatchedSelectionByClient: {},
           sessionDirtyDraftByClient: {},
