@@ -481,6 +481,10 @@ export function EventsCatalogView() {
       <ScraperRunModal
         isOpen={isScraperModalOpen}
         onClose={() => setIsScraperModalOpen(false)}
+        onOpenEventDetails={(eventId) => {
+          setSelectedEventIdForDrawer(eventId);
+          setIsScraperModalOpen(false);
+        }}
       />
 
       <AnimatePresence>
