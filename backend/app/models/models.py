@@ -252,3 +252,110 @@ class LLMCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     event: Mapped["Event | None"] = relationship()
+
+
+class ScraperSource(Base):
+    __tablename__ = "scraper_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    catalog_urls: Mapped[list[str]] = mapped_column(
+        JSONB, server_default="[]", default=list, nullable=False
+    )
+    adapter_type: Mapped[str] = mapped_column(
+        String(30), server_default="html_list", default="html_list", nullable=False
+    )
+    card_url_patterns: Mapped[list[str]] = mapped_column(
+        JSONB, server_default="[]", default=list, nullable=False
+    )
+    exclude_url_patterns: Mapped[list[str]] = mapped_column(
+        JSONB, server_default="[]", default=list, nullable=False
+    )
+    b2b_filter_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
+    )
+    russia_online_only: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", default=True, nullable=False
+    )
+    use_jina_reader: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
+    )
+    encoding: Mapped[str] = mapped_column(
+        String(50), server_default="utf-8", default="utf-8", nullable=False
+    )
+    required_cookies: Mapped[dict[str, str]] = mapped_column(
+        JSONB, server_default="{}", default=dict, nullable=False
+    )
+    max_urls_per_run: Mapped[int] = mapped_column(
+        Integer, server_default="10", default=10, nullable=False
+    )
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", default=True, nullable=False
+    )
+    is_builtin: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ScraperSeenUrl(Base):
+    __tablename__ = "scraper_seen_urls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    source_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    outcome: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    event_id: Mapped[int | None] = mapped_column(
+        ForeignKey("events.id", ondelete="SET NULL"), nullable=True
+    )
+    recheck_attempts: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    event: Mapped["Event | None"] = relationship()
+
+
+class ScraperRun(Base):
+    __tablename__ = "scraper_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    target_source_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    triggered_by: Mapped[str] = mapped_column(
+        String(30), server_default="manual", default="manual", nullable=False
+    )
+    sources_total: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
+    sources_done: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
+    urls_discovered: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    events_created: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    events_updated: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    rejected_b2c: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
+    rejected_geo: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
+    rejected_past: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    errors_count: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
+    source_logs: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, server_default="[]", default=list, nullable=False
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

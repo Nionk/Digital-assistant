@@ -114,6 +114,10 @@ class EventIngestionSchema(BaseModel):
         None,
         description="Город проведения в именительном падеже ('Москва', 'Казань'). Если мероприятие онлайн — строго null!",
     )
+    country: str | None = Field(
+        None,
+        description="Страна проведения (например, 'Россия'). Для онлайн-событий без привязки к стране — null.",
+    )
     is_online: bool = Field(
         ...,
         description="True для вебинаров и онлайн-конференций. Если city == null, is_online ОБЯЗАН быть True.",
@@ -155,6 +159,21 @@ class EventIngestionSchema(BaseModel):
     @model_validator(mode="after")
     def validate_event_ingestion(self) -> Self:
         """Гарантирует соблюдение CHECK (city IS NOT NULL OR is_online = true), нормализацию города и end_date >= start_date."""
+        if self.country is not None:
+            cleaned_country = self.country.strip()
+            if not cleaned_country or cleaned_country.lower() in (
+                "null",
+                "none",
+                "нет",
+                "не указана",
+                "не указано",
+                "unknown",
+                "-",
+            ):
+                self.country = None
+            else:
+                self.country = cleaned_country
+
         if self.city and self.city.strip().lower() not in ("онлайн", "online", "нет", "null"):
             self.city = normalize_city(self.city)
         else:
