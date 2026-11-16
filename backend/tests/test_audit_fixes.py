@@ -161,6 +161,7 @@ def test_scraper_endpoint_validation_and_concurrency(client):
     """Проверка валидации источников и защиты от параллельного запуска скрейпера."""
     import app.api.manager as manager_module
     from app.core.security import get_current_manager
+    from app.models.models import ScraperRun
 
     mock_mgr = User(
         id=1,
@@ -170,6 +171,27 @@ def test_scraper_endpoint_validation_and_concurrency(client):
         telegram_chat_id=111,
     )
     app.dependency_overrides[get_current_manager] = lambda: mock_mgr
+
+    async def override_session():
+        mock_session = AsyncMock()
+        mock_session.new = set()
+        mock_session.add = MagicMock()
+
+        async def _execute(stmt):
+            res = MagicMock()
+            res.scalars.return_value.all.return_value = []
+            res.scalar_one_or_none.return_value = None
+            return res
+
+        async def _refresh(obj):
+            if isinstance(obj, ScraperRun) and obj.id is None:
+                obj.id = 1
+
+        mock_session.execute = AsyncMock(side_effect=_execute)
+        mock_session.refresh = AsyncMock(side_effect=_refresh)
+        yield mock_session
+
+    app.dependency_overrides[get_async_session] = override_session
 
     try:
         # 1. Неизвестный источник -> 422 (или 400)
