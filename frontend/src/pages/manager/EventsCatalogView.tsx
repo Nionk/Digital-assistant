@@ -16,6 +16,8 @@ import {
   buildCityMultiOptions,
   buildThemeMultiOptions,
   filterAndSortCatalogEvents,
+  getTodayIsoDate,
+  isPastEvent,
 } from "./catalog/catalogUtils";
 import { CatalogHeaderAndFilters } from "./catalog/CatalogHeaderAndFilters";
 import { CatalogTable } from "./catalog/CatalogTable";
@@ -31,6 +33,7 @@ import { CatalogCardsGrid } from "./catalog/CatalogCardsGrid";
 export function EventsCatalogView() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedFormat, setSelectedFormat] = React.useState<string>("all");
+  const [selectedRole, setSelectedRole] = React.useState<string>("all");
   const [selectedCities, setSelectedCities] = React.useState<string[]>([]);
   const [selectedThemes, setSelectedThemes] = React.useState<string[]>([]);
   const [selectedDataStatus, setSelectedDataStatus] = React.useState<string>("all");
@@ -38,6 +41,7 @@ export function EventsCatalogView() {
   const [dateTo, setDateTo] = React.useState<string>("");
   const [sortBy, setSortBy] = React.useState<string>("date_asc");
   const [onlyEarlyBird, setOnlyEarlyBird] = React.useState<boolean>(false);
+  const [onlyUpcoming, setOnlyUpcoming] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<"table" | "cards">("table");
   const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
     React.useState<number | null>(null);
@@ -146,45 +150,91 @@ export function EventsCatalogView() {
     [events]
   );
 
+  const todayIso = getTodayIsoDate();
+
   const earlyBirdCount = React.useMemo(
     () => events.filter((e) => e.tariffs.some((t) => t.savings > 0)).length,
     [events]
   );
 
-  const filteredEvents = React.useMemo(
+  const upcomingCount = React.useMemo(
+    () => events.filter((e) => !isPastEvent(e, todayIso)).length,
+    [events, todayIso]
+  );
+
+  const roleCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {
+      speaker: 0,
+      delegate: 0,
+      sponsor: 0,
+    };
+    for (const ev of events) {
+      const roles = new Set(ev.tariffs.map((t) => t.participation_role));
+      for (const r of roles) {
+        counts[r] = (counts[r] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [events]);
+
+  const baseFilteredEvents = React.useMemo(
     () =>
       filterAndSortCatalogEvents(events, {
         selectedFormat,
+        selectedRole,
         selectedCities,
         selectedThemes,
         onlyEarlyBird,
+        onlyUpcoming: false,
         searchQuery,
         sortBy,
+        todayIso,
       }),
     [
       events,
       selectedFormat,
+      selectedRole,
       selectedCities,
       selectedThemes,
       onlyEarlyBird,
       searchQuery,
       sortBy,
+      todayIso,
     ]
+  );
+
+  const hiddenPastCount = React.useMemo(
+    () =>
+      onlyUpcoming
+        ? baseFilteredEvents.filter((e) => isPastEvent(e, todayIso)).length
+        : 0,
+    [baseFilteredEvents, onlyUpcoming, todayIso]
+  );
+
+  const filteredEvents = React.useMemo(
+    () =>
+      onlyUpcoming
+        ? baseFilteredEvents.filter((e) => !isPastEvent(e, todayIso))
+        : baseFilteredEvents,
+    [baseFilteredEvents, onlyUpcoming, todayIso]
   );
 
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     selectedFormat !== "all" ||
+    selectedRole !== "all" ||
     selectedCities.length > 0 ||
     selectedThemes.length > 0 ||
     selectedDataStatus !== "all" ||
     Boolean(dateFrom) ||
     Boolean(dateTo) ||
-    onlyEarlyBird;
+    onlyEarlyBird ||
+    onlyUpcoming;
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedFormat("all");
+    setSelectedRole("all");
     setSelectedCities([]);
     setSelectedThemes([]);
     setSelectedDataStatus("all");
@@ -192,6 +242,7 @@ export function EventsCatalogView() {
     setDateTo("");
     setSortBy("date_asc");
     setOnlyEarlyBird(false);
+    setOnlyUpcoming(false);
   };
 
   return (
@@ -200,10 +251,15 @@ export function EventsCatalogView() {
         totalCount={events.length}
         filteredCount={filteredEvents.length}
         earlyBirdCount={earlyBirdCount}
+        upcomingCount={upcomingCount}
+        hiddenPastCount={hiddenPastCount}
+        roleCounts={roleCounts}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         selectedFormat={selectedFormat}
         onFormatChange={setSelectedFormat}
+        selectedRole={selectedRole}
+        onRoleChange={setSelectedRole}
         cityOptions={cityOptions}
         selectedCities={selectedCities}
         onCitiesChange={setSelectedCities}
@@ -221,6 +277,8 @@ export function EventsCatalogView() {
         onSortByChange={setSortBy}
         onlyEarlyBird={onlyEarlyBird}
         onToggleEarlyBird={() => setOnlyEarlyBird((prev) => !prev)}
+        onlyUpcoming={onlyUpcoming}
+        onToggleUpcoming={() => setOnlyUpcoming((prev) => !prev)}
         hasActiveFilters={hasActiveFilters}
         onResetFilters={handleResetFilters}
         viewMode={viewMode}
@@ -240,44 +298,83 @@ export function EventsCatalogView() {
         <div className="rounded-[12px] border border-[#21262F] bg-[#0E1116] p-10 text-center shadow-sm">
           <Compass className="mx-auto h-9 w-9 text-[#E5C378]" strokeWidth={1.5} />
           <h3 className="mt-3 font-serif italic text-sm font-semibold text-[#E5C378]">
-            Мероприятия по заданным фильтрам не найдены
+            {onlyUpcoming && hiddenPastCount > 0
+              ? "Предстоящих мероприятий по заданным фильтрам нет"
+              : "Мероприятия по заданным фильтрам не найдены"}
           </h3>
           <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-[#8E95A0]">
-            Попробуйте смягчить критерии поиска (сбросить тему, формат или отключить фильтр Early Bird)
+            {onlyUpcoming && hiddenPastCount > 0
+              ? `В архиве найдено прошедших площадок: ${hiddenPastCount}. Вы можете показать их в 1 клик или сбросить все фильтры.`
+              : "Попробуйте смягчить критерии поиска (сбросить тему, формат, роль или отключить фильтр Early Bird)"}
           </p>
-          <Button
-            type="button"
-            variant="monolith"
-            size="sm"
-            onClick={handleResetFilters}
-            className="mt-4 cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" strokeWidth={1.75} />
-            <span>Сбросить все фильтры</span>
-          </Button>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {onlyUpcoming && hiddenPastCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOnlyUpcoming(false)}
+                className="cursor-pointer border-[#7C5A20]/60 bg-[#1E190E] text-xs text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white"
+              >
+                <span>Показать прошедшие ({hiddenPastCount})</span>
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="monolith"
+              size="sm"
+              onClick={handleResetFilters}
+              className="cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" strokeWidth={1.75} />
+              <span>Сбросить все фильтры</span>
+            </Button>
+          </div>
         </div>
       ) : (
-        <AnimatePresence mode="wait" initial={false}>
-          {viewMode === "table" ? (
-            <CatalogTable
-              key="catalog-table"
-              events={filteredEvents}
-              selectedEventId={selectedEventForDrawer?.event_id ?? null}
-              copiedEventId={copiedEventId}
-              onSelectEvent={setSelectedEventIdForDrawer}
-              onCopyLocation={handleCopyLocation}
-            />
-          ) : (
-            <CatalogCardsGrid
-              key="catalog-cards"
-              events={filteredEvents}
-              selectedEventId={selectedEventForDrawer?.event_id ?? null}
-              copiedEventId={copiedEventId}
-              onSelectEvent={setSelectedEventIdForDrawer}
-              onCopyLocation={handleCopyLocation}
-            />
+        <>
+          <AnimatePresence mode="wait" initial={false}>
+            {viewMode === "table" ? (
+              <CatalogTable
+                key="catalog-table"
+                events={filteredEvents}
+                todayIso={todayIso}
+                selectedEventId={selectedEventForDrawer?.event_id ?? null}
+                copiedEventId={copiedEventId}
+                onSelectEvent={setSelectedEventIdForDrawer}
+                onCopyLocation={handleCopyLocation}
+              />
+            ) : (
+              <CatalogCardsGrid
+                key="catalog-cards"
+                events={filteredEvents}
+                todayIso={todayIso}
+                selectedEventId={selectedEventForDrawer?.event_id ?? null}
+                copiedEventId={copiedEventId}
+                onSelectEvent={setSelectedEventIdForDrawer}
+                onCopyLocation={handleCopyLocation}
+              />
+            )}
+          </AnimatePresence>
+
+          {onlyUpcoming && hiddenPastCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#21262F] bg-[#12161A] px-3.5 py-2 text-xs text-[#8E95A0]">
+              <span className="font-serif italic">
+                Скрыто прошедших мероприятий:{" "}
+                <strong className="font-sans not-italic font-semibold text-white tabular-nums">
+                  {hiddenPastCount}
+                </strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setOnlyUpcoming(false)}
+                className="inline-flex items-center gap-1 rounded-[4px] border border-[#7C5A20]/50 bg-[#1E190E] px-2.5 py-1 text-[11px] font-medium text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white transition-colors cursor-pointer"
+              >
+                Показать весь архив ({hiddenPastCount})
+              </button>
+            </div>
           )}
-        </AnimatePresence>
+        </>
       )}
 
       <EventDetailsDrawer

@@ -4,6 +4,7 @@ import {
   MapPin,
   Globe,
   Check,
+  Plus,
   Compass,
   Edit3,
   Building,
@@ -257,8 +258,8 @@ function EventBuilderRow({
         "rounded-[8px] border p-3.5 transition-all duration-200 ease-in-out hover:border-[#3A4553]",
         isBonusSlot
           ? isIncluded
-            ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white opacity-100"
-            : "border-[#1D232A] bg-[#101317] text-[#9CA3AF] opacity-80 hover:opacity-100 hover:border-[#3A4553]"
+            ? "border-[#7C5A20] bg-[#1A1E24] shadow-[0_0_12px_rgba(229,195,120,0.08)] text-white opacity-100"
+            : "border-[#1D232A] bg-[#101317] text-[#9CA3AF] opacity-85 hover:opacity-100 hover:border-[#3A4553]"
           : isIncluded
             ? "border-[#262C35] bg-[#1A1E24] shadow-sm text-white"
             : "border-[#21262F] bg-[#14181D]/60 opacity-60 text-[#8E95A0]"
@@ -508,6 +509,32 @@ function EventBuilderRow({
             >
               {selectedTariff.included_benefits}
             </p>
+          )}
+
+          {isBonusSlot && (
+            <button
+              type="button"
+              onClick={onToggleIncluded}
+              aria-pressed={isIncluded}
+              className={cn(
+                "mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-[6px] border px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer select-none",
+                isIncluded
+                  ? "border-[#34D399]/70 bg-[#0E241E] text-[#34D399] hover:border-[#34D399] hover:bg-[#133129]"
+                  : "border-[#7C5A20]/80 bg-[#1E190E] text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white"
+              )}
+            >
+              {isIncluded ? (
+                <>
+                  <Check className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                  <span>Включено в КП</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5 shrink-0 stroke-[2.25]" />
+                  <span>Включить в КП</span>
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>

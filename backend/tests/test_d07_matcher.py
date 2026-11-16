@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from sqlalchemy import func, select
+
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
 from app.models.models import Client, Event, EventTariff, Selection, SelectionItem
@@ -19,7 +21,7 @@ from app.services.matcher import (
     get_scored_candidates,
     run_client_matching_pipeline,
 )
-from sqlalchemy import func, select
+from app.services.matcher.candidates import _calculate_domain_bonus
 from tests.test_d08_d09_d10 import is_postgres_online
 
 
@@ -255,6 +257,204 @@ class TestD07Matcher(unittest.IsolatedAsyncioTestCase):
         v1_tol_ids = {c.event.id for c in variants_tol[0].candidates}
         v2_tol_ids = {c.event.id for c in variants_tol[1].candidates}
         self.assertFalse(v2_tol_ids < v1_tol_ids)
+
+    async def test_02c_thematic_relevance_and_synonym_fallback_unit(self) -> None:
+        """Проверка приоритета тематической релевантности над шумом vec_distance и сохранения синонимов."""
+        ev_bim = Event(
+            id=101,
+            canonical_title="Форум строительства и BIM",
+            event_format="forum",
+            city="Санкт-Петербург",
+            is_online=False,
+            start_date=date(2026, 11, 25),
+            end_date=date(2026, 11, 25),
+            themes=["строительство", "BIM", "цифровизация"],
+            summary="Отраслевой форум по цифровизации стройки и внедрению BIM.",
+        )
+        ev_re_digital = Event(
+            id=102,
+            canonical_title="Недвижимость и капитал",
+            event_format="conference",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 12, 10),
+            end_date=date(2026, 12, 10),
+            themes=["недвижимость", "девелопмент", "цифровые решения"],
+            summary="Конференция для девелоперов и инвесторов.",
+        )
+        ev_finance_offtopic = Event(
+            id=103,
+            canonical_title="Финансовый директор 2026",
+            event_format="conference",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 11, 20),
+            end_date=date(2026, 11, 20),
+            themes=["финансы", "финансовые директора", "IPO", "ERP"],
+            summary="Премия для финансовых директоров.",
+        )
+
+        profile = ClientQueryExtracted(
+            cities=["Москва"],
+            include_online=True,
+            total_budget_max=350000.0,
+            target_events_count=2,
+            preferred_formats=["conference"],
+            required_roles=["delegate", "speaker"],
+            min_speaker_events=1,
+            themes_keywords=["цифровизация", "стройка", "BIM"],
+            semantic_search_query="Мероприятия по цифровизации стройки и BIM",
+        )
+
+        # 1. Тематически релевантный кандидат с пересечением тегов всегда обходит далёкий оффтоп,
+        # даже если оффтоп имеет более высокий базовый векторный ранг + совпадение города и формата.
+        bonus_bim = _calculate_domain_bonus(ev_bim, profile)
+        bonus_re = _calculate_domain_bonus(ev_re_digital, profile)
+        bonus_fin = _calculate_domain_bonus(ev_finance_offtopic, profile)
+        self.assertGreater(0.0145 + bonus_bim, 0.0164 + bonus_fin)
+        self.assertGreater(0.0156 + bonus_re, 0.0164 + bonus_fin)
+
+        t_del = TariffOptionOut(
+            tariff_id=1,
+            tariff_name="Делегат",
+            participation_role="delegate",
+            base_price=50000.0,
+            actual_price=50000.0,
+            savings=0.0,
+        )
+        tariffs_map = {101: [t_del], 102: [t_del], 103: [t_del]}
+
+        # 2. При наличии тематически релевантных кандидатов явный оффтоп отсеивается
+        async def _fake_rrf(*_args, **_kwargs):
+            return [(ev_finance_offtopic, 0.016393), (ev_re_digital, 0.015625), (ev_bim, 0.031500)]
+
+        async def _fake_tariffs(*_args, **_kwargs):
+            return tariffs_map
+
+        with (
+            patch("app.services.matcher.fetch_hybrid_rrf_candidates", side_effect=_fake_rrf),
+            patch("app.services.matcher.candidates._load_tariffs_by_event", side_effect=_fake_tariffs),
+        ):
+            scored = await get_scored_candidates(None, profile, date(2026, 11, 16))  # type: ignore[arg-type]
+
+        scored_ids = [c.event.id for c in scored]
+        self.assertIn(101, scored_ids)
+        self.assertIn(102, scored_ids)
+        self.assertNotIn(103, scored_ids)
+        self.assertEqual(scored_ids[0], 101)
+
+        # 3. Если запрос сформулирован синонимами и 0 кандидатов совпали лексически/FTS
+        # (только векторные RRF-ранги <= 1/61), векторные кандидаты НЕ отбрасываются
+        async def _fake_rrf_vector_only(*_args, **_kwargs):
+            return [(ev_finance_offtopic, 0.016393), (ev_re_digital, 0.016129), (ev_bim, 0.015873)]
+
+        synonym_profile = ClientQueryExtracted(
+            cities=["Москва"],
+            include_online=True,
+            total_budget_max=350000.0,
+            target_events_count=2,
+            themes_keywords=["градостроительная политика", "умные здания"],
+            semantic_search_query="Конференции по градостроительной политике и умным зданиям",
+        )
+        with (
+            patch("app.services.matcher.fetch_hybrid_rrf_candidates", side_effect=_fake_rrf_vector_only),
+            patch("app.services.matcher.candidates._load_tariffs_by_event", side_effect=_fake_tariffs),
+        ):
+            synonym_scored = await get_scored_candidates(None, synonym_profile, date(2026, 11, 16))  # type: ignore[arg-type]
+
+        self.assertEqual(len(synonym_scored), 3)
+
+    def test_02d_bonus_on_request_ordering_unit(self) -> None:
+        """Бонусный слот сортируется строго по релевантности, а цена 'По запросу' не подменяет платные пакеты."""
+        ev_paid = Event(
+            id=201,
+            canonical_title="Недвижимость и капитал",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 12, 10),
+            end_date=date(2026, 12, 10),
+        )
+        ev_nisf = Event(
+            id=202,
+            canonical_title="НИСФ 2026",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 11, 25),
+            end_date=date(2026, 11, 25),
+        )
+        ev_qube = Event(
+            id=203,
+            canonical_title="QUBE EXPO 2026",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 12, 1),
+            end_date=date(2026, 12, 3),
+        )
+        ev_other_on_req = Event(
+            id=204,
+            canonical_title="Случайный митап",
+            city="Москва",
+            is_online=False,
+            start_date=date(2026, 12, 5),
+            end_date=date(2026, 12, 5),
+        )
+
+        t_paid_spk = TariffOptionOut(
+            tariff_id=1,
+            tariff_name="Спикер",
+            participation_role="speaker",
+            base_price=25000.0,
+            actual_price=25000.0,
+            savings=0.0,
+        )
+        t_req_spk = TariffOptionOut(
+            tariff_id=2,
+            tariff_name="Спикер (по запросу)",
+            participation_role="speaker",
+            base_price=None,
+            actual_price=None,
+            savings=0.0,
+        )
+        t_req_del = TariffOptionOut(
+            tariff_id=3,
+            tariff_name="Делегат (по запросу)",
+            participation_role="delegate",
+            base_price=None,
+            actual_price=None,
+            savings=0.0,
+        )
+
+        # Намеренно передаем кандидатов в неотсортированном порядке
+        cands = [
+            ScoredEventCandidate(
+                event=ev_other_on_req, rrf_score=0.015, all_tariffs=[t_req_del], priced_tariffs=[], on_request_tariffs=[t_req_del]
+            ),
+            ScoredEventCandidate(
+                event=ev_paid, rrf_score=0.036, all_tariffs=[t_paid_spk], priced_tariffs=[t_paid_spk], on_request_tariffs=[]
+            ),
+            ScoredEventCandidate(
+                event=ev_qube, rrf_score=0.097, all_tariffs=[t_req_del], priced_tariffs=[], on_request_tariffs=[t_req_del]
+            ),
+            ScoredEventCandidate(
+                event=ev_nisf, rrf_score=0.105, all_tariffs=[t_req_del, t_req_spk], priced_tariffs=[], on_request_tariffs=[t_req_del, t_req_spk]
+            ),
+        ]
+        profile = ClientQueryExtracted(
+            cities=["Москва"],
+            include_online=True,
+            total_budget_max=350000.0,
+            target_events_count=2,
+            required_roles=["delegate", "speaker"],
+            min_speaker_events=1,
+            themes_keywords=["цифровизация", "стройка", "BIM"],
+            semantic_search_query="цифровизация стройки и BIM",
+        )
+
+        variants, bonus_pairs = build_bundles(cands, profile)
+        self.assertEqual(len(variants), 1)
+        self.assertEqual(variants[0].total_actual_price, 25000.0)
+        self.assertEqual([c.event.id for c, _ in bonus_pairs[:2]], [202, 203])
+        self.assertEqual(bonus_pairs[0][1].participation_role, "speaker")
 
     @unittest.skipUnless(is_postgres_online(), "Требуется запущенный контейнер PostgreSQL")
     async def test_03_build_bundles_performance_and_diversification(self) -> None:

@@ -16,11 +16,19 @@ import {
   formatRub,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { getEventPriceSummary, getEventMaxSavings } from "./catalogUtils";
+import {
+  CATALOG_ROLE_LABELS,
+  CATALOG_ROLE_PILL_CLASSES,
+  getEventPriceSummary,
+  getEventMaxSavings,
+  getEventRoles,
+  isPastEvent,
+} from "./catalogUtils";
 import { CatalogWarningsBadge } from "./CatalogWarningsBadge";
 
 interface CatalogCardsGridProps {
   events: CatalogEventItemOut[];
+  todayIso: string;
   selectedEventId: number | null;
   copiedEventId: number | null;
   onSelectEvent: (eventId: number) => void;
@@ -29,6 +37,7 @@ interface CatalogCardsGridProps {
 
 export function CatalogCardsGrid({
   events,
+  todayIso,
   selectedEventId,
   copiedEventId,
   onSelectEvent,
@@ -49,6 +58,8 @@ export function CatalogCardsGrid({
         const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
         const priceSummary = getEventPriceSummary(ev);
         const { savings } = getEventMaxSavings(ev);
+        const roles = getEventRoles(ev);
+        const isPast = isPastEvent(ev, todayIso);
         const isSelected = selectedEventId === ev.event_id;
 
         return (
@@ -56,10 +67,12 @@ export function CatalogCardsGrid({
             key={ev.event_id}
             onClick={() => onSelectEvent(ev.event_id)}
             className={cn(
-              "group flex flex-col justify-between rounded-[10px] border p-4 shadow-sm transition-colors duration-150 active:scale-[0.995] cursor-pointer",
+              "group flex flex-col justify-between rounded-[10px] border p-4 shadow-sm transition-all duration-150 active:scale-[0.995] cursor-pointer",
               isSelected
                 ? "border-[#E5C378] bg-[#1E190E] shadow-[0_0_12px_rgba(229,195,120,0.18)]"
-                : "border-[#262D35] bg-[#161B22] hover:border-[#7C5A20] hover:bg-[#181D24]"
+                : isPast
+                  ? "border-[#21262F] bg-[#12161A]/80 opacity-75 hover:opacity-100 hover:border-[#7C5A20] hover:bg-[#181D24]"
+                  : "border-[#262D35] bg-[#161B22] hover:border-[#7C5A20] hover:bg-[#181D24]"
             )}
           >
             <div>
@@ -116,11 +129,22 @@ export function CatalogCardsGrid({
                         </button>
                       </>
                     )}
-                    {ev.data_status === "needs_enrichment" && (
-                      <Badge variant="ebAmber" className="ml-auto text-[9px] shrink-0">
-                        Требует обогащения
-                      </Badge>
-                    )}
+                    <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                      {isPast && (
+                        <span className="inline-flex items-center rounded-[4px] border border-[#2A313C] bg-[#12161A] px-1.5 py-0.5 text-[10px] font-medium text-[#8E95A0]">
+                          Прошло
+                        </span>
+                      )}
+                      {ev.data_status === "ready" ? (
+                        <Badge variant="ebEmerald" asSlanted={false} className="text-[10px]">
+                          Готово к КП
+                        </Badge>
+                      ) : ev.data_status === "needs_enrichment" ? (
+                        <Badge variant="ebAmber" asSlanted={false} className="text-[10px]">
+                          Требует обогащения
+                        </Badge>
+                      ) : null}
+                    </div>
                   </div>
 
                   <h3
@@ -145,9 +169,20 @@ export function CatalogCardsGrid({
                 </div>
               </div>
 
-              {/* Тематические теги */}
-              {ev.themes.length > 0 && (
+              {/* Роли участия и тематические теги */}
+              {(roles.length > 0 || ev.themes.length > 0) && (
                 <div className="mt-2.5 flex flex-wrap gap-1">
+                  {roles.map((role) => (
+                    <span
+                      key={role}
+                      className={cn(
+                        "inline-flex items-center rounded-[4px] border px-1.5 py-0.5 text-[10px] font-medium leading-tight",
+                        CATALOG_ROLE_PILL_CLASSES[role]
+                      )}
+                    >
+                      {CATALOG_ROLE_LABELS[role]}
+                    </span>
+                  ))}
                   {ev.themes.slice(0, 4).map((t) => (
                     <span
                       key={t}

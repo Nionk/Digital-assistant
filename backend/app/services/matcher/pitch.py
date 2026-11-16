@@ -83,10 +83,18 @@ def build_fallback_pitch(
         else ""
     )
 
+    n_ev = len(v1.candidates)
+    if n_ev == 1:
+        bundle_lead = f"В приоритетный пакет вошла 1 площадка: {titles}."
+    elif 2 <= n_ev <= 4:
+        bundle_lead = f"В приоритетный пакет вошли {n_ev} площадки без пересечений по датам: {titles}."
+    else:
+        bundle_lead = f"В приоритетный пакет вошли {n_ev} площадок без пересечений по датам: {titles}."
+
     pitch = (
         f"Добрый день! По итогам установочной встречи подготовили для компании {client_name} "
         f"рекомендованный календарь профильных мероприятий {themes_clause}.\n\n"
-        f"В приоритетный пакет вошли {len(v1.candidates)} площадки без пересечений по датам: {titles}.\n\n"
+        f"{bundle_lead}\n\n"
         f"Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет {price_str} ₽ (с НДС)"
         f"{budget_clause}."
     )
@@ -263,6 +271,12 @@ async def generate_pitch_and_rationales(
 
     if not selected_variants:
         city_clause = f" (город: {', '.join(profile.cities)})" if profile.cities else ""
+        if bonus_pairs:
+            bonus_titles = ", ".join(f"«{c.event.canonical_title}»" for c, _ in bonus_pairs)
+            return (
+                rationales_map,
+                f"По вашему запросу{city_clause} не найдено площадок с фиксированным прайсом, однако подобраны релевантные профильные мероприятия с тарифами «По запросу»: {bonus_titles}. Включите подходящие площадки из блока «Дополнительные возможности» для согласования с клиентом.",
+            )
         return (
             rationales_map,
             f"По вашему запросу{city_clause} не найдено подходящих пакетных предложений в базе знаний агентства. Рекомендуется скорректировать параметры отбора или добавить новые площадки.",
