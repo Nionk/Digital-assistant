@@ -29,12 +29,15 @@ from app.schemas.manager import (
     ClientSummaryOut,
     ClientUpdateIn,
     ClientWorkspaceOut,
+    GeneratePitchIn,
+    GeneratePitchOut,
     ManagerDashboardOut,
     ManagerEventsCatalogOut,
     ManagerReplyIn,
     ManagerReplyOut,
     PublishSelectionIn,
     PublishSelectionOut,
+    SelectedEventTariffPairIn,
     SelectionActivityOut,
     SelectionItemReactionActivity,
     SelectionQuestionActivity,
@@ -43,7 +46,13 @@ from app.schemas.manager import (
     TariffOptionOut,
     WorkspaceSelectionOut,
 )
-from app.services.matcher import build_tariff_option
+from app.services.matcher import (
+    EvaluatedCombo,
+    ScoredEventCandidate,
+    build_tariff_option,
+    generate_live_pitch_text,
+    has_offline_date_conflict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -536,6 +545,38 @@ async def get_client_workspace(
     )
 
 
+async def _load_and_validate_selected_pairs(
+    db: AsyncSession,
+    final_items: list[SelectedEventTariffPairIn],
+) -> list[tuple[Event, EventTariff, str | None]]:
+    """Батчем (2 запроса без N+1) загружает и проверяет связки (event_id, tariff_id)."""
+    event_ids = {item_in.event_id for item_in in final_items}
+    tariff_ids = {item_in.tariff_id for item_in in final_items}
+
+    events_res = await db.execute(select(Event).where(Event.id.in_(event_ids)))
+    events_by_id = {e.id: e for e in events_res.scalars().all()}
+
+    tariffs_res = await db.execute(select(EventTariff).where(EventTariff.id.in_(tariff_ids)))
+    tariffs_by_id = {t.id: t for t in tariffs_res.scalars().all()}
+
+    validated: list[tuple[Event, EventTariff, str | None]] = []
+    for item_in in final_items:
+        event = events_by_id.get(item_in.event_id)
+        if not event:
+            raise WorkspaceValidationError(f"Мероприятие с ID={item_in.event_id} не найдено")
+
+        tariff = tariffs_by_id.get(item_in.tariff_id)
+        if not tariff:
+            raise WorkspaceValidationError(f"Тариф с ID={item_in.tariff_id} не найден")
+
+        if tariff.event_id != event.id:
+            raise WorkspaceValidationError(
+                f"Тариф ID={item_in.tariff_id} не принадлежит мероприятию ID={item_in.event_id}"
+            )
+        validated.append((event, tariff, item_in.ai_rationale))
+    return validated
+
+
 async def publish_selection_workspace(
     db: AsyncSession,
     selection_id: int,
@@ -558,46 +599,13 @@ async def publish_selection_workspace(
     total_savings = 0.0
     validated_pairs: list[tuple[int, int, str | None]] = []
 
-    # Пакетная валидация всех (event_id, tariff_id) без N+1 запросов к БД
-    event_ids = {item_in.event_id for item_in in payload.final_items}
-    tariff_ids = {item_in.tariff_id for item_in in payload.final_items}
-
-    events_res = await db.execute(select(Event).where(Event.id.in_(event_ids)))
-    events_by_id = {e.id: e for e in events_res.scalars().all()}
-
-    tariffs_res = await db.execute(select(EventTariff).where(EventTariff.id.in_(tariff_ids)))
-    tariffs_by_id = {t.id: t for t in tariffs_res.scalars().all()}
-
-    for item_in in payload.final_items:
-        event = events_by_id.get(item_in.event_id)
-        if not event:
-            raise WorkspaceValidationError(f"Мероприятие с ID={item_in.event_id} не найдено")
-
-        tariff = tariffs_by_id.get(item_in.tariff_id)
-        if not tariff:
-            raise WorkspaceValidationError(f"Тариф с ID={item_in.tariff_id} не найден")
-
-        if tariff.event_id != event.id:
-            raise WorkspaceValidationError(
-                f"Тариф ID={item_in.tariff_id} не принадлежит мероприятию ID={item_in.event_id}"
-            )
-
-        base = float(tariff.base_price) if tariff.base_price is not None else None
-        eb = float(tariff.early_bird_price) if tariff.early_bird_price is not None else None
-
-        if base is None:
-            actual = None
-        elif eb is not None and tariff.early_bird_deadline and tariff.early_bird_deadline >= today:
-            actual = eb
-            if base > eb:
-                total_savings += base - eb
-        else:
-            actual = base
-
-        if actual is not None:
-            total_price += actual
-
-        validated_pairs.append((event.id, tariff.id, item_in.ai_rationale))
+    loaded_pairs = await _load_and_validate_selected_pairs(db, payload.final_items)
+    for event, tariff, ai_rationale in loaded_pairs:
+        tariff_opt = build_tariff_option(tariff, today)
+        if tariff_opt.actual_price is not None:
+            total_price += tariff_opt.actual_price
+        total_savings += tariff_opt.savings
+        validated_pairs.append((event.id, tariff.id, ai_rationale))
 
     selection.status = "published"
     selection.generated_pitch_text = payload.final_pitch_text
@@ -627,6 +635,127 @@ async def publish_selection_workspace(
         public_showcase_url=f"/s/{selection.magic_token}",
         total_package_price=round(total_price, 2),
         total_package_savings=round(total_savings, 2),
+    )
+
+
+async def generate_selection_pitch_workspace(
+    db: AsyncSession,
+    selection_id: int,
+    manager_id: int,
+    payload: GeneratePitchIn,
+) -> GeneratePitchOut:
+    """
+    Валидирует выбранные пары (event_id, tariff_id) по БД, детерминированно пересчитывает
+    итоговую стоимость, экономию Early Bird, ближайший дедлайн и календарные накладки в Python,
+    после чего вызывает живую генерацию сопроводительного письма КП.
+    """
+    selection = await _get_owned_selection(db, selection_id, manager_id, use_select_stmt=True)
+    client = await verify_client_owned_by_manager(db, selection.client_id, manager_id)
+
+    loaded_pairs = await _load_and_validate_selected_pairs(db, payload.final_items)
+    today = today_local()
+
+    candidates: list[ScoredEventCandidate] = []
+    chosen_tariffs: list[TariffOptionOut] = []
+    for event, tariff, _ in loaded_pairs:
+        tariff_opt = build_tariff_option(tariff, today)
+        chosen_tariffs.append(tariff_opt)
+        is_on_request = tariff_opt.actual_price is None
+        candidates.append(
+            ScoredEventCandidate(
+                event=event,
+                rrf_score=0.0,
+                all_tariffs=[tariff_opt],
+                priced_tariffs=[] if is_on_request else [tariff_opt],
+                on_request_tariffs=[tariff_opt] if is_on_request else [],
+            )
+        )
+
+    total_actual = round(sum(t.actual_price or 0.0 for t in chosen_tariffs), 2)
+    total_base = round(sum(t.base_price or 0.0 for t in chosen_tariffs), 2)
+    total_savings = round(sum(t.savings or 0.0 for t in chosen_tariffs), 2)
+    deadlines = [
+        t.early_bird_deadline
+        for t in chosen_tariffs
+        if (t.savings or 0.0) > 0 and t.early_bird_deadline is not None
+    ]
+    earliest_deadline = min(deadlines) if deadlines else None
+    has_on_request = any(t.actual_price is None for t in chosen_tariffs)
+    date_conflict = has_offline_date_conflict(candidates)
+    matched_speaker_count = sum(1 for t in chosen_tariffs if t.participation_role == "speaker")
+
+    raw_notes = (
+        payload.raw_manager_notes
+        if payload.raw_manager_notes is not None
+        else client.raw_manager_notes
+    ) or ""
+
+    parsed_profile = _parse_extracted_profile(client.extracted_profile)
+    fallback_budget = (
+        float(selection.total_budget_limit)
+        if selection.total_budget_limit and selection.total_budget_limit > 0
+        else 300000.0
+    )
+    budget_max = (
+        float(payload.total_budget_max)
+        if payload.total_budget_max is not None
+        else (parsed_profile.total_budget_max if parsed_profile else fallback_budget)
+    )
+    if not payload.include_budget_limit:
+        budget_is_assumed = True
+    elif payload.total_budget_max is not None:
+        budget_is_assumed = False
+    elif parsed_profile is not None:
+        budget_is_assumed = parsed_profile.budget_is_assumed
+    else:
+        budget_is_assumed = True
+
+    if parsed_profile is not None:
+        profile = parsed_profile.model_copy(
+            update={
+                "total_budget_max": budget_max,
+                "budget_is_assumed": budget_is_assumed,
+            }
+        )
+    else:
+        profile = ClientQueryExtracted(
+            date_from=None,
+            date_to=None,
+            total_budget_max=budget_max,
+            budget_is_assumed=budget_is_assumed,
+            semantic_search_query=raw_notes.strip() or "деловые мероприятия",
+        )
+
+    combo = EvaluatedCombo(
+        candidates=tuple(candidates),
+        chosen_tariffs=tuple(chosen_tariffs),
+        total_actual_price=total_actual,
+        total_base_price=total_base,
+        total_savings=total_savings,
+        earliest_deadline=earliest_deadline,
+        combo_score=0.0,
+        is_over_budget_tolerance=total_actual > budget_max,
+        roles_strictly_matched=True,
+        has_date_conflict=date_conflict,
+        matched_speaker_count=matched_speaker_count,
+    )
+
+    pitch_text, used_llm = await generate_live_pitch_text(
+        client.company_name,
+        raw_notes,
+        profile,
+        combo,
+        has_on_request=has_on_request,
+    )
+
+    if selection.status == "draft":
+        selection.generated_pitch_text = pitch_text
+        await db.commit()
+
+    return GeneratePitchOut(
+        selection_id=selection.id,
+        generated_pitch_text=pitch_text,
+        used_llm=used_llm,
     )
 
 

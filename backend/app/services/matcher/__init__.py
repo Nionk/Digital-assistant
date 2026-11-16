@@ -31,8 +31,10 @@ from app.services.matcher.pipeline import (
 from app.services.matcher.pitch import (
     EventRationaleLLMItem,
     PitchAndRationalesLLMResponse,
+    PitchOnlyLLMResponse,
     build_default_rationale,
     build_fallback_pitch,
+    generate_live_pitch_text,
     generate_pitch_and_rationales,
 )
 from app.services.matcher.types import (
@@ -52,6 +54,7 @@ __all__ = [
     "EventRationaleLLMItem",
     "ParticipationRole",
     "PitchAndRationalesLLMResponse",
+    "PitchOnlyLLMResponse",
     "ScoredEventCandidate",
     "build_bundles",
     "build_default_rationale",
@@ -61,6 +64,7 @@ __all__ = [
     "evaluate_candidate_tuple",
     "extract_client_profile",
     "fetch_hybrid_rrf_candidates",
+    "generate_live_pitch_text",
     "generate_pitch_and_rationales",
     "get_embedding",
     "get_scored_candidates",

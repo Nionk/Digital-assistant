@@ -26,6 +26,8 @@ from app.schemas.manager import (
     ClientUpdateIn,
     ClientWorkspaceOut,
     EventUploadOut,
+    GeneratePitchIn,
+    GeneratePitchOut,
     ManagerDashboardOut,
     ManagerEventsCatalogOut,
     ManagerReplyIn,
@@ -44,6 +46,7 @@ from app.services.manager_workspace import (
     WorkspaceNotFoundError,
     WorkspaceValidationError,
     create_manager_client,
+    generate_selection_pitch_workspace,
     get_client_workspace,
     get_selection_activity_summary,
     list_catalog_events,
@@ -288,6 +291,40 @@ async def publish_selection(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (SQLAlchemyError, OSError) as exc:
         logger.error("Ошибка БД при публикации подборки %s: %s", selection_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.post(
+    "/selections/{selection_id}/pitch",
+    response_model=GeneratePitchOut,
+    status_code=status.HTTP_200_OK,
+    summary="Живая перегенерация сопроводительного письма КП через ИИ",
+    description=(
+        "Валидирует выбранные пары (event_id, tariff_id) по БД, детерминированно пересчитывает "
+        "стоимость, экономию Early Bird, ближайший дедлайн и календарные накладки в Python, "
+        "после чего генерирует живое сопроводительное письмо через LLM (с откатом на шаблон при сбое)."
+    ),
+)
+async def generate_selection_pitch(
+    selection_id: int,
+    payload: GeneratePitchIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> GeneratePitchOut:
+    """Перегенерирует сопроводительное письмо КП по актуальному составу конструктора."""
+    try:
+        return await generate_selection_pitch_workspace(
+            db, selection_id, current_manager.id, payload
+        )
+    except WorkspaceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except WorkspaceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при генерации письма подборки %s: %s", selection_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="База данных временно недоступна",
