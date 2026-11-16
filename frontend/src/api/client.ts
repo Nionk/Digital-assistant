@@ -23,8 +23,16 @@ import type {
   MatchResponseOut,
   PublishSelectionIn,
   PublishSelectionOut,
+  ScraperRunDetailOut,
   ScraperRunIn,
   ScraperRunOut,
+  ScraperRunsListOut,
+  ScraperSourceCreateIn,
+  ScraperSourceDeleteOut,
+  ScraperSourceOut,
+  ScraperSourcePreviewIn,
+  ScraperSourcePreviewOut,
+  ScraperSourceUpdateIn,
   SelectionActivityOut,
   ShowcaseViewOut,
   TokenOut,
@@ -289,6 +297,73 @@ export const apiClient = {
       body: JSON.stringify(payload),
       timeoutMs: DEFAULT_TIMEOUT_MS,
     });
+  },
+
+  getScraperSources(): Promise<ScraperSourceOut[]> {
+    return requestJson<ScraperSourceOut[]>("/api/manager/scraper/sources", {
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+  },
+
+  createScraperSource(
+    payload: ScraperSourceCreateIn
+  ): Promise<ScraperSourceOut> {
+    return requestJson<ScraperSourceOut>("/api/manager/scraper/sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+  },
+
+  updateScraperSource(
+    sourceKey: string,
+    payload: ScraperSourceUpdateIn
+  ): Promise<ScraperSourceOut> {
+    return requestJson<ScraperSourceOut>(
+      `/api/manager/scraper/sources/${encodeURIComponent(sourceKey)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      }
+    );
+  },
+
+  deleteScraperSource(sourceKey: string): Promise<ScraperSourceDeleteOut> {
+    return requestJson<ScraperSourceDeleteOut>(
+      `/api/manager/scraper/sources/${encodeURIComponent(sourceKey)}`,
+      {
+        method: "DELETE",
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      }
+    );
+  },
+
+  previewScraperSource(
+    payload: ScraperSourcePreviewIn
+  ): Promise<ScraperSourcePreviewOut> {
+    return requestJson<ScraperSourcePreviewOut>(
+      "/api/manager/scraper/sources/preview",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        timeoutMs: 45_000,
+      }
+    );
+  },
+
+  getScraperRuns(limit = 15): Promise<ScraperRunsListOut> {
+    return requestJson<ScraperRunsListOut>(
+      `/api/manager/scraper/runs?limit=${encodeURIComponent(limit)}`,
+      { timeoutMs: DEFAULT_TIMEOUT_MS }
+    );
+  },
+
+  getLatestScraperRun(): Promise<ScraperRunDetailOut | null> {
+    return requestJson<ScraperRunDetailOut | null>(
+      "/api/manager/scraper/runs/latest",
+      { timeoutMs: DEFAULT_TIMEOUT_MS }
+    );
   },
 
   matchClientEvents(

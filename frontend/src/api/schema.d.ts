@@ -240,10 +240,97 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ручной запуск парсера по одной из утвержденных площадок
-         * @description Ставит в очередь фоновую задачу скрейпинга для выбранного источника.
+         * Ручной запуск парсера по площадке из БД или по всем активным сразу
+         * @description Проверяет источник в таблице scraper_sources, создает запись ScraperRun и ставит задачу в фон.
          */
         post: operations["run_scraper_endpoint_api_manager_scraper_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/scraper/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список всех источников мониторинга (встроенных и пользовательских) */
+        get: operations["list_scraper_sources_api_manager_scraper_sources_get"];
+        put?: never;
+        /** Создание новой пользовательской площадки мониторинга */
+        post: operations["create_scraper_source_api_manager_scraper_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/scraper/sources/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Бесплатный предпросмотр Discovery по первому URL каталога (0 токенов LLM) */
+        post: operations["preview_scraper_source_api_manager_scraper_sources_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/scraper/sources/{source_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удаление пользовательской площадки мониторинга */
+        delete: operations["delete_scraper_source_api_manager_scraper_sources__source_key__delete"];
+        options?: never;
+        head?: never;
+        /** Обновление настроек источника мониторинга */
+        patch: operations["update_scraper_source_api_manager_scraper_sources__source_key__patch"];
+        trace?: never;
+    };
+    "/api/manager/scraper/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** История запусков парсера и статистика по площадкам */
+        get: operations["list_scraper_runs_api_manager_scraper_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/scraper/runs/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Последний (или текущий выполняемый) прогон парсера */
+        get: operations["get_latest_scraper_run_api_manager_scraper_runs_latest_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1265,16 +1352,127 @@ export interface components {
             total_package_savings: number;
         };
         /**
+         * ScraperPreviewCandidateOut
+         * @description Найденный кандидат мероприятия на этапе Discovery Preview.
+         */
+        ScraperPreviewCandidateOut: {
+            /** Url */
+            url: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Snippet
+             * @default
+             */
+            snippet: string;
+            /**
+             * Is Digest
+             * @default false
+             */
+            is_digest: boolean;
+        };
+        /**
+         * ScraperRunDetailOut
+         * @description Полная запись запуска скрейпера (история и live-прогресс).
+         */
+        ScraperRunDetailOut: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Target Source Key */
+            target_source_key: string;
+            /** Triggered By */
+            triggered_by: string;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * Sources Total
+             * @default 0
+             */
+            sources_total: number;
+            /**
+             * Sources Done
+             * @default 0
+             */
+            sources_done: number;
+            /**
+             * Urls Discovered
+             * @default 0
+             */
+            urls_discovered: number;
+            /**
+             * Events Created
+             * @default 0
+             */
+            events_created: number;
+            /**
+             * Events Updated
+             * @default 0
+             */
+            events_updated: number;
+            /**
+             * Rejected B2C
+             * @default 0
+             */
+            rejected_b2c: number;
+            /**
+             * Rejected Geo
+             * @default 0
+             */
+            rejected_geo: number;
+            /**
+             * Rejected Past
+             * @default 0
+             */
+            rejected_past: number;
+            /**
+             * Errors Count
+             * @default 0
+             */
+            errors_count: number;
+            /** Source Logs */
+            source_logs?: components["schemas"]["ScraperRunSourceLogOut"][];
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at?: string | null;
+        };
+        /**
          * ScraperRunIn
-         * @description Запрос на ручной запуск фонового парсера по конкретной площадке.
+         * @description Запрос на ручной запуск фонового парсера по конкретной площадке или всем сразу.
          */
         ScraperRunIn: {
             /**
              * Source Key
-             * @description Ключ площадки (expomap_construction, expomap_design, architime, archi_ru, helpinver, archdialog, design_mate, votkuda, archdaily, all)
-             * @enum {string}
+             * @description Ключ площадки из scraper_sources или 'all' для обхода всех активных площадок
              */
-            source_key: "expomap_construction" | "expomap_design" | "architime" | "archi_ru" | "helpinver" | "archdialog" | "design_mate" | "votkuda" | "archdaily" | "all";
+            source_key: string;
+            /**
+             * Dry Run
+             * @description Пробный запуск только стадии Discovery без вызова LLM и записи событий
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * Max Urls Per Source
+             * @description Временный лимит новых URL на один источник для этого запуска (1..50)
+             */
+            max_urls_per_source?: number | null;
         };
         /**
          * ScraperRunOut
@@ -1292,12 +1490,431 @@ export interface components {
              * @default queued
              * @enum {string}
              */
-            status: "queued" | "completed" | "failed";
+            status: "queued" | "running" | "completed" | "failed";
             /**
              * Message
              * @description Информационное сообщение
              */
             message: string;
+            /**
+             * Run Id
+             * @description ID записи прогона в scraper_runs
+             */
+            run_id?: number | null;
+            /**
+             * Dry Run
+             * @description Признак пробного прогона
+             * @default false
+             */
+            dry_run: boolean;
+        };
+        /**
+         * ScraperRunSavedEventOut
+         * @description Конкретное мероприятие, созданное или обновленное в ходе прогона парсера.
+         */
+        ScraperRunSavedEventOut: {
+            /** Event Id */
+            event_id?: number | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /**
+             * Action
+             * @default created
+             * @enum {string}
+             */
+            action: "created" | "updated";
+            /**
+             * Data Status
+             * @default ready
+             */
+            data_status: string;
+            /** Start Date */
+            start_date?: string | null;
+            /** City */
+            city?: string | null;
+        };
+        /**
+         * ScraperRunSourceLogOut
+         * @description Детальный отчет по одной площадке внутри прогона скрейпера.
+         */
+        ScraperRunSourceLogOut: {
+            /** Source Key */
+            source_key: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /**
+             * Adapter Type
+             * @default html_list
+             */
+            adapter_type: string;
+            /** Catalog Urls */
+            catalog_urls?: string[];
+            /**
+             * Discovered Total
+             * @default 0
+             */
+            discovered_total: number;
+            /**
+             * Selected New Count
+             * @default 0
+             */
+            selected_new_count: number;
+            /**
+             * Events Created
+             * @default 0
+             */
+            events_created: number;
+            /**
+             * Events Updated
+             * @default 0
+             */
+            events_updated: number;
+            /**
+             * Rejected B2C
+             * @default 0
+             */
+            rejected_b2c: number;
+            /**
+             * Rejected Geo
+             * @default 0
+             */
+            rejected_geo: number;
+            /**
+             * Rejected Past
+             * @default 0
+             */
+            rejected_past: number;
+            /**
+             * Errors Count
+             * @default 0
+             */
+            errors_count: number;
+            /** Candidate Urls */
+            candidate_urls?: string[];
+            /** Saved Events */
+            saved_events?: components["schemas"]["ScraperRunSavedEventOut"][];
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * ScraperRunsListOut
+         * @description Список последних прогонов парсера.
+         */
+        ScraperRunsListOut: {
+            /** Items */
+            items?: components["schemas"]["ScraperRunDetailOut"][];
+        };
+        /**
+         * ScraperSourceCreateIn
+         * @description Запрос на добавление новой площадки мониторинга (Вариант А + опциональные расширенные настройки).
+         */
+        ScraperSourceCreateIn: {
+            /**
+             * Display Name
+             * @description Название площадки
+             */
+            display_name: string;
+            /**
+             * Catalog Urls
+             * @description Список URL каталогов или RSS-лент
+             */
+            catalog_urls: string[];
+            /**
+             * Adapter Type
+             * @description Тип адаптера сбора
+             * @default html_list
+             * @enum {string}
+             */
+            adapter_type: "html_list" | "rss" | "html_digest" | "manual_only";
+            /**
+             * B2B Filter Enabled
+             * @description Включить B2C/B2B фильтрацию
+             * @default false
+             */
+            b2b_filter_enabled: boolean;
+            /**
+             * Russia Online Only
+             * @description Оставлять только РФ и онлайн
+             * @default true
+             */
+            russia_online_only: boolean;
+            /**
+             * Source Key
+             * @description Опциональный ключ площадки (если не указан — генерируется из названия)
+             */
+            source_key?: string | null;
+            /**
+             * Card Url Patterns
+             * @description Опциональные regex-паттерны ссылок карточек
+             */
+            card_url_patterns?: string[];
+            /**
+             * Exclude Url Patterns
+             * @description Опциональные regex-паттерны исключений
+             */
+            exclude_url_patterns?: string[];
+            /**
+             * Use Jina Reader
+             * @description Использовать r.jina.ai
+             * @default false
+             */
+            use_jina_reader: boolean;
+            /**
+             * Encoding
+             * @description Кодировка
+             * @default utf-8
+             */
+            encoding: string;
+            /**
+             * Required Cookies
+             * @description Cookies для запросов
+             */
+            required_cookies?: {
+                [key: string]: string;
+            };
+            /**
+             * Max Urls Per Run
+             * @description Максимум новых URL за запуск
+             * @default 10
+             */
+            max_urls_per_run: number;
+            /**
+             * Is Enabled
+             * @description Активен ли источник
+             * @default true
+             */
+            is_enabled: boolean;
+        };
+        /**
+         * ScraperSourceDeleteOut
+         * @description Подтверждение удаления пользовательской площадки мониторинга.
+         */
+        ScraperSourceDeleteOut: {
+            /**
+             * Deleted
+             * @default true
+             */
+            deleted: boolean;
+            /** Source Key */
+            source_key: string;
+        };
+        /**
+         * ScraperSourceOut
+         * @description Конфигурация площадки мониторинга из таблицы scraper_sources.
+         */
+        ScraperSourceOut: {
+            /**
+             * Id
+             * @description ID источника
+             */
+            id: number;
+            /**
+             * Source Key
+             * @description Уникальный ключ площадки
+             */
+            source_key: string;
+            /**
+             * Display Name
+             * @description Отображаемое название площадки
+             */
+            display_name: string;
+            /**
+             * Catalog Urls
+             * @description Список URL каталогов/RSS-лент
+             */
+            catalog_urls?: string[];
+            /**
+             * Adapter Type
+             * @description Тип адаптера сбора
+             * @enum {string}
+             */
+            adapter_type: "html_list" | "rss" | "html_digest" | "manual_only";
+            /**
+             * Card Url Patterns
+             * @description Regex-паттерны ссылок карточек
+             */
+            card_url_patterns?: string[];
+            /**
+             * Exclude Url Patterns
+             * @description Regex-паттерны исключений
+             */
+            exclude_url_patterns?: string[];
+            /**
+             * B2B Filter Enabled
+             * @description Фильтрация B2C/непрофильных событий
+             * @default false
+             */
+            b2b_filter_enabled: boolean;
+            /**
+             * Russia Online Only
+             * @description Фильтр только РФ или онлайн
+             * @default true
+             */
+            russia_online_only: boolean;
+            /**
+             * Use Jina Reader
+             * @description Загружать страницы через r.jina.ai
+             * @default false
+             */
+            use_jina_reader: boolean;
+            /**
+             * Encoding
+             * @description Кодировка страниц источника
+             * @default utf-8
+             */
+            encoding: string;
+            /**
+             * Required Cookies
+             * @description Обязательные cookies
+             */
+            required_cookies?: {
+                [key: string]: string;
+            };
+            /**
+             * Max Urls Per Run
+             * @description Лимит новых URL за один прогон
+             * @default 10
+             */
+            max_urls_per_run: number;
+            /**
+             * Is Enabled
+             * @description Включен ли источник в автоматический мониторинг
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Is Builtin
+             * @description Признак встроенной площадки заказчика
+             * @default false
+             */
+            is_builtin: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             * @description Дата создания
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             * @description Дата последнего обновления
+             */
+            updated_at: string;
+        };
+        /**
+         * ScraperSourcePreviewIn
+         * @description Параметры для бесплатного тест-просмотра Discovery (без вызова LLM) на первом catalog_url.
+         */
+        ScraperSourcePreviewIn: {
+            /** Catalog Urls */
+            catalog_urls: string[];
+            /**
+             * Adapter Type
+             * @default html_list
+             * @enum {string}
+             */
+            adapter_type: "html_list" | "rss" | "html_digest" | "manual_only";
+            /** Card Url Patterns */
+            card_url_patterns?: string[];
+            /** Exclude Url Patterns */
+            exclude_url_patterns?: string[];
+            /**
+             * B2B Filter Enabled
+             * @default false
+             */
+            b2b_filter_enabled: boolean;
+            /**
+             * Russia Online Only
+             * @default true
+             */
+            russia_online_only: boolean;
+            /**
+             * Use Jina Reader
+             * @default false
+             */
+            use_jina_reader: boolean;
+            /**
+             * Encoding
+             * @default utf-8
+             */
+            encoding: string;
+            /** Required Cookies */
+            required_cookies?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * ScraperSourcePreviewOut
+         * @description Результат бесплатного предпросмотра Discovery по первой ссылке каталога.
+         */
+        ScraperSourcePreviewOut: {
+            /**
+             * Discovered Count
+             * @default 0
+             */
+            discovered_count: number;
+            /**
+             * Rejected B2C
+             * @default 0
+             */
+            rejected_b2c: number;
+            /**
+             * Rejected Geo
+             * @default 0
+             */
+            rejected_geo: number;
+            /** Sample Candidates */
+            sample_candidates?: components["schemas"]["ScraperPreviewCandidateOut"][];
+            /**
+             * Checked Url
+             * @description Фактически проверенный первый URL каталога из списка
+             */
+            checked_url?: string | null;
+            /**
+             * Total Catalog Urls
+             * @description Общее количество URL в catalog_urls (проверяется только первый)
+             * @default 1
+             */
+            total_catalog_urls: number;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * ScraperSourceUpdateIn
+         * @description Запрос на частичное обновление параметров площадки мониторинга.
+         */
+        ScraperSourceUpdateIn: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Catalog Urls */
+            catalog_urls?: string[] | null;
+            /** Adapter Type */
+            adapter_type?: ("html_list" | "rss" | "html_digest" | "manual_only") | null;
+            /** Card Url Patterns */
+            card_url_patterns?: string[] | null;
+            /** Exclude Url Patterns */
+            exclude_url_patterns?: string[] | null;
+            /** B2B Filter Enabled */
+            b2b_filter_enabled?: boolean | null;
+            /** Russia Online Only */
+            russia_online_only?: boolean | null;
+            /** Use Jina Reader */
+            use_jina_reader?: boolean | null;
+            /** Encoding */
+            encoding?: string | null;
+            /** Required Cookies */
+            required_cookies?: {
+                [key: string]: string;
+            } | null;
+            /** Max Urls Per Run */
+            max_urls_per_run?: number | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
         };
         /**
          * SelectedEventTariffPairIn
@@ -2162,6 +2779,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scraper_sources_api_manager_scraper_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperSourceOut"][];
+                };
+            };
+        };
+    };
+    create_scraper_source_api_manager_scraper_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScraperSourceCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperSourceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_scraper_source_api_manager_scraper_sources_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScraperSourcePreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperSourcePreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_scraper_source_api_manager_scraper_sources__source_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperSourceDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_scraper_source_api_manager_scraper_sources__source_key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScraperSourceUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperSourceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scraper_runs_api_manager_scraper_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperRunsListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_scraper_run_api_manager_scraper_runs_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScraperRunDetailOut"] | null;
                 };
             };
         };

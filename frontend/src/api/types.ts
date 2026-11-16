@@ -26,7 +26,9 @@ export type ClientReactionStatus =
 
 export type ProfileSource = Schema<"ClientQueryExtracted">["profile_source"];
 
-export type ScraperSourceKey = Schema<"ScraperRunIn">["source_key"];
+export type ScraperSourceKey = string;
+
+export type ScraperAdapterType = Schema<"ScraperSourceOut">["adapter_type"];
 
 export type ScraperRunStatus = Schema<"ScraperRunOut">["status"];
 
@@ -83,8 +85,49 @@ export interface EventUploadIn {
 
 export type EventUploadOut = Required<Schema<"EventUploadOut">>;
 
-export type ScraperRunIn = Schema<"ScraperRunIn">;
+export type ScraperRunIn = Omit<
+  Schema<"ScraperRunIn">,
+  "dry_run" | "max_urls_per_source"
+> & {
+  dry_run?: boolean;
+  max_urls_per_source?: number | null;
+};
 export type ScraperRunOut = Required<Schema<"ScraperRunOut">>;
+
+export type ScraperSourceOut = Required<Schema<"ScraperSourceOut">>;
+export type ScraperSourceCreateIn = Schema<"ScraperSourceCreateIn">;
+export type ScraperSourceUpdateIn = Schema<"ScraperSourceUpdateIn">;
+export type ScraperSourceDeleteOut = Required<Schema<"ScraperSourceDeleteOut">>;
+
+export type ScraperSourcePreviewIn = Schema<"ScraperSourcePreviewIn">;
+export type ScraperPreviewCandidateOut = Required<
+  Schema<"ScraperPreviewCandidateOut">
+>;
+export type ScraperSourcePreviewOut = Omit<
+  Required<Schema<"ScraperSourcePreviewOut">>,
+  "sample_candidates"
+> & {
+  sample_candidates: ScraperPreviewCandidateOut[];
+};
+
+export type ScraperRunSavedEventOut = Required<
+  Schema<"ScraperRunSavedEventOut">
+>;
+export type ScraperRunSourceLogOut = Omit<
+  Required<Schema<"ScraperRunSourceLogOut">>,
+  "saved_events"
+> & {
+  saved_events: ScraperRunSavedEventOut[];
+};
+export type ScraperRunDetailOut = Omit<
+  Required<Schema<"ScraperRunDetailOut">>,
+  "source_logs"
+> & {
+  source_logs: ScraperRunSourceLogOut[];
+};
+export type ScraperRunsListOut = {
+  items: ScraperRunDetailOut[];
+};
 
 export type ClientQueryExtracted = Required<Schema<"ClientQueryExtracted">>;
 
