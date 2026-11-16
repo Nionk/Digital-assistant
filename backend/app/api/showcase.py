@@ -178,6 +178,7 @@ async def get_public_showcase(
         chat_by_event[msg.event_id].append(
             ShowcaseChatMessageOut(
                 id=msg.id or idx_msg,
+                reply_to_message_id=msg.reply_to_message_id,
                 sender_role=sender_role,
                 message_text=msg.message_text,
                 needs_manager_attention=bool(msg.needs_manager_attention),
@@ -275,6 +276,7 @@ async def get_public_showcase(
         selection_id=selection.id,
         company_name=client.company_name if client else "Уважаемый клиент",
         manager_full_name=manager.full_name if manager else "Персональный менеджер сопровождения",
+        manager_email=manager.email if manager else None,
         pitch_text=selection.generated_pitch_text or "Здравствуйте! Направляем вашу персональную подборку мероприятий.",
         total_events_count=len(showcase_items),
         total_actual_price=round(total_actual, 2),

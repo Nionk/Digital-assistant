@@ -42,6 +42,12 @@ export type TokenOut = Omit<Required<Schema<"TokenOut">>, "user"> & {
 // ---- Кабинет менеджера (/api/manager/*) ----
 export type BurningDeadlineOut = Required<Schema<"BurningDeadlineOut">>;
 export type ClientSummaryOut = Required<Schema<"ClientSummaryOut">>;
+export type ClientCreateIn = {
+  company_name: string;
+  contact_person?: string | null;
+  raw_manager_notes?: string | null;
+};
+export type ClientUpdateIn = Schema<"ClientUpdateIn">;
 export type ManagerDashboardOut = {
   clients: ClientSummaryOut[];
   burning_deadlines: BurningDeadlineOut[];
@@ -111,6 +117,22 @@ export type MatchResponseOut = Omit<
   bonus_on_request_items: BundleEventItemOut[];
 };
 
+export type WorkspaceSelectionOut = Omit<
+  Required<Schema<"WorkspaceSelectionOut">>,
+  "bundle_variants" | "bonus_on_request_items"
+> & {
+  bundle_variants: BundleVariantOut[];
+  bonus_on_request_items: BundleEventItemOut[];
+};
+
+export type ClientWorkspaceOut = Omit<
+  Required<Schema<"ClientWorkspaceOut">>,
+  "extracted_profile" | "selection"
+> & {
+  extracted_profile: ClientQueryExtracted | null;
+  selection: WorkspaceSelectionOut | null;
+};
+
 export type SelectedEventTariffPairIn = Schema<"SelectedEventTariffPairIn">;
 export type PublishSelectionIn = Schema<"PublishSelectionIn">;
 export type PublishSelectionOut = Required<Schema<"PublishSelectionOut">>;
@@ -121,10 +143,20 @@ export type SelectionItemReactionActivity = Required<
 export type SelectionQuestionActivity = Required<
   Schema<"SelectionQuestionActivity">
 >;
+export type SelectionResolvedReplyOut = Required<
+  Schema<"SelectionResolvedReplyOut">
+>;
+export type SelectionResolvedQuestionActivity = Omit<
+  Required<Schema<"SelectionResolvedQuestionActivity">>,
+  "replies"
+> & {
+  replies: SelectionResolvedReplyOut[];
+};
 export type SelectionActivityOut = {
   selection_id: number;
   reactions: SelectionItemReactionActivity[];
   pending_questions: SelectionQuestionActivity[];
+  resolved_questions: SelectionResolvedQuestionActivity[];
 };
 
 export type ManagerReplyIn = Schema<"ManagerReplyIn">;

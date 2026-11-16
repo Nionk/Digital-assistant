@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type {
   ClientQueryExtracted,
+  ClientWorkspaceOut,
   MatchResponseOut,
   ShowcaseViewOut,
 } from "@/api/types";
@@ -57,6 +58,10 @@ interface ManagerState {
   pitchTextByClient: Record<number, string>;
   publishedInfoByClient: Record<number, PublishedSelectionInfo>;
 
+  // Неперсистируемая защита сессии от перезаписи несохраненного локального черновика
+  sessionMatchedSelectionByClient: Record<number, number>;
+  sessionDirtyDraftByClient: Record<number, boolean>;
+
   // Целевое мероприятие для перехода в Базу площадок
   catalogTargetEventId: number | null;
 
@@ -66,11 +71,18 @@ interface ManagerState {
   setCatalogTargetEventId: (eventId: number | null) => void;
   toggleSidebar: () => void;
   selectClient: (clientId: number, initialNotes?: string) => void;
+  clearSelectedClient: () => void;
+  removeClientWorkspace: (clientId: number) => void;
   setClientSearchQuery: (q: string) => void;
   setClientNotes: (clientId: number, notes: string) => void;
+  syncClientNotes: (clientId: number, notes: string) => void;
   setNotesCollapsed: (collapsed: boolean) => void;
 
   hydrateMatchResponse: (clientId: number, response: MatchResponseOut) => void;
+  hydrateServerWorkspace: (
+    clientId: number,
+    workspace: ClientWorkspaceOut
+  ) => void;
   hydratePublishedShowcase: (
     clientId: number,
     magicToken: string,
@@ -111,6 +123,84 @@ const INITIAL_MANAGER_PERSISTED_DATA = {
   publishedInfoByClient: {} as Record<number, PublishedSelectionInfo>,
 };
 
+function buildHydratedSelectionMaps(response: MatchResponseOut): {
+  defaultGroup: 1 | 2;
+  includedMap: Record<number, boolean>;
+  tariffMap: Record<string, number>;
+  rationaleMap: Record<string, string>;
+} {
+  const defaultGroup = normalizeBundleGroup(
+    response.bundle_variants[0]?.bundle_group ?? 1
+  );
+  const activeVariant =
+    response.bundle_variants.find((v) => v.bundle_group === defaultGroup) ||
+    response.bundle_variants[0];
+
+  const includedMap: Record<number, boolean> = {};
+  const tariffMap: Record<string, number> = {};
+  const rationaleMap: Record<string, string> = {};
+
+  for (const variant of response.bundle_variants) {
+    const vGroup = normalizeBundleGroup(variant.bundle_group);
+    for (const item of variant.items) {
+      const key = variantItemKey(vGroup, item.event_id);
+      tariffMap[key] = item.recommended_tariff.tariff_id;
+      rationaleMap[key] = item.ai_rationale;
+    }
+  }
+
+  if (activeVariant) {
+    for (const item of activeVariant.items) {
+      includedMap[item.event_id] = true;
+    }
+  }
+
+  for (const bonus of response.bonus_on_request_items) {
+    if (includedMap[bonus.event_id] === undefined) {
+      includedMap[bonus.event_id] = false;
+    }
+    const bKey = bonusItemKey(bonus.event_id);
+    tariffMap[bKey] = bonus.recommended_tariff.tariff_id;
+    rationaleMap[bKey] = bonus.ai_rationale;
+  }
+
+  return { defaultGroup, includedMap, tariffMap, rationaleMap };
+}
+
+function omitClientKey<T>(
+  record: Record<number, T>,
+  clientId: number
+): Record<number, T> {
+  if (!(clientId in record)) return record;
+  const next = { ...record };
+  delete next[clientId];
+  return next;
+}
+
+function buildFallbackProfileFromWorkspace(
+  workspace: ClientWorkspaceOut
+): ClientQueryExtracted {
+  const sel = workspace.selection;
+  const itemCount = sel?.bundle_variants[0]?.items.length || 3;
+  return {
+    cities: [],
+    include_online: true,
+    date_from: null,
+    date_to: null,
+    total_budget_max:
+      sel && sel.total_budget_limit > 0 ? sel.total_budget_limit : 300000,
+    target_events_count: Math.max(1, Math.min(10, itemCount)),
+    preferred_formats: [],
+    required_roles: ["delegate"],
+    min_speaker_events: 0,
+    themes_keywords: [],
+    semantic_search_query:
+      workspace.raw_manager_notes.trim() || "деловые мероприятия",
+    budget_is_assumed: true,
+    profile_source: "heuristic",
+  };
+}
+
 const userScopedManagerStorage: StateStorage = {
   getItem: (name) => {
     const userId = useAuthStore.getState().user?.id;
@@ -135,6 +225,8 @@ export const useManagerStore = create<ManagerState>()(
       isProducerModalOpen: false,
       clientSearchQuery: "",
       catalogTargetEventId: null,
+      sessionMatchedSelectionByClient: {},
+      sessionDirtyDraftByClient: {},
       ...INITIAL_MANAGER_PERSISTED_DATA,
 
       setProducerModalOpen: (open) => set({ isProducerModalOpen: open }),
@@ -161,9 +253,57 @@ export const useManagerStore = create<ManagerState>()(
           };
         }),
 
+      clearSelectedClient: () => set({ selectedClientId: null }),
+
+      removeClientWorkspace: (clientId) =>
+        set((state) => ({
+          selectedClientId:
+            state.selectedClientId === clientId ? null : state.selectedClientId,
+          notesByClient: omitClientKey(state.notesByClient, clientId),
+          matchResultByClient: omitClientKey(state.matchResultByClient, clientId),
+          editableProfileByClient: omitClientKey(
+            state.editableProfileByClient,
+            clientId
+          ),
+          selectedVariantGroupByClient: omitClientKey(
+            state.selectedVariantGroupByClient,
+            clientId
+          ),
+          includedEventsByClient: omitClientKey(
+            state.includedEventsByClient,
+            clientId
+          ),
+          selectedTariffByClient: omitClientKey(
+            state.selectedTariffByClient,
+            clientId
+          ),
+          customRationaleByClient: omitClientKey(
+            state.customRationaleByClient,
+            clientId
+          ),
+          pitchTextByClient: omitClientKey(state.pitchTextByClient, clientId),
+          publishedInfoByClient: omitClientKey(
+            state.publishedInfoByClient,
+            clientId
+          ),
+          sessionMatchedSelectionByClient: omitClientKey(
+            state.sessionMatchedSelectionByClient,
+            clientId
+          ),
+          sessionDirtyDraftByClient: omitClientKey(
+            state.sessionDirtyDraftByClient,
+            clientId
+          ),
+        })),
+
       setClientSearchQuery: (q) => set({ clientSearchQuery: q }),
 
       setClientNotes: (clientId, notes) =>
+        set((state) => ({
+          notesByClient: { ...state.notesByClient, [clientId]: notes },
+        })),
+
+      syncClientNotes: (clientId, notes) =>
         set((state) => ({
           notesByClient: { ...state.notesByClient, [clientId]: notes },
         })),
@@ -172,41 +312,8 @@ export const useManagerStore = create<ManagerState>()(
 
       hydrateMatchResponse: (clientId, response) =>
         set((state) => {
-          const defaultGroup = normalizeBundleGroup(
-            response.bundle_variants[0]?.bundle_group ?? 1
-          );
-          const activeVariant =
-            response.bundle_variants.find(
-              (v) => v.bundle_group === defaultGroup
-            ) || response.bundle_variants[0];
-
-          const includedMap: Record<number, boolean> = {};
-          const tariffMap: Record<string, number> = {};
-          const rationaleMap: Record<string, string> = {};
-
-          for (const variant of response.bundle_variants) {
-            const vGroup = normalizeBundleGroup(variant.bundle_group);
-            for (const item of variant.items) {
-              const key = variantItemKey(vGroup, item.event_id);
-              tariffMap[key] = item.recommended_tariff.tariff_id;
-              rationaleMap[key] = item.ai_rationale;
-            }
-          }
-
-          if (activeVariant) {
-            for (const item of activeVariant.items) {
-              includedMap[item.event_id] = true;
-            }
-          }
-
-          for (const bonus of response.bonus_on_request_items) {
-            if (includedMap[bonus.event_id] === undefined) {
-              includedMap[bonus.event_id] = false;
-            }
-            const bKey = bonusItemKey(bonus.event_id);
-            tariffMap[bKey] = bonus.recommended_tariff.tariff_id;
-            rationaleMap[bKey] = bonus.ai_rationale;
-          }
+          const { defaultGroup, includedMap, tariffMap, rationaleMap } =
+            buildHydratedSelectionMaps(response);
 
           return {
             isNotesCollapsed: true,
@@ -237,6 +344,165 @@ export const useManagerStore = create<ManagerState>()(
             pitchTextByClient: {
               ...state.pitchTextByClient,
               [clientId]: response.generated_pitch_text,
+            },
+            sessionMatchedSelectionByClient: {
+              ...state.sessionMatchedSelectionByClient,
+              [clientId]: response.selection_id,
+            },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: false,
+            },
+          };
+        }),
+
+      hydrateServerWorkspace: (clientId, workspace) =>
+        set((state) => {
+          if (workspace.client_id !== clientId) return state;
+
+          const existingNotes = state.notesByClient[clientId];
+          const nextNotesByClient =
+            existingNotes === undefined
+              ? { ...state.notesByClient, [clientId]: workspace.raw_manager_notes }
+              : state.notesByClient;
+
+          const srvSel = workspace.selection;
+          if (!srvSel) {
+            const shouldFillProfile =
+              Boolean(workspace.extracted_profile) &&
+              !state.editableProfileByClient[clientId];
+            if (!shouldFillProfile && nextNotesByClient === state.notesByClient) {
+              return state;
+            }
+            return {
+              notesByClient: nextNotesByClient,
+              ...(shouldFillProfile && workspace.extracted_profile
+                ? {
+                    editableProfileByClient: {
+                      ...state.editableProfileByClient,
+                      [clientId]: structuredClone(workspace.extracted_profile),
+                    },
+                  }
+                : {}),
+            };
+          }
+
+          const existingMatch = state.matchResultByClient[clientId];
+          const existingPublished = state.publishedInfoByClient[clientId];
+          const sessionMatchedId =
+            state.sessionMatchedSelectionByClient[clientId];
+          const isDirty = Boolean(state.sessionDirtyDraftByClient[clientId]);
+
+          let shouldHydrateSelection = false;
+          if (!existingMatch) {
+            shouldHydrateSelection = true;
+          } else if (
+            sessionMatchedId === existingMatch.selection_id &&
+            srvSel.selection_id <= existingMatch.selection_id
+          ) {
+            shouldHydrateSelection = false;
+          } else if (srvSel.selection_id > existingMatch.selection_id) {
+            shouldHydrateSelection = true;
+          } else if (
+            srvSel.selection_id === existingMatch.selection_id &&
+            srvSel.status === "published" &&
+            existingPublished?.selectionId !== srvSel.selection_id &&
+            !isDirty
+          ) {
+            shouldHydrateSelection = true;
+          }
+
+          const v1 =
+            srvSel.bundle_variants.find((v) => v.bundle_group === 1) ??
+            srvSel.bundle_variants[0];
+          const serverPublishedInfo: PublishedSelectionInfo | null =
+            srvSel.status === "published" && srvSel.magic_token
+              ? {
+                  selectionId: srvSel.selection_id,
+                  magicToken: srvSel.magic_token,
+                  publicUrl: `/s/${srvSel.magic_token}`,
+                  totalPrice: v1?.total_actual_price ?? 0,
+                  totalSavings: v1?.total_savings ?? 0,
+                }
+              : null;
+
+          if (!shouldHydrateSelection) {
+            const shouldSyncPubOnly =
+              serverPublishedInfo !== null &&
+              existingMatch?.selection_id === srvSel.selection_id &&
+              existingPublished?.selectionId !== srvSel.selection_id;
+            if (!shouldSyncPubOnly && nextNotesByClient === state.notesByClient) {
+              return state;
+            }
+            return {
+              notesByClient: nextNotesByClient,
+              ...(shouldSyncPubOnly && serverPublishedInfo
+                ? {
+                    publishedInfoByClient: {
+                      ...state.publishedInfoByClient,
+                      [clientId]: serverPublishedInfo,
+                    },
+                  }
+                : {}),
+            };
+          }
+
+          const resolvedProfile =
+            workspace.extracted_profile ??
+            buildFallbackProfileFromWorkspace(workspace);
+          const matchResponse: MatchResponseOut = {
+            selection_id: srvSel.selection_id,
+            client_id: clientId,
+            extracted_profile: resolvedProfile,
+            bundle_variants: srvSel.bundle_variants,
+            bonus_on_request_items: srvSel.bonus_on_request_items,
+            generated_pitch_text: srvSel.generated_pitch_text,
+          };
+          const { defaultGroup, includedMap, tariffMap, rationaleMap } =
+            buildHydratedSelectionMaps(matchResponse);
+
+          const nextPublishedByClient = serverPublishedInfo
+            ? {
+                ...state.publishedInfoByClient,
+                [clientId]: serverPublishedInfo,
+              }
+            : omitClientKey(state.publishedInfoByClient, clientId);
+
+          return {
+            isNotesCollapsed: state.selectedClientId === clientId ? true : state.isNotesCollapsed,
+            notesByClient: nextNotesByClient,
+            matchResultByClient: {
+              ...state.matchResultByClient,
+              [clientId]: matchResponse,
+            },
+            editableProfileByClient: {
+              ...state.editableProfileByClient,
+              [clientId]: structuredClone(resolvedProfile),
+            },
+            selectedVariantGroupByClient: {
+              ...state.selectedVariantGroupByClient,
+              [clientId]: defaultGroup,
+            },
+            includedEventsByClient: {
+              ...state.includedEventsByClient,
+              [clientId]: includedMap,
+            },
+            selectedTariffByClient: {
+              ...state.selectedTariffByClient,
+              [clientId]: tariffMap,
+            },
+            customRationaleByClient: {
+              ...state.customRationaleByClient,
+              [clientId]: rationaleMap,
+            },
+            pitchTextByClient: {
+              ...state.pitchTextByClient,
+              [clientId]: srvSel.generated_pitch_text,
+            },
+            publishedInfoByClient: nextPublishedByClient,
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: false,
             },
           };
         }),
@@ -276,6 +542,10 @@ export const useManagerStore = create<ManagerState>()(
               ...state.editableProfileByClient,
               [clientId]: updater(current),
             },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: true,
+            },
           };
         }),
 
@@ -310,6 +580,10 @@ export const useManagerStore = create<ManagerState>()(
               ...state.includedEventsByClient,
               [clientId]: newIncluded,
             },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: true,
+            },
           };
         }),
 
@@ -323,6 +597,10 @@ export const useManagerStore = create<ManagerState>()(
                 ...currentMap,
                 [eventId]: !currentMap[eventId],
               },
+            },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: true,
             },
           };
         }),
@@ -343,6 +621,10 @@ export const useManagerStore = create<ManagerState>()(
                 [slotKey]: tariffId,
               },
             },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: true,
+            },
           };
         }),
 
@@ -362,6 +644,10 @@ export const useManagerStore = create<ManagerState>()(
                 [slotKey]: rationale,
               },
             },
+            sessionDirtyDraftByClient: {
+              ...state.sessionDirtyDraftByClient,
+              [clientId]: true,
+            },
           };
         }),
 
@@ -370,6 +656,10 @@ export const useManagerStore = create<ManagerState>()(
           pitchTextByClient: {
             ...state.pitchTextByClient,
             [clientId]: text,
+          },
+          sessionDirtyDraftByClient: {
+            ...state.sessionDirtyDraftByClient,
+            [clientId]: true,
           },
         })),
 
@@ -433,6 +723,10 @@ export const useManagerStore = create<ManagerState>()(
             ...s.pitchTextByClient,
             [clientId]: updatedPitch,
           },
+          sessionDirtyDraftByClient: {
+            ...s.sessionDirtyDraftByClient,
+            [clientId]: true,
+          },
         }));
       },
 
@@ -442,6 +736,10 @@ export const useManagerStore = create<ManagerState>()(
             ...state.publishedInfoByClient,
             [clientId]: info,
           },
+          sessionDirtyDraftByClient: {
+            ...state.sessionDirtyDraftByClient,
+            [clientId]: false,
+          },
         })),
 
       resetWorkspaceMemory: () =>
@@ -449,6 +747,8 @@ export const useManagerStore = create<ManagerState>()(
           isProducerModalOpen: false,
           clientSearchQuery: "",
           catalogTargetEventId: null,
+          sessionMatchedSelectionByClient: {},
+          sessionDirtyDraftByClient: {},
           ...INITIAL_MANAGER_PERSISTED_DATA,
         }),
     }),

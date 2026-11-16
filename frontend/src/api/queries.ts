@@ -3,10 +3,13 @@ import { ApiError, apiClient } from "./client";
 import type {
   AskRegulationQuestionIn,
   CatalogEventsFilterParams,
+  ClientCreateIn,
   ClientReactionIn,
+  ClientUpdateIn,
   EscalateQuestionIn,
   EventUploadIn,
   LoginRequestIn,
+  ManagerDashboardOut,
   ManagerReplyIn,
   MatchRequestIn,
   PublishSelectionIn,
@@ -27,6 +30,9 @@ function isTerminalPollingError(error: unknown): boolean {
  */
 export const queryKeys = {
   managerDashboard: ["manager", "dashboard"] as const,
+  clientWorkspaceRoot: ["manager", "clientWorkspace"] as const,
+  clientWorkspace: (clientId: number) =>
+    ["manager", "clientWorkspace", clientId] as const,
   managerEventsRoot: ["manager", "events"] as const,
   managerEvents: (filters?: CatalogEventsFilterParams) =>
     filters ? (["manager", "events", filters] as const) : (["manager", "events"] as const),
@@ -49,6 +55,75 @@ export function useManagerDashboard() {
       isTerminalPollingError(query.state.error) ? false : 10_000,
     refetchIntervalInBackground: false,
     staleTime: 5_000,
+  });
+}
+
+export function useClientWorkspace(
+  clientId: number | null | undefined,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: queryKeys.clientWorkspace(clientId || 0),
+    queryFn: () => apiClient.getClientWorkspace(clientId!),
+    enabled: Boolean(clientId) && enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useCreateClientMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ClientCreateIn) => apiClient.createClient(payload),
+    onSuccess: (created) => {
+      queryClient.setQueryData<ManagerDashboardOut>(
+        queryKeys.managerDashboard,
+        (prev) => {
+          if (!prev) return prev;
+          const exists = prev.clients.some((c) => c.id === created.id);
+          return exists
+            ? prev
+            : { ...prev, clients: [...prev.clients, created] };
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+    },
+  });
+}
+
+export function useUpdateClientMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      payload,
+    }: {
+      clientId: number;
+      payload: ClientUpdateIn;
+    }) => apiClient.updateClient(clientId, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<ManagerDashboardOut>(
+        queryKeys.managerDashboard,
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            clients: updated.is_active
+              ? prev.clients.map((c) => (c.id === updated.id ? updated : c))
+              : prev.clients.filter((c) => c.id !== updated.id),
+          };
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      if (updated.is_active) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientWorkspace(updated.id),
+        });
+      } else {
+        queryClient.removeQueries({
+          queryKey: queryKeys.clientWorkspace(updated.id),
+        });
+      }
+    },
   });
 }
 
@@ -94,8 +169,11 @@ export function useMatchClientMutation() {
       clientId: number;
       payload: MatchRequestIn;
     }) => apiClient.matchClientEvents(clientId, payload),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clientWorkspace(data.client_id),
+      });
     },
   });
 }
@@ -112,6 +190,7 @@ export function usePublishSelectionMutation() {
     }) => apiClient.publishSelection(selectionId, payload),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clientWorkspaceRoot });
       queryClient.invalidateQueries({
         queryKey: queryKeys.selectionActivity(data.selection_id),
       });

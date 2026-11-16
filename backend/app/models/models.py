@@ -45,6 +45,9 @@ class Client(Base):
     contact_person: Mapped[str | None] = mapped_column(String(255))
     raw_manager_notes: Mapped[str] = mapped_column(Text)
     extracted_profile: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", default=True, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -224,6 +227,9 @@ class ChatMessage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     selection_id: Mapped[int] = mapped_column(ForeignKey("selections.id", ondelete="CASCADE"))
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    reply_to_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
+    )
     sender_role: Mapped[str] = mapped_column(String(50))
     message_text: Mapped[str] = mapped_column(Text)
     needs_manager_attention: Mapped[bool] = mapped_column(Boolean, server_default="false")
@@ -231,6 +237,11 @@ class ChatMessage(Base):
 
     selection: Mapped["Selection"] = relationship(back_populates="chat_messages")
     event: Mapped["Event"] = relationship(lazy="joined")
+    reply_to_message: Mapped["ChatMessage | None"] = relationship(
+        "ChatMessage",
+        remote_side="ChatMessage.id",
+        foreign_keys=[reply_to_message_id],
+    )
 
 
 class LLMCache(Base):

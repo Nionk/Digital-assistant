@@ -3,12 +3,14 @@ import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
+  useClientWorkspace,
   useManagerDashboard,
   useManagerEventsCatalog,
   useMatchClientMutation,
   usePublicShowcase,
   usePublishSelectionMutation,
 } from "@/api/queries";
+import type { ClientSummaryOut } from "@/api/types";
 import {
   computeClientFinancialSummary,
   useManagerStore,
@@ -22,6 +24,7 @@ import { PublishedShowcaseMonitor } from "./PublishedShowcaseMonitor";
 import { EventsCatalogView } from "./EventsCatalogView";
 import { EventDetailsDrawer } from "./EventDetailsDrawer";
 import { ClientsSelectorDropdown } from "./workspace/ClientsSelectorDropdown";
+import { ClientFormModal } from "./workspace/ClientFormModal";
 import {
   ActiveClientHeader,
   BundleOnboardingEmptyState,
@@ -90,10 +93,18 @@ export function ManagerWorkspacePage() {
 
   const setWorkspaceMode = useManagerStore((s) => s.setWorkspaceMode);
   const selectClient = useManagerStore((s) => s.selectClient);
+  const clearSelectedClient = useManagerStore((s) => s.clearSelectedClient);
+  const removeClientWorkspace = useManagerStore(
+    (s) => s.removeClientWorkspace
+  );
   const setClientSearchQuery = useManagerStore((s) => s.setClientSearchQuery);
   const setClientNotes = useManagerStore((s) => s.setClientNotes);
+  const syncClientNotes = useManagerStore((s) => s.syncClientNotes);
   const setNotesCollapsed = useManagerStore((s) => s.setNotesCollapsed);
   const hydrateMatchResponse = useManagerStore((s) => s.hydrateMatchResponse);
+  const hydrateServerWorkspace = useManagerStore(
+    (s) => s.hydrateServerWorkspace
+  );
   const updateEditableProfile = useManagerStore((s) => s.updateEditableProfile);
   const selectVariantGroup = useManagerStore((s) => s.selectVariantGroup);
   const toggleEventIncluded = useManagerStore((s) => s.toggleEventIncluded);
@@ -111,6 +122,11 @@ export function ManagerWorkspacePage() {
   const [isClientsDropdownOpen, setIsClientsDropdownOpen] = React.useState(false);
   const [selectedEventIdForDrawer, setSelectedEventIdForDrawer] =
     React.useState<number | null>(null);
+  const [clientModalState, setClientModalState] = React.useState<{
+    isOpen: boolean;
+    mode: "create" | "edit";
+    client: ClientSummaryOut | null;
+  }>({ isOpen: false, mode: "create", client: null });
 
   const { data: catalogData } = useManagerEventsCatalog(
     Boolean(activeMatchResult) || selectedEventIdForDrawer !== null
@@ -139,17 +155,62 @@ export function ManagerWorkspacePage() {
     setIsClientsDropdownOpen(false);
   }, []);
 
-  // Автовыбор первого клиента при загрузке дашборда
+  // Автовыбор первого клиента и безопасное переключение при архивации/отсутствии выбранного клиента
   React.useEffect(() => {
-    if (selectedClientId === null && clients.length > 0) {
+    if (isDashboardLoading) return;
+    if (clients.length === 0) {
+      if (selectedClientId !== null) {
+        clearSelectedClient();
+      }
+      return;
+    }
+    const existsInDashboard =
+      selectedClientId !== null &&
+      clients.some((c) => c.id === selectedClientId);
+    if (!existsInDashboard) {
       const first = clients[0];
       selectClient(first.id, first.raw_manager_notes);
     }
-  }, [clients, selectedClientId, selectClient]);
+  }, [
+    isDashboardLoading,
+    clients,
+    selectedClientId,
+    selectClient,
+    clearSelectedClient,
+  ]);
 
   const activeClient =
     clients.find((c) => c.id === selectedClientId) || null;
   const activeClientId = activeClient?.id ?? null;
+
+  const needsWorkspaceSync = React.useMemo(() => {
+    if (!activeClient) return false;
+    if (!activeMatchResult) return true;
+    if (
+      activeClient.latest_selection_id != null &&
+      activeClient.latest_selection_id > activeMatchResult.selection_id
+    ) {
+      return true;
+    }
+    if (
+      activeClient.latest_selection_status === "published" &&
+      activeClient.latest_selection_id != null &&
+      activeClient.latest_selection_id === activeMatchResult.selection_id &&
+      activePublishedInfo?.selectionId !== activeClient.latest_selection_id
+    ) {
+      return true;
+    }
+    return false;
+  }, [activeClient, activeMatchResult, activePublishedInfo]);
+
+  const { data: serverWorkspace, isFetching: isWorkspaceFetching } =
+    useClientWorkspace(activeClientId, needsWorkspaceSync);
+
+  React.useEffect(() => {
+    if (!activeClient || !serverWorkspace) return;
+    if (serverWorkspace.client_id !== activeClient.id) return;
+    hydrateServerWorkspace(activeClient.id, serverWorkspace);
+  }, [activeClient, serverWorkspace, hydrateServerWorkspace]);
 
   const currentNotes = activeClient
     ? (activeNotesOverride ?? activeClient.raw_manager_notes)
@@ -417,13 +478,23 @@ export function ManagerWorkspacePage() {
                 onSelectClient={(client) =>
                   selectClient(client.id, client.raw_manager_notes)
                 }
+                onCreateClient={() =>
+                  setClientModalState({ isOpen: true, mode: "create", client: null })
+                }
+                onEditClient={(client) =>
+                  setClientModalState({ isOpen: true, mode: "edit", client })
+                }
               />
 
               {isDashboardLoading ? (
                 <WorkspaceLoadingState />
               ) : !activeClient ? (
                 <WorkspaceEmptyClientState
+                  hasClients={clients.length > 0}
                   onOpenClientsDropdown={handleToggleClientsDropdown}
+                  onCreateClient={() =>
+                    setClientModalState({ isOpen: true, mode: "create", client: null })
+                  }
                 />
               ) : (
                 <AnimatePresence mode="wait">
@@ -439,6 +510,13 @@ export function ManagerWorkspacePage() {
                     <ActiveClientHeader
                       companyName={activeClient.company_name}
                       contactPerson={activeClient.contact_person}
+                      onEditClient={() =>
+                        setClientModalState({
+                          isOpen: true,
+                          mode: "edit",
+                          client: activeClient,
+                        })
+                      }
                     />
 
                     {/* Живой мониторинг опубликованной витрины (если у клиента уже выпущена ссылка) */}
@@ -502,9 +580,17 @@ export function ManagerWorkspacePage() {
                               />
                             </motion.div>
                           ) : (
-                            !matchMutation.isPending && (
+                            !matchMutation.isPending &&
+                            (needsWorkspaceSync && isWorkspaceFetching ? (
+                              <div
+                                key="bundle-hydrating"
+                                className="flex h-40 items-center justify-center rounded-[12px] border border-[#262D35] bg-[#161B22] text-xs text-[#8E95A0]"
+                              >
+                                Загрузка сохранённой подборки клиента...
+                              </div>
+                            ) : (
                               <BundleOnboardingEmptyState key="bundle-empty" />
-                            )
+                            ))
                           )}
                         </AnimatePresence>
                       </div>
@@ -554,6 +640,24 @@ export function ManagerWorkspacePage() {
           />
         </div>
       )}
+
+      <ClientFormModal
+        isOpen={clientModalState.isOpen}
+        mode={clientModalState.mode}
+        client={clientModalState.client}
+        onClose={() =>
+          setClientModalState((prev) => ({ ...prev, isOpen: false }))
+        }
+        onCreated={(created) => {
+          selectClient(created.id, created.raw_manager_notes);
+        }}
+        onUpdated={(updated) => {
+          syncClientNotes(updated.id, updated.raw_manager_notes);
+        }}
+        onArchived={(archived) => {
+          removeClientWorkspace(archived.id);
+        }}
+      />
     </div>
   );
 }

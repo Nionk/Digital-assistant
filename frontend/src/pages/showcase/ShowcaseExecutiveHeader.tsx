@@ -1,6 +1,8 @@
-import { Layers, Check } from "lucide-react";
+import * as React from "react";
+import { Layers, Check, Mail, Copy } from "lucide-react";
 import type { ShowcaseViewOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { formatDateShort, formatRub, pluralizeRu } from "@/lib/formatters";
 import logoImage from "@/assets/images/logo.png";
 
@@ -11,6 +13,35 @@ interface ShowcaseExecutiveHeaderProps {
 export function ShowcaseExecutiveHeader({
   showcase,
 }: ShowcaseExecutiveHeaderProps) {
+  const [emailCopied, setEmailCopied] = React.useState(false);
+  const copyTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyManagerEmail = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!showcase.manager_email) return;
+    const ok = await copyTextToClipboard(showcase.manager_email, {
+      successMessage: "Email куратора скопирован в буфер обмена",
+    });
+    if (!ok) return;
+    setEmailCopied(true);
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setEmailCopied(false);
+      copyTimerRef.current = null;
+    }, 2000);
+  };
+
   const approvedItems = showcase.items.filter(
     (i) => i.client_reaction === "interested"
   );
@@ -82,6 +113,31 @@ export function ShowcaseExecutiveHeader({
             <span className="mt-0.5 block text-xs font-semibold text-white">
               {cleanName}
             </span>
+            {showcase.manager_email && (
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <a
+                  href={`mailto:${showcase.manager_email}`}
+                  title={`Написать куратору на ${showcase.manager_email}`}
+                  className="inline-flex items-center gap-1 text-[11px] text-[#E5C378] transition-colors hover:text-white hover:underline underline-offset-2"
+                >
+                  <Mail className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                  <span>{showcase.manager_email}</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyManagerEmail}
+                  title="Скопировать email куратора"
+                  aria-label="Скопировать email куратора"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded text-[#8E95A0] transition-colors hover:text-[#E5C378] cursor-pointer"
+                >
+                  {emailCopied ? (
+                    <Check className="h-3 w-3 text-[#34D399]" strokeWidth={2.25} />
+                  ) : (
+                    <Copy className="h-2.5 w-2.5" strokeWidth={1.75} />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
