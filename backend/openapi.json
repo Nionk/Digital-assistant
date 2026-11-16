@@ -404,6 +404,64 @@
         }
       }
     },
+    "/api/manager/selections/{selection_id}/pitch": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Живая перегенерация сопроводительного письма КП через ИИ",
+        "description": "Валидирует выбранные пары (event_id, tariff_id) по БД, детерминированно пересчитывает стоимость, экономию Early Bird, ближайший дедлайн и календарные накладки в Python, после чего генерирует живое сопроводительное письмо через LLM (с откатом на шаблон при сбое).",
+        "operationId": "generate_selection_pitch_api_manager_selections__selection_id__pitch_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "selection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Selection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePitchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratePitchOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/events": {
       "get": {
         "tags": [
@@ -1997,6 +2055,83 @@
         ],
         "title": "EventUploadOut",
         "description": "Результат ручной загрузки/обогащения мероприятия через PDF, URL или сырой текст."
+      },
+      "GeneratePitchIn": {
+        "properties": {
+          "final_items": {
+            "items": {
+              "$ref": "#/components/schemas/SelectedEventTariffPairIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Final Items",
+            "description": "Итоговый список пар (event_id, tariff_id), по которым пересчитывается письмо КП"
+          },
+          "raw_manager_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Manager Notes",
+            "description": "Актуальный конспект встречи от менеджера"
+          },
+          "total_budget_max": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Budget Max",
+            "description": "Целевой лимит бюджета клиента в рублях"
+          },
+          "include_budget_limit": {
+            "type": "boolean",
+            "title": "Include Budget Limit",
+            "description": "Упоминать ли ориентир бюджета клиента в тексте письма",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "final_items"
+        ],
+        "title": "GeneratePitchIn",
+        "description": "Запрос на живую перегенерацию сопроводительного письма КП по выбранным парам (event_id, tariff_id)."
+      },
+      "GeneratePitchOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id",
+            "description": "ID подборки"
+          },
+          "generated_pitch_text": {
+            "type": "string",
+            "title": "Generated Pitch Text",
+            "description": "Сгенерированный текст сопроводительного письма КП"
+          },
+          "used_llm": {
+            "type": "boolean",
+            "title": "Used Llm",
+            "description": "True, если письмо сгенерировано живой LLM; False при откате на шаблон"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id",
+          "generated_pitch_text",
+          "used_llm"
+        ],
+        "title": "GeneratePitchOut",
+        "description": "Результат живой генерации сопроводительного письма КП."
       },
       "HTTPValidationError": {
         "properties": {

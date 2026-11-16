@@ -651,3 +651,238 @@ def test_fallback_pitch_without_themes_has_no_tautology():
     pitch = build_fallback_pitch("ГК Тест", profile, combo)
     assert "по ключевым отраслевым направлениям." in pitch
     assert "по направлениям: ключевым" not in pitch
+
+
+def test_generate_selection_pitch_endpoint_success_fallback_validation_and_idor(client):
+    """Проверка POST /api/manager/selections/{id}/pitch: LLM успех, fallback при сбое, 400 и IDOR 404."""
+    import datetime
+    from types import SimpleNamespace
+
+    import app.services.matcher as matcher_pkg
+    from app.core.security import get_current_manager
+    from app.models.models import Client, Event, EventTariff, Selection
+
+    today = datetime.date.today()
+    ev1 = Event(
+        id=101,
+        canonical_title="Форум Девелопмент 2026",
+        event_format="forum",
+        city="Москва",
+        is_online=False,
+        start_date=today + datetime.timedelta(days=10),
+        end_date=today + datetime.timedelta(days=11),
+        themes=["КРТ", "ИЖС"],
+    )
+    ev2 = Event(
+        id=102,
+        canonical_title="Саммит СтройТех",
+        event_format="conference",
+        city="Санкт-Петербург",
+        is_online=False,
+        start_date=today + datetime.timedelta(days=20),
+        end_date=today + datetime.timedelta(days=21),
+        themes=["Цифровизация"],
+    )
+    tar1 = EventTariff(
+        id=1001,
+        event_id=101,
+        tariff_name="Спикер сессии",
+        participation_role="speaker",
+        base_price=200000.0,
+        early_bird_price=150000.0,
+        early_bird_deadline=today + datetime.timedelta(days=5),
+    )
+    tar2 = EventTariff(
+        id=1002,
+        event_id=102,
+        tariff_name="Делегат",
+        participation_role="delegate",
+        base_price=80000.0,
+        early_bird_price=None,
+        early_bird_deadline=None,
+    )
+    tar_other_event = EventTariff(
+        id=1999,
+        event_id=999,
+        tariff_name="Чужой тариф",
+        participation_role="delegate",
+        base_price=50000.0,
+    )
+
+    owned_client = Client(
+        id=10,
+        manager_id=1,
+        company_name="ГК Пионер",
+        raw_manager_notes="Нужны форумы по КРТ и цифровизации",
+        extracted_profile={
+            "cities": ["Москва"],
+            "include_online": True,
+            "total_budget_max": 350000.0,
+            "target_events_count": 2,
+            "themes_keywords": ["КРТ"],
+            "semantic_search_query": "форумы КРТ",
+            "budget_is_assumed": False,
+        },
+    )
+    foreign_client = Client(
+        id=20,
+        manager_id=2,
+        company_name="Чужая компания",
+        raw_manager_notes="",
+        extracted_profile={},
+    )
+    owned_selection = Selection(
+        id=50,
+        client_id=10,
+        status="draft",
+        total_budget_limit=350000.0,
+        generated_pitch_text="Старый черновик",
+    )
+    foreign_selection = Selection(
+        id=60,
+        client_id=20,
+        status="draft",
+        total_budget_limit=200000.0,
+        generated_pitch_text="Чужой черновик",
+    )
+
+    def _make_session():
+        mock_session = AsyncMock()
+
+        async def _get(model, pk):
+            if model is Client:
+                return {10: owned_client, 20: foreign_client}.get(pk)
+            if model is Selection:
+                return {50: owned_selection, 60: foreign_selection}.get(pk)
+            return None
+
+        async def _execute(stmt):
+            sql_text = str(stmt)
+            res = MagicMock()
+            if "FROM selections" in sql_text:
+                # Проверяем ID по параметрам запроса, если переданы
+                params = stmt.compile().params
+                sel_id = next(iter(params.values()), 50)
+                res.scalar_one_or_none.return_value = {50: owned_selection, 60: foreign_selection}.get(sel_id)
+                return res
+            if "FROM events" in sql_text:
+                params = stmt.compile().params
+                ids = set()
+                for v in params.values():
+                    if isinstance(v, (list, tuple, set)):
+                        ids.update(v)
+                    elif isinstance(v, int):
+                        ids.add(v)
+                res.scalars.return_value.all.return_value = [e for e in (ev1, ev2) if e.id in ids]
+                return res
+            if "FROM event_tariffs" in sql_text:
+                params = stmt.compile().params
+                ids = set()
+                for v in params.values():
+                    if isinstance(v, (list, tuple, set)):
+                        ids.update(v)
+                    elif isinstance(v, int):
+                        ids.add(v)
+                res.scalars.return_value.all.return_value = [
+                    t for t in (tar1, tar2, tar_other_event) if t.id in ids
+                ]
+                return res
+            res.scalar_one_or_none.return_value = None
+            res.scalars.return_value.all.return_value = []
+            return res
+
+        mock_session.get = _get
+        mock_session.execute = _execute
+        return mock_session
+
+    mock_session = _make_session()
+
+    async def override_session():
+        yield mock_session
+
+    app.dependency_overrides[get_async_session] = override_session
+    app.dependency_overrides[get_current_manager] = lambda: User(
+        id=1, email="m@skart.ru", password_hash="x", full_name="Менеджер"
+    )
+
+    # 1. Успешная живая генерация через замоканный structured_llm_client
+    captured_messages = []
+
+    async def fake_create(**kwargs):
+        captured_messages.append(kwargs["messages"])
+        return SimpleNamespace(generated_pitch_text="Живое письмо для ГК Пионер на 230 000 ₽.")
+
+    mock_llm_client = MagicMock()
+    mock_llm_client.chat.completions.create = AsyncMock(side_effect=fake_create)
+
+    with (
+        patch.object(matcher_pkg.settings, "LLM_API_KEY", "test-key"),
+        patch.object(matcher_pkg, "structured_llm_client", mock_llm_client),
+    ):
+        res_ok = client.post(
+            "/api/manager/selections/50/pitch",
+            json={
+                "final_items": [
+                    {"event_id": 101, "tariff_id": 1001},
+                    {"event_id": 102, "tariff_id": 1002},
+                ],
+                "raw_manager_notes": "Хотим выступить спикером и посетить саммит",
+                "total_budget_max": 350000,
+                "include_budget_limit": True,
+            },
+        )
+
+    assert res_ok.status_code == 200
+    body_ok = res_ok.json()
+    assert body_ok["selection_id"] == 50
+    assert body_ok["used_llm"] is True
+    assert body_ok["generated_pitch_text"] == "Живое письмо для ГК Пионер на 230 000 ₽."
+    assert owned_selection.generated_pitch_text == "Живое письмо для ГК Пионер на 230 000 ₽."
+    assert mock_session.commit.await_count == 1
+    # Проверяем, что LLM получила точные Python-цифры: 150000 + 80000 = 230000, базовая 280000, экономия 50000
+    user_msg = captured_messages[0][1]["content"]
+    assert "230000" in user_msg
+    assert "280000" in user_msg
+    assert "50000" in user_msg
+
+    # 2. Безопасный откат на build_fallback_pitch при сбое LLM (used_llm=False)
+    failing_llm_client = MagicMock()
+    failing_llm_client.chat.completions.create = AsyncMock(side_effect=TimeoutError("LLM timeout"))
+
+    with (
+        patch.object(matcher_pkg.settings, "LLM_API_KEY", "test-key"),
+        patch.object(matcher_pkg, "structured_llm_client", failing_llm_client),
+    ):
+        res_fb = client.post(
+            "/api/manager/selections/50/pitch",
+            json={
+                "final_items": [
+                    {"event_id": 101, "tariff_id": 1001},
+                    {"event_id": 102, "tariff_id": 1002},
+                ],
+            },
+        )
+
+    assert res_fb.status_code == 200
+    body_fb = res_fb.json()
+    assert body_fb["used_llm"] is False
+    assert "ГК Пионер" in body_fb["generated_pitch_text"]
+    assert "230 000 ₽" in body_fb["generated_pitch_text"]
+
+    # 3. Неверная связка (event_id, tariff_id) -> 400
+    res_bad_pair = client.post(
+        "/api/manager/selections/50/pitch",
+        json={
+            "final_items": [{"event_id": 101, "tariff_id": 1999}],
+        },
+    )
+    assert res_bad_pair.status_code == 400
+
+    # 4. IDOR чужой подборки -> 404
+    res_idor = client.post(
+        "/api/manager/selections/60/pitch",
+        json={
+            "final_items": [{"event_id": 101, "tariff_id": 1001}],
+        },
+    )
+    assert res_idor.status_code == 404

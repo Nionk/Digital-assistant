@@ -311,6 +311,16 @@ class SelectedEventTariffPairIn(BaseModel):
     tariff_id: int = Field(..., description="ID выбранного тарифа")
     ai_rationale: str | None = Field(None, description="Отредактированное менеджером обоснование")
 
+
+def _validate_unique_final_items(items: list[SelectedEventTariffPairIn]) -> None:
+    """Гарантирует отсутствие дублей одного и того же мероприятия в списке пар."""
+    seen_events: set[int] = set()
+    for item in items:
+        if item.event_id in seen_events:
+            raise ValueError(f"Дублирование мероприятия event_id={item.event_id} в final_items не допускается.")
+        seen_events.add(item.event_id)
+
+
 class PublishSelectionIn(BaseModel):
     """Запрос на фиксацию и публикацию персональной витрины клиенту."""
     selected_bundle_group: Literal[1, 2] = Field(
@@ -329,12 +339,43 @@ class PublishSelectionIn(BaseModel):
     @model_validator(mode="after")
     def validate_unique_events(self) -> Self:
         """Гарантирует отсутствие дублей одного и того же мероприятия в публикуемом пакете."""
-        seen_events: set[int] = set()
-        for item in self.final_items:
-            if item.event_id in seen_events:
-                raise ValueError(f"Дублирование мероприятия event_id={item.event_id} в final_items не допускается.")
-            seen_events.add(item.event_id)
+        _validate_unique_final_items(self.final_items)
         return self
+
+
+class GeneratePitchIn(BaseModel):
+    """Запрос на живую перегенерацию сопроводительного письма КП по выбранным парам (event_id, tariff_id)."""
+    final_items: list[SelectedEventTariffPairIn] = Field(
+        ...,
+        min_length=1,
+        description="Итоговый список пар (event_id, tariff_id), по которым пересчитывается письмо КП",
+    )
+    raw_manager_notes: str | None = Field(
+        default=None,
+        description="Актуальный конспект встречи от менеджера",
+    )
+    total_budget_max: float | None = Field(
+        default=None,
+        gt=0,
+        description="Целевой лимит бюджета клиента в рублях",
+    )
+    include_budget_limit: bool = Field(
+        default=True,
+        description="Упоминать ли ориентир бюджета клиента в тексте письма",
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_events(self) -> Self:
+        """Гарантирует отсутствие дублей одного и того же мероприятия в запросе генерации письма."""
+        _validate_unique_final_items(self.final_items)
+        return self
+
+
+class GeneratePitchOut(BaseModel):
+    """Результат живой генерации сопроводительного письма КП."""
+    selection_id: int = Field(..., description="ID подборки")
+    generated_pitch_text: str = Field(..., description="Сгенерированный текст сопроводительного письма КП")
+    used_llm: bool = Field(..., description="True, если письмо сгенерировано живой LLM; False при откате на шаблон")
 
 class PublishSelectionOut(BaseModel):
     """Результат публикации: ссылка Magic Link и параметры опубликованной витрины."""

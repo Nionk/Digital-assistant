@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import TypeVar
 
 import httpx
 from instructor.core import InstructorRetryException
@@ -11,6 +12,8 @@ from app.schemas.manager import ClientQueryExtracted, TariffOptionOut
 from app.services.matcher.types import EvaluatedCombo, ScoredEventCandidate
 
 logger = logging.getLogger(__name__)
+
+_LLMResponseT = TypeVar("_LLMResponseT", bound=BaseModel)
 
 
 class EventRationaleLLMItem(BaseModel):
@@ -30,6 +33,16 @@ class PitchAndRationalesLLMResponse(BaseModel):
         ...,
         description=(
             "Живое, персонализированное сопроводительное письмо клиенту от лица менеджера без спам-штампов. "
+            "Используй ТОЛЬКО переданные точные цифры общей стоимости, базовой стоимости, экономии Early Bird и дат."
+        ),
+    )
+
+
+class PitchOnlyLLMResponse(BaseModel):
+    generated_pitch_text: str = Field(
+        ...,
+        description=(
+            "Живое, персонализированное сопроводительное письмо клиенту от лица менеджера без канцеляризмов и спам-штампов. "
             "Используй ТОЛЬКО переданные точные цифры общей стоимости, базовой стоимости, экономии Early Bird и дат."
         ),
     )
@@ -59,14 +72,21 @@ def build_default_rationale(
     return f"Приоритетная площадка по направлениям ({themes_str}) в {loc}: обеспечивает {role_label}."
 
 
+def _format_rub_int(amount: float) -> str:
+    """Форматирует целую сумму в рублях с пробелами-разделителями разрядов."""
+    return f"{int(amount):,}".replace(",", " ")
+
+
 def build_fallback_pitch(
     client_name: str,
     profile: ClientQueryExtracted,
     v1: EvaluatedCombo,
+    *,
+    has_on_request: bool = False,
 ) -> str:
     """
-    Формирует чистый, выверенный шаблон КП на случай недоступности внешнего LLM-шлюза.
-    Корректно адаптируется к составу ролей и отсутствию скидок Early Bird (total_savings == 0.0).
+    Формирует живой, естественный шаблон КП на случай недоступности внешнего LLM-шлюза.
+    Корректно адаптируется к составу ролей, позициям «По запросу», конфликтам дат и отсутствию Early Bird.
     """
     titles = ", ".join(f"«{c.event.canonical_title}»" for c in v1.candidates)
     clean_themes = [t.strip() for t in profile.themes_keywords[:3] if t.strip()]
@@ -75,49 +95,67 @@ def build_fallback_pitch(
         if clean_themes
         else "по ключевым отраслевым направлениям"
     )
-    price_str = f"{int(v1.total_actual_price):,}".replace(",", " ")
-    budget_str = f"{int(profile.total_budget_max):,}".replace(",", " ")
+    price_str = _format_rub_int(v1.total_actual_price)
+    budget_str = _format_rub_int(profile.total_budget_max)
     budget_clause = (
-        f" при согласованном ориентире бюджета {budget_str} ₽"
+        f" при ориентире бюджета {budget_str} ₽"
         if not getattr(profile, "budget_is_assumed", False)
         else ""
     )
 
     n_ev = len(v1.candidates)
-    if n_ev == 1:
-        bundle_lead = f"В приоритетный пакет вошла 1 площадка: {titles}."
-    elif 2 <= n_ev <= 4:
-        bundle_lead = f"В приоритетный пакет вошли {n_ev} площадки без пересечений по датам: {titles}."
+    conflict_note = ""
+    if v1.has_date_conflict:
+        date_phrase = ""
+        conflict_note = (
+            " Обратите внимание: даты части очных площадок пересекаются, "
+            "поэтому при подтверждении поможем гибко распределить участие команды."
+        )
     else:
-        bundle_lead = f"В приоритетный пакет вошли {n_ev} площадок без пересечений по датам: {titles}."
+        date_phrase = " без пересечений по датам"
+
+    if n_ev == 1:
+        bundle_lead = f"В подборку вошла 1 профильная площадка: {titles}."
+    elif 2 <= n_ev <= 4:
+        bundle_lead = f"В подборку вошли {n_ev} площадки{date_phrase}: {titles}.{conflict_note}"
+    else:
+        bundle_lead = f"В подборку вошли {n_ev} площадок{date_phrase}: {titles}.{conflict_note}"
+
+    if has_on_request and v1.total_actual_price <= 0:
+        price_sentence = "Стоимость участия по выбранным позициям уточняется по запросу у организаторов."
+    else:
+        on_req_suffix = " (плюс позиции со стоимостью по запросу)" if has_on_request else ""
+        price_sentence = (
+            f"Стоимость участия по выбранным тарифам составит {price_str} ₽ (с НДС)"
+            f"{on_req_suffix}{budget_clause}."
+        )
 
     pitch = (
-        f"Добрый день! По итогам установочной встречи подготовили для компании {client_name} "
-        f"рекомендованный календарь профильных мероприятий {themes_clause}.\n\n"
+        f"Добрый день! По итогам нашего разговора подготовили для компании {client_name} "
+        f"подборку профильных мероприятий {themes_clause}.\n\n"
         f"{bundle_lead}\n\n"
-        f"Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет {price_str} ₽ (с НДС)"
-        f"{budget_clause}."
+        f"{price_sentence}"
     )
 
     if v1.total_savings > 0 and v1.earliest_deadline is not None:
-        base_str = f"{int(v1.total_base_price):,}".replace(",", " ")
-        savings_str = f"{int(v1.total_savings):,}".replace(",", " ")
+        base_str = _format_rub_int(v1.total_base_price)
+        savings_str = _format_rub_int(v1.total_savings)
         dl_str = v1.earliest_deadline.strftime("%d.%m.%Y")
         pitch += (
-            f" При согласовании плана и бронировании до {dl_str} действуют льготные условия Early Bird "
-            f"и партнёрские преференции — прямая выгода составит {savings_str} ₽ "
+            f" Если зафиксируем участие до {dl_str}, сработают условия Early Bird "
+            f"и партнёрские преференции — прямая экономия составит {savings_str} ₽ "
             f"(базовая стоимость без скидки — {base_str} ₽)."
         )
 
     if v1.matched_speaker_count > 0:
         pitch += (
-            "\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, "
-            "подготовку экспертного выступления спикера и организацию целевых деловых знакомств на площадках."
+            "\n\nМы возьмём на себя переговоры с организаторами, подготовку выступления спикера "
+            "и организацию целевых деловых знакомств на площадках."
         )
     else:
         pitch += (
-            "\n\nСо стороны агентства мы берем на себя согласование условий с организаторами, "
-            "аккредитацию участников и организацию целевых деловых знакомств на площадках."
+            "\n\nМы возьмём на себя переговоры с организаторами, аккредитацию участников "
+            "и организацию целевых деловых знакомств на площадках."
         )
     return pitch
 
@@ -154,6 +192,53 @@ def _format_event_line_for_pitch(ev_id: int, ev: Event, tar: TariffOptionOut) ->
     )
 
 
+def _build_common_pitch_clauses(
+    profile: ClientQueryExtracted,
+    combo: EvaluatedCombo,
+    *,
+    has_on_request: bool = False,
+) -> tuple[str, str, str, str, str]:
+    """Собирает переиспользуемые фрагменты промпта (Early Bird, роль агентства, сводка пакета, бюджет)."""
+    eb_clause = (
+        f"Экономия Early Bird: {int(combo.total_savings)} руб. при бронировании до {combo.earliest_deadline.isoformat()}."
+        if (combo.total_savings > 0 and combo.earliest_deadline is not None)
+        else "Специальных скидок Early Bird в данном пакете нет (экономия 0 руб., не упоминай скидки в письме)."
+    )
+    agency_role_clause = (
+        "подготовку спикера и организацию целевых встреч"
+        if combo.matched_speaker_count > 0
+        else "согласование участия с организаторами и организацию целевых встреч"
+    )
+    on_req_clause = (
+        " В составе есть позиции со статусом «По запросу» — их стоимость уточняется отдельно у организаторов."
+        if has_on_request
+        else ""
+    )
+    combo_summary = (
+        f"Состав пакета ({len(combo.candidates)} событий): "
+        + ", ".join(
+            f"«{c.event.canonical_title}» (тариф {t.tariff_name})"
+            for c, t in zip(combo.candidates, combo.chosen_tariffs)
+        )
+        + f". Итоговая стоимость пакета: {int(combo.total_actual_price)} руб. "
+        + f"Базовая стоимость: {int(combo.total_base_price)} руб. "
+        + eb_clause
+        + on_req_clause
+    )
+    budget_line = (
+        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
+        if not getattr(profile, "budget_is_assumed", False)
+        else "Клиент не зафиксировал жесткий бюджет (не упоминай в письме формулировки 'согласованный бюджет').\n\n"
+    )
+    date_clause = (
+        "Внимание: среди выбранных очных площадок есть пересечение по датам (менеджер включил их осознанно) — "
+        "НЕ пиши, что календарь без пересечений; аккуратно отметь необходимость распределить команду или согласовать график."
+        if combo.has_date_conflict
+        else "Календарь сверен без пересечений по датам."
+    )
+    return agency_role_clause, combo_summary, budget_line, date_clause, eb_clause
+
+
 def _build_pitch_prompts(
     client_name: str,
     raw_notes: str,
@@ -163,37 +248,18 @@ def _build_pitch_prompts(
 ) -> tuple[str, str]:
     """Формирует системный и пользовательский промпты для генерации КП и обоснований."""
     events_lines = [_format_event_line_for_pitch(ev_id, ev, tar) for ev_id, (ev, tar) in unique_events_info.items()]
-    eb_clause = (
-        f"Экономия Early Bird: {int(v1.total_savings)} руб. при бронировании до {v1.earliest_deadline.isoformat()}."
-        if (v1.total_savings > 0 and v1.earliest_deadline is not None)
-        else "Специальных скидок Early Bird в данном пакете нет (экономия 0 руб., не упоминай скидки в письме)."
-    )
-    agency_role_clause = (
-        "подготовку спикера и организацию целевых встреч"
-        if v1.matched_speaker_count > 0
-        else "согласование участия с организаторами и организацию целевых встреч"
-    )
-    v1_summary = (
-        f"Состав Варианта №1 ({len(v1.candidates)} событий): "
-        + ", ".join(f"«{c.event.canonical_title}» (тариф {t.tariff_name})" for c, t in zip(v1.candidates, v1.chosen_tariffs))
-        + f". Итоговая стоимость пакета: {int(v1.total_actual_price)} руб. "
-        + f"Базовая стоимость: {int(v1.total_base_price)} руб. "
-        + eb_clause
+    agency_role_clause, v1_summary, budget_line, date_clause, _ = _build_common_pitch_clauses(
+        profile, v1, has_on_request=False
     )
     system_prompt = (
         "Ты — ведущий менеджер сопровождения делового B2B-агентства. "
         "Сформируй персональные аргументы выбора площадки (ai_rationale) для каждого мероприятия из списка "
         "(укажи ценность целевой аудитории и какую задачу решает формат: целевые деловые знакомства, экспертное выступление в сессии или вовлечение аудитории на стенде) "
         "и напиши живое, убедительное сопроводительное письмо клиенту (generated_pitch_text) без канцеляризмов и спам-штампов. "
-        f"В письме подчеркни, что календарь сверен без пересечений по срокам, укажи бюджет внешних взносов организаторам "
+        f"В письме учти календарь ({date_clause}), укажи стоимость участия по выбранным тарифам "
         f"и готовность агентства взять на себя {agency_role_clause}. "
         "КРИТИЧЕСКОЕ ПРАВИЛО: В письме используй ТОЛЬКО переданные ниже цифры стоимости Варианта №1 и дат. "
         "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
-    )
-    budget_line = (
-        f"Лимит бюджета клиента: {int(profile.total_budget_max)} руб.\n\n"
-        if not getattr(profile, "budget_is_assumed", False)
-        else "Клиент не зафиксировал жесткий бюджет (не упоминай в письме формулировки 'согласованный бюджет').\n\n"
     )
     user_prompt = (
         f"Клиент: {client_name}\nИсходная заметка созвона: {raw_notes}\n"
@@ -204,26 +270,64 @@ def _build_pitch_prompts(
     return system_prompt, user_prompt
 
 
-async def _request_pitch_from_llm(
+def _build_live_pitch_prompts(
+    client_name: str,
+    raw_notes: str,
+    profile: ClientQueryExtracted,
+    combo: EvaluatedCombo,
+    *,
+    has_on_request: bool = False,
+) -> tuple[str, str]:
+    """Формирует системный и пользовательский промпты для живой перегенерации только текста письма КП."""
+    events_lines = [
+        _format_event_line_for_pitch(cand.event.id, cand.event, tar)
+        for cand, tar in zip(combo.candidates, combo.chosen_tariffs)
+    ]
+    agency_role_clause, combo_summary, budget_line, date_clause, _ = _build_common_pitch_clauses(
+        profile, combo, has_on_request=has_on_request
+    )
+    system_prompt = (
+        "Ты — ведущий менеджер сопровождения делового B2B-агентства. "
+        "Напиши тёплое, живое, лаконичное деловое сопроводительное письмо клиенту (generated_pitch_text) "
+        "без канцеляризмов (избегай фраз вроде 'Расчет внешних расходов') и без спам-штампов. "
+        f"Учти статус календаря: {date_clause} "
+        f"Покажи ценность выбранных площадок, укажи стоимость участия и готовность агентства взять на себя {agency_role_clause}. "
+        "Если в составе есть позиции «По запросу», явно отметь, что их стоимость уточняется отдельно у организаторов. "
+        "КРИТИЧЕСКОЕ ПРАВИЛО: Используй ТОЛЬКО переданные ниже точные цифры стоимости, экономии и дат. "
+        "Ничего не пересчитывай самостоятельно и не выдумывай несуществующие скидки."
+    )
+    user_prompt = (
+        f"Клиент: {client_name}\nИсходная заметка созвона: {raw_notes or 'Не указана'}\n"
+        f"{budget_line}"
+        f"Точные параметры утвержденного менеджером состава:\n{combo_summary}\n\n"
+        "Выбранные мероприятия и тарифы:\n" + "\n".join(events_lines)
+    )
+    return system_prompt, user_prompt
+
+
+async def _request_structured_pitch(
     system_prompt: str,
     user_prompt: str,
-) -> PitchAndRationalesLLMResponse | None:
-    """Выполняет защищенный LLM_SEMAPHORE вызов к LLM для генерации КП и обоснований."""
+    response_model: type[_LLMResponseT],
+    *,
+    timeout_sec: float = 25.0,
+) -> _LLMResponseT | None:
+    """Выполняет защищенный LLM_SEMAPHORE вызов к LLM для структурированной генерации КП."""
     import app.services.matcher as matcher_pkg
 
     try:
         async with matcher_pkg.LLM_SEMAPHORE:
-            res: PitchAndRationalesLLMResponse = await asyncio.wait_for(
+            res: _LLMResponseT = await asyncio.wait_for(
                 matcher_pkg.structured_llm_client.chat.completions.create(
                     model=matcher_pkg.settings.LLM_MODEL,
-                    response_model=PitchAndRationalesLLMResponse,
+                    response_model=response_model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     max_retries=1,
                 ),
-                timeout=25.0,
+                timeout=timeout_sec,
             )
             return res
     except (TimeoutError, APIError, httpx.HTTPError, ValidationError, InstructorRetryException) as exc:
@@ -234,6 +338,61 @@ async def _request_pitch_from_llm(
             exc_info=True,
         )
         return None
+
+
+async def _request_pitch_from_llm(
+    system_prompt: str,
+    user_prompt: str,
+) -> PitchAndRationalesLLMResponse | None:
+    """Выполняет защищенный LLM_SEMAPHORE вызов к LLM для генерации КП и обоснований."""
+    return await _request_structured_pitch(
+        system_prompt,
+        user_prompt,
+        PitchAndRationalesLLMResponse,
+        timeout_sec=25.0,
+    )
+
+
+async def generate_live_pitch_text(
+    client_name: str,
+    raw_notes: str,
+    profile: ClientQueryExtracted,
+    combo: EvaluatedCombo,
+    *,
+    has_on_request: bool = False,
+) -> tuple[str, bool]:
+    """
+    Генерирует живое сопроводительное письмо КП по актуальному составу (без пересчёта ai_rationale).
+    При отсутствии ключа или сбое/таймауте LLM безопасно откатывается на build_fallback_pitch.
+    Возвращает кортеж (pitch_text, used_llm).
+    """
+    import app.services.matcher as matcher_pkg
+
+    fallback_pitch = build_fallback_pitch(
+        client_name,
+        profile,
+        combo,
+        has_on_request=has_on_request,
+    )
+    if not matcher_pkg.settings.LLM_API_KEY:
+        return fallback_pitch, False
+
+    system_prompt, user_prompt = _build_live_pitch_prompts(
+        client_name,
+        raw_notes,
+        profile,
+        combo,
+        has_on_request=has_on_request,
+    )
+    llm_res = await _request_structured_pitch(
+        system_prompt,
+        user_prompt,
+        PitchOnlyLLMResponse,
+        timeout_sec=20.0,
+    )
+    if llm_res is None or not llm_res.generated_pitch_text.strip():
+        return fallback_pitch, False
+    return llm_res.generated_pitch_text.strip(), True
 
 
 def _merge_llm_rationales(
