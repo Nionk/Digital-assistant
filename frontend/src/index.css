@@ -42,7 +42,7 @@
     min-height: 100vh;
     background-color: #0B0E12;
     color: #F3F4F6;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   /* Полное подавление браузерных белых контуров (outline) и вспышек при любых состояниях */

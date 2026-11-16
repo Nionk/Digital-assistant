@@ -88,7 +88,7 @@ export function ShowcaseExecutiveHeader({
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#7C5A20]/35 to-transparent" />
 
       {/* Верхняя навигационная полоса: Логотип слева + Персональный куратор справа */}
-      <div className="mx-auto flex h-[67px] max-w-7xl items-center justify-between gap-3 border-b border-[#1A2026] px-4 sm:px-6">
+      <div className="mx-auto flex min-h-[67px] max-w-7xl flex-wrap items-center justify-between gap-3 border-b border-[#1A2026] px-4 py-2.5 sm:px-6">
         <div className="flex items-center">
           <img
             src={logoImage}
@@ -106,38 +106,43 @@ export function ShowcaseExecutiveHeader({
               title="На связи"
             />
           </div>
-          <div className="text-left leading-tight">
+          <div className="min-w-0 text-left leading-tight">
             <span className="block font-serif italic text-[11px] text-[#8E95A0]">
               С вами работает персональный куратор
             </span>
-            <span className="mt-0.5 block text-xs font-semibold text-white">
-              {cleanName}
-            </span>
-            {showcase.manager_email && (
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <a
-                  href={`mailto:${showcase.manager_email}`}
-                  title={`Написать куратору на ${showcase.manager_email}`}
-                  className="inline-flex items-center gap-1 text-[11px] text-[#E5C378] transition-colors hover:text-white hover:underline underline-offset-2"
-                >
-                  <Mail className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                  <span>{showcase.manager_email}</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={handleCopyManagerEmail}
-                  title="Скопировать email куратора"
-                  aria-label="Скопировать email куратора"
-                  className="inline-flex h-4 w-4 items-center justify-center rounded text-[#8E95A0] transition-colors hover:text-[#E5C378] cursor-pointer"
-                >
-                  {emailCopied ? (
-                    <Check className="h-3 w-3 text-[#34D399]" strokeWidth={2.25} />
-                  ) : (
-                    <Copy className="h-2.5 w-2.5" strokeWidth={1.75} />
-                  )}
-                </button>
-              </div>
-            )}
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="text-xs font-semibold text-white whitespace-nowrap">
+                {cleanName}
+              </span>
+              {showcase.manager_email && (
+                <div className="flex items-center gap-1">
+                  <span className="hidden sm:inline text-[#38414F]" aria-hidden="true">
+                    ·
+                  </span>
+                  <a
+                    href={`mailto:${showcase.manager_email}`}
+                    title={`Написать куратору на ${showcase.manager_email}`}
+                    className="inline-flex items-center gap-1 text-[11px] text-[#E5C378] transition-colors hover:text-white hover:underline underline-offset-2"
+                  >
+                    <Mail className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                    <span>{showcase.manager_email}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyManagerEmail}
+                    title="Скопировать email куратора"
+                    aria-label="Скопировать email куратора"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded text-[#8E95A0] transition-colors hover:text-[#E5C378] cursor-pointer"
+                  >
+                    {emailCopied ? (
+                      <Check className="h-3 w-3 text-[#34D399]" strokeWidth={2.25} />
+                    ) : (
+                      <Copy className="h-2.5 w-2.5" strokeWidth={1.75} />
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
