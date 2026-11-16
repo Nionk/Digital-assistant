@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("app.core.config")
@@ -86,6 +86,22 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.ru-openrouter.ru/v1"
     LLM_MODEL: str = "deepseek/deepseek-chat"
+
+    # Budget Vision OCR & PDF Limits
+    VISION_OCR_MODEL: str | None = None
+    VISION_OCR_MAX_PAGES_AUTO: int = Field(default=3, ge=1, le=20)
+    VISION_OCR_MAX_PAGES_MANUAL: int = Field(default=6, ge=1, le=20)
+    VISION_OCR_MAX_PAGES_PER_RUN: int = Field(default=20, ge=0, le=200)
+    SCRAPER_MAX_PDF_BYTES: int = Field(default=15 * 1024 * 1024, ge=1024 * 1024)
+
+    @field_validator("VISION_OCR_MODEL", mode="before")
+    @classmethod
+    def normalize_vision_ocr_model(cls, v: object) -> str | None:
+        """Нормализует пустую строку/пробелы в None для безопасного отключения Vision OCR."""
+        if v is None:
+            return None
+        cleaned = str(v).strip()
+        return cleaned or None
 
     # Embedding & Jina Gateway
     JINA_API_KEY: str | None = None

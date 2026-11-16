@@ -337,21 +337,32 @@ def _build_rag_prompts(
     """Формирует системный и пользовательский промпты для изолированного RAG."""
     tariff_context = _build_tariff_context(tariff, today)
     location_str = "Онлайн" if event.is_online else (event.city or "Не указан")
+    summary_line = (
+        f"- Краткое описание: {event.summary.strip()}\n"
+        if event.summary and event.summary.strip()
+        else ""
+    )
     system_prompt = (
         "Ты — точный консультант по регламентам и условиям участия деловых мероприятий.\n"
         "Твоя задача — ответить на вопрос клиента ИСКЛЮЧИТЕЛЬНО на основе предоставленного ниже "
-        "регламента конкретного мероприятия и параметров рекомендованного тарифа.\n\n"
+        "регламента, описания мероприятия и параметров рекомендованного тарифа.\n\n"
         "ЖЕСТКИЕ ПРАВИЛА (ZERO-HALLUCINATION):\n"
         "1. Отвечай только по фактам из текста. Никогда не додумывай цены, скидки, трансферы, отели или технические условия.\n"
-        "2. Если точного ответа в тексте регламента и описании тарифа НЕТ, обязательно верни `is_answer_found=False`, "
+        "2. Исключение по стоимости: если клиент спрашивает про цену/стоимость/тариф, и в параметрах тарифа указано "
+        "'По запросу' либо в тексте регламента прямо сказано, что цены не публикуются в открытом доступе / уточняются по заявке — "
+        "это ПОДТВЕРЖДЕННЫЙ факт (`is_answer_found=True`). Вежливо сообщи, что стоимость предоставляется по запросу "
+        "(и предложи уточнить точный расчет через куратора или заявку на сайте), указав дословную `source_quote` "
+        "(например, фразу из регламента или `Базовая стоимость: По запросу`).\n"
+        "3. Если точного ответа в тексте регламента, кратком описании и параметрах тарифа НЕТ, обязательно верни `is_answer_found=False`, "
         "`source_quote=None` и вежливо напиши: 'Точных данных по этому вопросу нет в открытом регламенте мероприятия "
         "(как правило, такие детали согласовываются с оргкомитетом в индивидуальном порядке). "
         "Вы можете передать вопрос персональному менеджеру для уточнения у организаторов.'\n"
-        "3. Если ответ найден (`is_answer_found=True`), приведи в `source_quote` точную подтверждающую цитату из текста.\n\n"
+        "4. Если ответ найден (`is_answer_found=True`), приведи в `source_quote` точную подтверждающую цитату из текста или контекста тарифа.\n\n"
         f"Контекст карточки мероприятия:\n"
         f"- Название: {event.canonical_title}\n"
         f"- Локация и площадка: {location_str}, {event.venue or 'уточняется'}\n"
         f"- Даты проведения: {event.start_date.isoformat()} — {event.end_date.isoformat()}\n"
+        f"{summary_line}"
         f"- {tariff_context}"
     )
     user_prompt = (
@@ -556,11 +567,17 @@ async def ask_regulation_question(
     )
     tariff_text = _build_tariff_context(tariff, today)
     location_desc = "Онлайн" if event.is_online else (event.city or "Локация не указана")
+    summary_block = (
+        f"\nОписание: {event.summary.strip()}"
+        if event.summary and event.summary.strip()
+        else ""
+    )
     event_header = (
         f"Мероприятие: {event.canonical_title}\n"
         f"Локация: {location_desc}\n"
         f"Площадка: {event.venue or 'Площадка уточняется'}\n"
         f"Даты проведения: с {event.start_date} по {event.end_date}"
+        f"{summary_block}"
     )
     grounding_context = f"{event_header}\n{regulation_text}\n{tariff_text}"
     llm_res = await _query_rag_llm(event_id, system_prompt, user_prompt, grounding_context)
