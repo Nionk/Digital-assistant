@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Copy,
   Check,
-  AlertTriangle,
 } from "lucide-react";
 import type { CatalogEventItemOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +14,10 @@ import {
   FORMAT_LABELS,
   formatCalendarBadge,
   formatRub,
-  formatMinPrice,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { getEventMinPrice, getEventMaxSavings } from "./catalogUtils";
+import { getEventPriceSummary, getEventMaxSavings } from "./catalogUtils";
+import { CatalogWarningsBadge } from "./CatalogWarningsBadge";
 
 interface CatalogCardsGridProps {
   events: CatalogEventItemOut[];
@@ -48,7 +47,7 @@ export function CatalogCardsGrid({
         const cal = formatCalendarBadge(ev.start_date, ev.end_date);
         const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
         const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
-        const minPrice = getEventMinPrice(ev);
+        const priceSummary = getEventPriceSummary(ev);
         const { savings } = getEventMaxSavings(ev);
         const isSelected = selectedEventId === ev.event_id;
 
@@ -139,15 +138,9 @@ export function CatalogCardsGrid({
                   </p>
 
                   {ev.missing_data_warnings.length > 0 && (
-                    <p
-                      title={ev.missing_data_warnings.join(" · ")}
-                      className="mt-1 flex items-center gap-1 text-[10px] text-[#E5C378]/90 line-clamp-1"
-                    >
-                      <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                      <span className="truncate">
-                        {ev.missing_data_warnings.join(" · ")}
-                      </span>
-                    </p>
+                    <div className="mt-1.5">
+                      <CatalogWarningsBadge warnings={ev.missing_data_warnings} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -177,11 +170,16 @@ export function CatalogCardsGrid({
             </div>
 
             {/* Нижняя лаконичная сводка: стоимость + Early Bird + кнопка Подробнее */}
-            <div className="mt-3 flex items-center justify-between border-t border-[#21262F] pt-2.5 text-xs">
-              <div className="flex items-center gap-2">
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#21262F] pt-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-sans font-bold text-white tabular-nums">
-                  {formatMinPrice(minPrice)}
+                  {priceSummary.label}
                 </span>
+                {priceSummary.subLabel && (
+                  <span className="text-[11px] text-[#E5C378]/85">
+                    · {priceSummary.subLabel}
+                  </span>
+                )}
                 {savings > 0 && (
                   <Badge variant="ebEmerald" className="text-[9px]">
                     Выгода {formatRub(savings)}

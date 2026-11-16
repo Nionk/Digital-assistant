@@ -69,7 +69,12 @@ def build_fallback_pitch(
     Корректно адаптируется к составу ролей и отсутствию скидок Early Bird (total_savings == 0.0).
     """
     titles = ", ".join(f"«{c.event.canonical_title}»" for c in v1.candidates)
-    themes_str = ", ".join(profile.themes_keywords[:3]) if profile.themes_keywords else "ключевым отраслевым направлениям"
+    clean_themes = [t.strip() for t in profile.themes_keywords[:3] if t.strip()]
+    themes_clause = (
+        f"по направлениям: {', '.join(clean_themes)}"
+        if clean_themes
+        else "по ключевым отраслевым направлениям"
+    )
     price_str = f"{int(v1.total_actual_price):,}".replace(",", " ")
     budget_str = f"{int(profile.total_budget_max):,}".replace(",", " ")
     budget_clause = (
@@ -80,7 +85,7 @@ def build_fallback_pitch(
 
     pitch = (
         f"Добрый день! По итогам установочной встречи подготовили для компании {client_name} "
-        f"рекомендованный календарь профильных мероприятий по направлениям: {themes_str}.\n\n"
+        f"рекомендованный календарь профильных мероприятий {themes_clause}.\n\n"
         f"В приоритетный пакет вошли {len(v1.candidates)} площадки без пересечений по датам: {titles}.\n\n"
         f"Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет {price_str} ₽ (с НДС)"
         f"{budget_clause}."

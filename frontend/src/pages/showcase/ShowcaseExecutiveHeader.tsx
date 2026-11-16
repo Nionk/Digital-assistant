@@ -11,9 +11,19 @@ interface ShowcaseExecutiveHeaderProps {
 export function ShowcaseExecutiveHeader({
   showcase,
 }: ShowcaseExecutiveHeaderProps) {
-  const approvedCount = showcase.items.filter(
+  const approvedItems = showcase.items.filter(
     (i) => i.client_reaction === "interested"
+  );
+  const approvedCount = approvedItems.length;
+  const approvedOnRequestCount = approvedItems.filter(
+    (item) => item.actual_price === null
   ).length;
+  const approvedTotalPrice = approvedItems.reduce((acc, item) => {
+    if (item.actual_price === null) return acc;
+    return acc + item.actual_price;
+  }, 0);
+  const approvedOnlyOnRequest =
+    approvedCount > 0 && approvedOnRequestCount === approvedCount;
 
   const onRequestCount = showcase.items.filter(
     (item) => item.actual_price === null
@@ -183,6 +193,34 @@ export function ShowcaseExecutiveHeader({
                     </Badge>
                   )}
                 </div>
+
+                {approvedCount > 0 && (
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#1E5241]/80 bg-[#0E241E]/75 px-3 py-2 text-xs tabular-nums">
+                    <div className="flex items-center gap-1.5 text-[#A7F3D0]">
+                      <Check
+                        className="h-3.5 w-3.5 shrink-0 text-[#34D399]"
+                        strokeWidth={2.25}
+                      />
+                      <span className="font-serif italic">В плане клиента:</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 font-semibold text-white">
+                      {approvedOnlyOnRequest ? (
+                        <span className="text-[#E5C378]">
+                          {approvedOnRequestCount} по запросу
+                        </span>
+                      ) : (
+                        <>
+                          <span>{formatRub(approvedTotalPrice)}</span>
+                          {approvedOnRequestCount > 0 && (
+                            <span className="text-[11px] font-medium text-[#E5C378]">
+                              + {approvedOnRequestCount} по запросу
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Выгода по спецтарифам Early Bird */}

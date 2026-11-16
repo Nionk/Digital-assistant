@@ -1,5 +1,4 @@
 import {
-  ThumbsUp,
   RefreshCcw,
   Clock,
   ExternalLink,
@@ -25,6 +24,7 @@ import type {
 } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { parseClientComment } from "@/lib/accompaniment";
 import {
   ROLE_BADGE_LABELS,
   formatDateRange,
@@ -274,7 +274,7 @@ export function PublishedShowcaseMonitor({
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-1.5 mr-2 text-xs tabular-nums">
             <Badge variant="ebTeal" className="text-[9px]">
-              Одобрено: {approvedCount}
+              В плане: {approvedCount}
             </Badge>
             {rejectedCount > 0 && (
               <Badge variant="ebRose" className="text-[9px]">
@@ -326,6 +326,10 @@ export function PublishedShowcaseMonitor({
           {displayCards.map((item) => {
             const isInterested = item.reaction === "interested";
             const isRejected = item.reaction === "rejected";
+            const parsedComment = parseClientComment(item.comment);
+            const hasCommentContent =
+              Boolean(parsedComment.freeNote) ||
+              parsedComment.parsedServices.length > 0;
 
             return (
               <div
@@ -354,8 +358,8 @@ export function PublishedShowcaseMonitor({
 
                     {isInterested ? (
                       <Badge variant="ebEmerald" className="text-[9px]">
-                        <ThumbsUp className="h-3 w-3 stroke-[2.5]" />
-                        Интересно
+                        <Check className="h-3 w-3 stroke-[2.5]" />
+                        В плане
                       </Badge>
                     ) : isRejected ? (
                       <Badge variant="ebRose" className="text-[9px]">
@@ -385,16 +389,39 @@ export function PublishedShowcaseMonitor({
                   )}
                 </div>
 
-                {item.comment && (
-                  <div className="mt-2.5 rounded-[6px] border border-[#262C35] bg-[#12161A] p-2 text-[11px] text-[#D1D5DB]">
-                    <div className="flex items-center gap-1 font-semibold text-white">
-                      <MessageSquare
-                        className="h-3 w-3 text-[#E5C378]"
-                        strokeWidth={1.5}
-                      />
-                      <span>Комментарий клиента:</span>
-                    </div>
-                    <p className="mt-0.5 leading-relaxed">{item.comment}</p>
+                {hasCommentContent && (
+                  <div className="mt-2.5 rounded-[6px] border border-[#262C35] bg-[#12161A] p-2 text-[11px] text-[#D1D5DB] space-y-1.5">
+                    {parsedComment.freeNote && (
+                      <div>
+                        <div className="flex items-center gap-1 font-semibold text-white">
+                          <MessageSquare
+                            className="h-3 w-3 text-[#E5C378]"
+                            strokeWidth={1.5}
+                          />
+                          <span>Комментарий клиента:</span>
+                        </div>
+                        <p className="mt-0.5 leading-relaxed whitespace-pre-line">
+                          {parsedComment.freeNote}
+                        </p>
+                      </div>
+                    )}
+                    {parsedComment.parsedServices.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#34D399]">
+                          Опции сопровождения:
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {parsedComment.parsedServices.map((srv) => (
+                            <span
+                              key={srv}
+                              className="inline-flex items-center rounded-[4px] border border-[#1E5241] bg-[#0E241E] px-1.5 py-0.5 text-[10px] font-medium text-[#A7F3D0]"
+                            >
+                              {srv}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

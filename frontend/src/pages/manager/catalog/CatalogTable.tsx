@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Copy,
   Check,
-  AlertTriangle,
 } from "lucide-react";
 import type { CatalogEventItemOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +14,11 @@ import {
   formatCalendarBadge,
   formatDateShort,
   formatRub,
-  formatMinPrice,
   pluralizeRu,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { getEventMinPrice, getEventMaxSavings } from "./catalogUtils";
+import { getEventPriceSummary, getEventMaxSavings } from "./catalogUtils";
+import { CatalogWarningsBadge } from "./CatalogWarningsBadge";
 
 interface CatalogTableProps {
   events: CatalogEventItemOut[];
@@ -62,7 +61,7 @@ export function CatalogTable({
               const cal = formatCalendarBadge(ev.start_date, ev.end_date);
               const formatLabel = FORMAT_LABELS[ev.event_format] || ev.event_format;
               const locationLabel = ev.is_online ? "Онлайн" : ev.city || "Россия";
-              const minPrice = getEventMinPrice(ev);
+              const priceSummary = getEventPriceSummary(ev);
               const { savings, deadline } = getEventMaxSavings(ev);
               const isSelected = selectedEventId === ev.event_id;
 
@@ -114,15 +113,9 @@ export function CatalogTable({
                         )}
                       </div>
                       {ev.missing_data_warnings.length > 0 && (
-                        <p
-                          title={ev.missing_data_warnings.join(" · ")}
-                          className="mt-0.5 flex items-center gap-1 text-[10px] text-[#E5C378]/90 truncate"
-                        >
-                          <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                          <span className="truncate">
-                            {ev.missing_data_warnings.join(" · ")}
-                          </span>
-                        </p>
+                        <div className="mt-1">
+                          <CatalogWarningsBadge warnings={ev.missing_data_warnings} />
+                        </div>
                       )}
                       {ev.themes.length > 0 && (
                         <p
@@ -178,11 +171,16 @@ export function CatalogTable({
                   </td>
 
                   <td className="py-3 px-3 align-middle whitespace-nowrap tabular-nums">
-                    {minPrice !== null ? (
+                    {priceSummary.minPrice !== null ? (
                       <div>
                         <span className="font-sans font-bold text-white text-xs">
-                          {formatMinPrice(minPrice)}
+                          {priceSummary.label}
                         </span>
+                        {priceSummary.subLabel && (
+                          <span className="block text-[10px] text-[#E5C378]/85 leading-tight">
+                            {priceSummary.subLabel}
+                          </span>
+                        )}
                         <span className="block text-[10px] text-[#727985] font-serif italic">
                           {ev.tariffs.length}{" "}
                           {pluralizeRu(ev.tariffs.length, ["тариф", "тарифа", "тарифов"])}

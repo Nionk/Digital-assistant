@@ -1,5 +1,6 @@
 import type { CatalogEventItemOut } from "@/api/types";
 import type { MultiSelectOption } from "@/components/ui/searchable-multi-select-popover";
+import { formatMinPrice } from "@/lib/formatters";
 
 export const FORMAT_OPTIONS = [
   { value: "all", label: "Все форматы" },
@@ -30,6 +31,59 @@ export function getEventMinPrice(ev: CatalogEventItemOut): number | null {
     if (acc === null) return t.actual_price;
     return Math.min(acc, t.actual_price);
   }, null);
+}
+
+export interface EventPriceSummary {
+  minPrice: number | null;
+  hasFreeTariff: boolean;
+  hasPaidTariff: boolean;
+  hasOnRequestTariff: boolean;
+  label: string;
+  subLabel: string | null;
+}
+
+/**
+ * Формирует честную сводку минимальной цены мероприятия, уточняя наличие платных
+ * или «По запросу» тарифов, если минимальный тариф равен 0 ₽.
+ */
+export function getEventPriceSummary(ev: CatalogEventItemOut): EventPriceSummary {
+  const minPrice = getEventMinPrice(ev);
+  const hasFreeTariff = ev.tariffs.some((t) => t.actual_price === 0);
+  const hasPaidTariff = ev.tariffs.some(
+    (t) => t.actual_price !== null && t.actual_price > 0
+  );
+  const hasOnRequestTariff = ev.tariffs.some((t) => t.actual_price === null);
+
+  if (minPrice === null) {
+    return {
+      minPrice,
+      hasFreeTariff,
+      hasPaidTariff,
+      hasOnRequestTariff,
+      label: "По запросу",
+      subLabel: null,
+    };
+  }
+
+  let subLabel: string | null = null;
+  if (minPrice === 0) {
+    if (hasPaidTariff && hasOnRequestTariff) {
+      subLabel = "есть платные и по запросу";
+    } else if (hasPaidTariff) {
+      subLabel = "есть платные тарифы";
+    } else if (hasOnRequestTariff) {
+      subLabel = "есть тарифы по запросу";
+    }
+  }
+
+  return {
+    minPrice,
+    hasFreeTariff,
+    hasPaidTariff,
+    hasOnRequestTariff,
+    label: formatMinPrice(minPrice),
+    subLabel,
+  };
 }
 
 export function getEventMaxSavings(ev: CatalogEventItemOut): {

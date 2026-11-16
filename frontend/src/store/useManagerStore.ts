@@ -386,10 +386,14 @@ export const useManagerStore = create<ManagerState>()(
         const profile =
           state.editableProfileByClient[clientId] ||
           matchRes?.extracted_profile;
-        const themesStr =
-          profile?.themes_keywords && profile.themes_keywords.length > 0
-            ? profile.themes_keywords.slice(0, 3).join(", ")
-            : "ключевым отраслевым направлениям";
+        const cleanThemes = (profile?.themes_keywords ?? [])
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 3);
+        const themesClause =
+          cleanThemes.length > 0
+            ? `по направлениям: ${cleanThemes.join(", ")}`
+            : "по ключевым отраслевым направлениям";
 
         const titles = summary.includedRows
           .map(
@@ -406,7 +410,7 @@ export const useManagerStore = create<ManagerState>()(
 
         let updatedPitch =
           `Добрый день! По итогам установочной встречи подготовили для компании ${companyName} ` +
-          `рекомендованный календарь профильных мероприятий по направлениям: ${themesStr}.\n\n` +
+          `рекомендованный календарь профильных мероприятий ${themesClause}.\n\n` +
           `В согласованный план вошли (${summary.includedRows.length}): ${titles}.\n\n` +
           `Расчет внешних расходов (взносы организаторов по выбранным тарифам) составляет ${priceStr} ₽ (с НДС)${onRequestSuffix} ` +
           `при ориентире бюджета ${budgetStr} ₽.`;

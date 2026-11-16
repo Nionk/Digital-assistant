@@ -9,6 +9,7 @@ import {
   Building,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   AlertTriangle,
 } from "lucide-react";
 import type { BundleVariantOut } from "@/api/types";
@@ -26,6 +27,7 @@ import {
   formatDateShort,
   formatRub,
 } from "@/lib/formatters";
+import { humanizeMissingDataWarnings } from "@/lib/warnings";
 import { cn } from "@/lib/utils";
 
 interface BundleConstructorSectionProps {
@@ -239,7 +241,12 @@ function EventBuilderRow({
   onOpenDetails,
 }: EventBuilderRowProps) {
   const [isEditingRationale, setIsEditingRationale] = React.useState(false);
+  const [isWarningsExpanded, setIsWarningsExpanded] = React.useState(false);
   const { item, isIncluded, selectedTariff, rationale, isBonusSlot } = row;
+  const humanizedWarnings = React.useMemo(
+    () => humanizeMissingDataWarnings(item.missing_data_warnings),
+    [item.missing_data_warnings]
+  );
   const cal = formatCalendarBadge(item.start_date, item.end_date);
   const formatName = FORMAT_LABELS[item.event_format] || item.event_format;
   const locationLabel = item.is_online ? "Онлайн" : item.city || "Россия";
@@ -325,7 +332,7 @@ function EventBuilderRow({
                   variant="ebAmber"
                   className="ml-1 text-[9px]"
                   title={
-                    item.missing_data_warnings.join(" • ") ||
+                    humanizedWarnings.join(" • ") ||
                     "Карточка требует обогащения данных"
                   }
                 >
@@ -369,10 +376,36 @@ function EventBuilderRow({
               </p>
             )}
 
-            {item.missing_data_warnings.length > 0 && (
-              <div className="mt-1.5 flex items-start gap-1.5 rounded-[4px] border border-[#7C4A19]/70 bg-[#22160C]/80 px-2 py-1 text-[11px] text-[#E59837]">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" strokeWidth={1.75} />
-                <span>{item.missing_data_warnings.join(" · ")}</span>
+            {humanizedWarnings.length > 0 && (
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsWarningsExpanded((p) => !p)}
+                  title={`Уточнить данные:\n${humanizedWarnings.map((w) => `• ${w}`).join("\n")}`}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-[4px] border border-[#7C4A19]/70 bg-[#22160C]/80 px-2 py-0.5 text-[11px] text-[#E59837] hover:border-[#E59837]/80 transition-colors cursor-pointer"
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                  <span className="font-medium shrink-0">
+                    Уточнить данные ({humanizedWarnings.length})
+                  </span>
+                  <span className="truncate text-[#FDE68A]/80">
+                    · {humanizedWarnings[0]}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3 w-3 shrink-0 transition-transform duration-150",
+                      isWarningsExpanded && "rotate-180"
+                    )}
+                    strokeWidth={2}
+                  />
+                </button>
+                {isWarningsExpanded && (
+                  <ul className="mt-1.5 list-disc space-y-0.5 rounded-[4px] border border-[#7C4A19]/50 bg-[#1B120A]/90 py-1.5 pl-6 pr-2.5 text-[11px] text-[#FDE68A]/90">
+                    {humanizedWarnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
