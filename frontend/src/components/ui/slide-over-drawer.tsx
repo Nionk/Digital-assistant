@@ -59,8 +59,14 @@ export function SlideOverDrawer({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {subtitle && (
-                    <p className="font-serif italic text-xs font-medium text-[#E5C378]">
-                      ✦ {subtitle}
+                    <p className="flex items-center gap-1.5 font-serif italic text-xs font-medium text-[#E5C378]">
+                      <span
+                        className="not-italic leading-none select-none shrink-0"
+                        aria-hidden="true"
+                      >
+                        ✦
+                      </span>
+                      <span>{subtitle}</span>
                     </p>
                   )}
                   <AnimatePresence mode="wait" initial={false}>

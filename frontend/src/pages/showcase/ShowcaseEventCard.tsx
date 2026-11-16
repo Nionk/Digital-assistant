@@ -10,7 +10,6 @@ import {
   ChevronDown,
   Plus,
   Check,
-  Sparkles,
   Copy,
 } from "lucide-react";
 import type { ShowcaseEventItemOut } from "@/api/types";
@@ -506,13 +505,15 @@ export function ShowcaseEventCard({
                   : "text-[#8E95A0] hover:text-[#E5C378]"
               )}
             >
-              <Sparkles
+              <span
                 className={cn(
-                  "h-3.5 w-3.5 shrink-0",
+                  "text-xs not-italic leading-none select-none shrink-0",
                   isInterested ? "text-[#34D399]" : "text-[#E5C378]"
                 )}
-                strokeWidth={1.75}
-              />
+                aria-hidden="true"
+              >
+                ✦
+              </span>
               <span>
                 {effectiveAgencyServices.length > 0
                   ? `Выбрана помощь агентства (${effectiveAgencyServices.length})`

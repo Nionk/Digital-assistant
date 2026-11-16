@@ -13,7 +13,6 @@ import {
   Check,
   AlertCircle,
   Trash2,
-  Sparkles,
   ArrowRight,
   RefreshCw,
 } from "lucide-react";
@@ -62,13 +61,6 @@ const TEXT_TEMPLATES: TextTemplate[] = [
     snippet:
       "Условия для спикера / экспонента:\n- Длительность слота: ___ мин\n- Требования к заявке / дедлайн: \n- Бонусы и проходки для команды: ",
   },
-];
-
-const AI_EXTRACTION_ITEMS = [
-  "Даты и локация",
-  "Тарифы и Early Bird",
-  "Роли Спикер / Делегат / Стенд",
-  "Регламент для чата",
 ];
 
 const PIPELINE_STEPS = [
@@ -444,10 +436,6 @@ export function EventImportModal({
           </button>
         )}
       </div>
-      <p className="mt-1.5 text-[11px] text-[#8E95A0] leading-relaxed">
-        ИИ загрузит страницу события, извлечёт программу, даты и тарифы. Можно
-        комбинировать с PDF или текстовыми заметками.
-      </p>
     </div>
   );
 
@@ -521,22 +509,22 @@ export function EventImportModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="relative z-10 w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-[10px] border border-[#7C5A20] bg-[#161B22] text-white shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_24px_rgba(229,195,120,0.12)] scrollbar-thin"
+            className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[10px] border border-[#7C5A20] bg-[#161B22] text-white shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_24px_rgba(229,195,120,0.12)] scrollbar-thin"
           >
             {/* Шапка модалки */}
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[#21262F] bg-[#12161A] px-4 py-3.5 sm:px-5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[#E5C378] text-xs select-none">✦</span>
-                  <h2 className="font-serif italic text-base font-semibold tracking-tight text-[#E5C378]">
-                    {initialEventTitle
-                      ? "Сборщик досье · Обогащение площадки"
-                      : "Сборщик досье · Импорт площадки"}
-                  </h2>
-                </div>
-                <p className="mt-0.5 text-[11px] text-[#8E95A0]">
-                  Комбинируйте PDF, URL и текстовые заметки — ИИ объединит данные в единую карточку
-                </p>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#21262F] bg-[#12161A] px-4 py-3 sm:px-5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="text-[#E5C378] text-xs not-italic leading-none select-none shrink-0"
+                  aria-hidden="true"
+                >
+                  ✦
+                </span>
+                <h2 className="truncate font-serif italic text-base font-semibold tracking-tight text-[#E5C378]">
+                  {initialEventTitle
+                    ? "Сборщик досье · Обогащение площадки"
+                    : "Сборщик досье · Импорт площадки"}
+                </h2>
               </div>
 
               <button
@@ -550,7 +538,7 @@ export function EventImportModal({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 sm:p-5" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-3.5 p-4 sm:p-5" noValidate>
               {/* Скрытый input для выбора PDF-файла, доступный из любой вкладки */}
               <input
                 ref={fileInputRef}
@@ -567,362 +555,311 @@ export function EventImportModal({
                 className="hidden"
               />
 
+              {initialEventTitle && (
+                <div className="flex items-center justify-between gap-2 rounded-[6px] border border-[#7C5A20]/50 bg-[#1E190E] px-3 py-2 text-xs">
+                  <span className="shrink-0 text-[11px] uppercase tracking-wider text-[#E5C378]/80">
+                    Целевое событие
+                  </span>
+                  <span className="truncate font-medium text-white">
+                    {initialEventTitle}
+                  </span>
+                </div>
+              )}
+
               {formError && (
                 <div
                   role="alert"
-                  className="mb-4 flex items-start gap-2 rounded-[6px] border border-[#EA4335]/40 bg-[#EA4335]/10 px-3 py-2 text-xs text-[#FCA5A5]"
+                  className="flex items-start gap-2 rounded-[6px] border border-[#EA4335]/40 bg-[#EA4335]/10 px-3 py-2 text-xs text-[#FCA5A5]"
                 >
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F87171]" />
                   <span>{formError}</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-[1.2fr_0.85fr]">
-                {/* Левая панель — Источники с вкладками и комбинированием */}
-                <div className="space-y-4">
-                  <div
-                    role="tablist"
-                    aria-label="Источники импорта площадки"
-                    className="grid grid-cols-2 gap-1.5 rounded-[8px] border border-[#262D35] bg-[#0B0E12] p-1 sm:grid-cols-4"
-                  >
-                    {tabs.map((tab) => {
-                      const isActive = activeTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          role="tab"
-                          aria-selected={isActive}
-                          disabled={uploadMutation.isPending}
-                          onClick={() => setActiveTab(tab.id)}
+              {/* Переключатель вкладок */}
+              <div
+                role="tablist"
+                aria-label="Источники импорта площадки"
+                className="grid grid-cols-2 gap-1.5 rounded-[8px] border border-[#262D35] bg-[#0B0E12] p-1 sm:grid-cols-4"
+              >
+                {tabs.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      disabled={uploadMutation.isPending}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 rounded-[6px] px-2 py-1.5 text-[11px] font-medium transition-all cursor-pointer disabled:opacity-60",
+                        isActive
+                          ? "border border-[#7C5A20] bg-[#1E190E] text-[#E5C378] shadow-xs"
+                          : "border border-transparent text-[#8E95A0] hover:bg-[#161B22] hover:text-white"
+                      )}
+                    >
+                      {tab.icon}
+                      <span className="truncate">{tab.label}</span>
+                      {tab.isFilled && (
+                        <span
                           className={cn(
-                            "flex items-center justify-center gap-1.5 rounded-[6px] px-2 py-1.5 text-[11px] font-medium transition-all cursor-pointer disabled:opacity-60",
-                            isActive
-                              ? "border border-[#7C5A20] bg-[#1E190E] text-[#E5C378] shadow-xs"
-                              : "border border-transparent text-[#8E95A0] hover:bg-[#161B22] hover:text-white"
+                            "inline-flex items-center justify-center text-[11px] font-semibold",
+                            tab.badgeText
+                              ? "rounded bg-[#34D399]/15 px-1 text-[#34D399] tabular-nums"
+                              : "text-[#34D399]"
+                          )}
+                          title="Источник заполнен"
+                        >
+                          {tab.badgeText ?? "✓"}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Блок ввода активной вкладки */}
+              <div className="rounded-[8px] border border-[#262D35] bg-[#0B0E12]/60 p-3.5">
+                {activeTab === "pdf" && renderPdfField(false)}
+                {activeTab === "url" && renderUrlField()}
+                {activeTab === "text" && renderTextField(6)}
+                {activeTab === "all" && (
+                  <div className="space-y-4">
+                    {renderPdfField(true)}
+                    <div className="border-t border-[#21262F] pt-3.5">
+                      {renderUrlField()}
+                    </div>
+                    <div className="border-t border-[#21262F] pt-3.5">
+                      {renderTextField(4)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Компактная горизонтальная строка статуса источников */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#21262F] bg-[#12161A] px-3 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0] tabular-nums">
+                  Источники · {filledSourcesCount}/3
+                </span>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={uploadMutation.isPending}
+                    onClick={() => setActiveTab("pdf")}
+                    className={cn(
+                      "inline-flex max-w-[220px] items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-60",
+                      hasPdf
+                        ? "border-[#34D399]/50 bg-[#0E241E] text-[#34D399]"
+                        : activeTab === "pdf"
+                          ? "border-[#7C5A20] bg-[#1E190E] text-[#E5C378]"
+                          : "border-[#262D35] bg-[#0B0E12] text-[#8E95A0] hover:border-[#38414F] hover:text-white"
+                    )}
+                    title={selectedFile ? `${selectedFile.name} · ${formatFileSize(selectedFile.size)}` : "Перейти к загрузке PDF"}
+                  >
+                    {hasPdf ? (
+                      <Check className="h-3 w-3 shrink-0 stroke-[2.5]" />
+                    ) : (
+                      <FileText className="h-3 w-3 shrink-0" />
+                    )}
+                    <span className="truncate tabular-nums">
+                      {selectedFile
+                        ? `${selectedFile.name} (${formatFileSize(selectedFile.size)})`
+                        : "PDF-файл"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={uploadMutation.isPending}
+                    onClick={() => setActiveTab("url")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-60",
+                      isUrlValid
+                        ? "border-[#34D399]/50 bg-[#0E241E] text-[#34D399]"
+                        : hasUrl
+                          ? "border-[#E59837]/60 bg-[#22160C] text-[#E59837]"
+                          : activeTab === "url"
+                            ? "border-[#7C5A20] bg-[#1E190E] text-[#E5C378]"
+                            : "border-[#262D35] bg-[#0B0E12] text-[#8E95A0] hover:border-[#38414F] hover:text-white"
+                    )}
+                    title={hasUrl ? trimmedUrl : "Перейти к вводу URL"}
+                  >
+                    {isUrlValid ? (
+                      <Check className="h-3 w-3 shrink-0 stroke-[2.5]" />
+                    ) : (
+                      <Link2 className="h-3 w-3 shrink-0" />
+                    )}
+                    <span>URL</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={uploadMutation.isPending}
+                    onClick={() => setActiveTab("text")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-60",
+                      hasText
+                        ? "border-[#34D399]/50 bg-[#0E241E] text-[#34D399]"
+                        : activeTab === "text"
+                          ? "border-[#7C5A20] bg-[#1E190E] text-[#E5C378]"
+                          : "border-[#262D35] bg-[#0B0E12] text-[#8E95A0] hover:border-[#38414F] hover:text-white"
+                    )}
+                    title="Перейти к текстовому конспекту"
+                  >
+                    {hasText ? (
+                      <Check className="h-3 w-3 shrink-0 stroke-[2.5]" />
+                    ) : (
+                      <AlignLeft className="h-3 w-3 shrink-0" />
+                    )}
+                    <span className="tabular-nums">
+                      {hasText ? `Текст (${trimmedText.length})` : "Текст"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Условный блок: шаги обработки ИИ или карточка результата */}
+              {uploadMutation.isPending ? (
+                <div className="rounded-[8px] border border-[#7C5A20]/60 bg-[#1E190E]/70 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-[#E5C378]">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Обработка досье...</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-[#E5C378] tabular-nums">
+                      {formatElapsed(elapsedSeconds)}
+                    </span>
+                  </div>
+                  <ol className="space-y-1.5 text-[11px]">
+                    {PIPELINE_STEPS.map((step) => {
+                      const isDone = activePipelineStep > step.id;
+                      const isCurrent = activePipelineStep === step.id;
+                      return (
+                        <li
+                          key={step.id}
+                          className={cn(
+                            "flex items-center gap-2 transition-colors",
+                            isDone
+                              ? "text-[#34D399]"
+                              : isCurrent
+                                ? "text-white font-medium"
+                                : "text-[#8E95A0]"
                           )}
                         >
-                          {tab.icon}
-                          <span className="truncate">{tab.label}</span>
-                          {tab.isFilled && (
-                            <span
-                              className={cn(
-                                "inline-flex items-center justify-center text-[11px] font-semibold",
-                                tab.badgeText
-                                  ? "rounded bg-[#34D399]/15 px-1 text-[#34D399] tabular-nums"
-                                  : "text-[#34D399]"
-                              )}
-                              title="Источник заполнен"
-                            >
-                              {tab.badgeText ?? "✓"}
-                            </span>
-                          )}
-                        </button>
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[11px] tabular-nums",
+                              isDone
+                                ? "border-[#34D399]/60 bg-[#34D399]/15 text-[#34D399]"
+                                : isCurrent
+                                  ? "border-[#E5C378] bg-[#E5C378]/15 text-[#E5C378]"
+                                  : "border-[#262D35] text-[#8E95A0]"
+                            )}
+                          >
+                            {isDone ? (
+                              <Check className="h-2.5 w-2.5 stroke-[2.5]" />
+                            ) : (
+                              step.id
+                            )}
+                          </span>
+                          <span>{step.label}</span>
+                        </li>
                       );
                     })}
-                  </div>
-
-                  <div className="rounded-[8px] border border-[#262D35] bg-[#0B0E12]/60 p-3.5">
-                    {activeTab === "pdf" && renderPdfField(false)}
-                    {activeTab === "url" && renderUrlField()}
-                    {activeTab === "text" && renderTextField(6)}
-                    {activeTab === "all" && (
-                      <div className="space-y-4">
-                        {renderPdfField(true)}
-                        <div className="border-t border-[#21262F] pt-3.5">
-                          {renderUrlField()}
-                        </div>
-                        <div className="border-t border-[#21262F] pt-3.5">
-                          {renderTextField(4)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  </ol>
                 </div>
-
-                {/* Правая панель — Живое досье, прогресс и карточка результата */}
-                <div className="flex flex-col justify-between gap-3.5 rounded-[8px] border border-[#262D35] bg-[#12161A] p-3.5">
-                  <div className="space-y-3.5">
-                    {initialEventTitle && (
-                      <div className="rounded-[6px] border border-[#7C5A20]/50 bg-[#1E190E] px-3 py-2 text-xs">
-                        <span className="block text-[11px] uppercase tracking-wider text-[#E5C378]/80">
-                          Целевое событие
-                        </span>
-                        <span className="mt-0.5 block font-medium text-white">
-                          {initialEventTitle}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Блок «Собранные источники» */}
-                    <div>
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
-                          Собранные источники
-                        </span>
-                        <span className="text-[11px] font-medium text-[#E5C378] tabular-nums">
-                          {filledSourcesCount} из 3
-                        </span>
-                      </div>
-                      <ul className="space-y-1.5 text-xs">
-                        <li className="flex items-center justify-between gap-2 rounded-[6px] border border-[#21262F] bg-[#0B0E12] px-2.5 py-1.5">
-                          <span className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                                hasPdf
-                                  ? "border-[#34D399]/60 bg-[#34D399]/15 text-[#34D399]"
-                                  : "border-[#262D35] text-[#8E95A0]"
-                              )}
-                            >
-                              {hasPdf ? (
-                                <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                              ) : (
-                                <FileText className="h-2.5 w-2.5" />
-                              )}
-                            </span>
-                            <span
-                              className={cn(
-                                "truncate",
-                                hasPdf ? "text-white font-medium" : "text-[#8E95A0]"
-                              )}
-                            >
-                              {selectedFile ? selectedFile.name : "PDF-файл"}
-                            </span>
-                          </span>
-                          <span className="shrink-0 text-[11px] text-[#8E95A0] tabular-nums">
-                            {selectedFile ? formatFileSize(selectedFile.size) : "не добавлен"}
-                          </span>
-                        </li>
-
-                        <li className="flex items-center justify-between gap-2 rounded-[6px] border border-[#21262F] bg-[#0B0E12] px-2.5 py-1.5">
-                          <span className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                                isUrlValid
-                                  ? "border-[#34D399]/60 bg-[#34D399]/15 text-[#34D399]"
-                                  : hasUrl
-                                    ? "border-[#E59837]/60 bg-[#E59837]/15 text-[#E59837]"
-                                    : "border-[#262D35] text-[#8E95A0]"
-                              )}
-                            >
-                              {isUrlValid ? (
-                                <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                              ) : (
-                                <Link2 className="h-2.5 w-2.5" />
-                              )}
-                            </span>
-                            <span
-                              className={cn(
-                                "truncate",
-                                hasUrl ? "text-white font-medium" : "text-[#8E95A0]"
-                              )}
-                            >
-                              {hasUrl ? trimmedUrl : "URL страницы"}
-                            </span>
-                          </span>
-                          <span className="shrink-0 text-[11px] text-[#8E95A0]">
-                            {isUrlValid
-                              ? "готов"
-                              : hasUrl
-                                ? "проверьте http(s)"
-                                : "не указан"}
-                          </span>
-                        </li>
-
-                        <li className="flex items-center justify-between gap-2 rounded-[6px] border border-[#21262F] bg-[#0B0E12] px-2.5 py-1.5">
-                          <span className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                                hasText
-                                  ? "border-[#34D399]/60 bg-[#34D399]/15 text-[#34D399]"
-                                  : "border-[#262D35] text-[#8E95A0]"
-                              )}
-                            >
-                              {hasText ? (
-                                <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                              ) : (
-                                <AlignLeft className="h-2.5 w-2.5" />
-                              )}
-                            </span>
-                            <span
-                              className={cn(
-                                "truncate",
-                                hasText ? "text-white font-medium" : "text-[#8E95A0]"
-                              )}
-                            >
-                              Текстовый конспект
-                            </span>
-                          </span>
-                          <span className="shrink-0 text-[11px] text-[#8E95A0] tabular-nums">
-                            {hasText ? `${trimmedText.length} симв.` : "пусто"}
-                          </span>
-                        </li>
-                      </ul>
+              ) : uploadResult ? (
+                <div className="rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-3 text-xs space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-1.5 font-semibold text-[#34D399] min-w-0">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="leading-snug">
+                        {uploadResult.canonical_title}
+                      </span>
                     </div>
-
-                    {/* Во время отправки: честный пошаговый индикатор этапа */}
-                    {uploadMutation.isPending ? (
-                      <div className="rounded-[8px] border border-[#7C5A20]/60 bg-[#1E190E]/70 p-3 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#E5C378]">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            <span>Обработка досье...</span>
-                          </span>
-                          <span className="text-[11px] font-mono text-[#E5C378] tabular-nums">
-                            {formatElapsed(elapsedSeconds)}
-                          </span>
-                        </div>
-                        <ol className="space-y-1.5 text-[11px]">
-                          {PIPELINE_STEPS.map((step) => {
-                            const isDone = activePipelineStep > step.id;
-                            const isCurrent = activePipelineStep === step.id;
-                            return (
-                              <li
-                                key={step.id}
-                                className={cn(
-                                  "flex items-center gap-2 transition-colors",
-                                  isDone
-                                    ? "text-[#34D399]"
-                                    : isCurrent
-                                      ? "text-white font-medium"
-                                      : "text-[#8E95A0]"
-                                )}
-                              >
-                                <span
-                                  className={cn(
-                                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[11px] tabular-nums",
-                                    isDone
-                                      ? "border-[#34D399]/60 bg-[#34D399]/15 text-[#34D399]"
-                                      : isCurrent
-                                        ? "border-[#E5C378] bg-[#E5C378]/15 text-[#E5C378]"
-                                        : "border-[#262D35] text-[#8E95A0]"
-                                  )}
-                                >
-                                  {isDone ? (
-                                    <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                                  ) : (
-                                    step.id
-                                  )}
-                                </span>
-                                <span>{step.label}</span>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      </div>
-                    ) : uploadResult ? (
-                      /* Карточка результата после успешного сохранения */
-                      <div className="rounded-[8px] border border-[#1E5241] bg-[#0E241E]/90 p-3 text-xs space-y-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5 font-semibold text-[#34D399] min-w-0">
-                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                            <span className="leading-snug">
-                              {uploadResult.canonical_title}
-                            </span>
-                          </div>
-                          <Badge
-                            variant={
-                              uploadResult.data_status === "ready"
-                                ? "ebEmerald"
-                                : "ebAmber"
-                            }
-                            asSlanted={false}
-                            className="text-[11px] shrink-0"
-                          >
-                            {uploadResult.data_status === "ready"
-                              ? "Готово к КП"
-                              : "Требует обогащения"}
-                          </Badge>
-                        </div>
-
-                        <p className="text-[11px] text-[#D1D5DB] leading-relaxed">
-                          {uploadResult.message}
-                        </p>
-
-                        <div className="flex items-center justify-between rounded-[6px] border border-[#1E5241]/80 bg-[#0B0E12]/60 px-2.5 py-1.5 text-[11px]">
-                          <span className="text-[#8E95A0]">Извлечено тарифов:</span>
-                          <strong className="text-white font-semibold tabular-nums">
-                            {uploadResult.tariffs_count}{" "}
-                            {pluralizeRu(uploadResult.tariffs_count, [
-                              "тариф",
-                              "тарифа",
-                              "тарифов",
-                            ])}
-                          </strong>
-                        </div>
-
-                        {onOpenEventDetails && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const eventId = uploadResult.event_id;
-                              onClose();
-                              onOpenEventDetails(eventId);
-                            }}
-                            className="w-full h-8 border-[#34D399]/50 bg-[#12161A] text-xs font-semibold text-[#34D399] hover:border-[#34D399] hover:bg-[#1E5241]/40 hover:text-white"
-                          >
-                            <span>Открыть паспорт площадки</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      /* Блок «Что извлечёт ИИ» */
-                      <div className="rounded-[8px] border border-[#21262F] bg-[#0B0E12] p-3">
-                        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#E5C378]">
-                          <Sparkles className="h-3.5 w-3.5" />
-                          <span>Что извлечёт ИИ</span>
-                        </div>
-                        <ul className="space-y-1.5 text-xs text-[#D1D5DB]">
-                          {AI_EXTRACTION_ITEMS.map((item) => (
-                            <li key={item} className="flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#E5C378]" />
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    <Badge
+                      variant={
+                        uploadResult.data_status === "ready"
+                          ? "ebEmerald"
+                          : "ebAmber"
+                      }
+                      asSlanted={false}
+                      className="text-[11px] shrink-0"
+                    >
+                      {uploadResult.data_status === "ready"
+                        ? "Готово к КП"
+                        : "Требует обогащения"}
+                    </Badge>
                   </div>
 
-                  {/* Действия формы */}
-                  <div className="flex flex-col-reverse gap-2 border-t border-[#21262F] pt-3 sm:flex-row sm:items-center sm:justify-end">
+                  <p className="text-[11px] text-[#D1D5DB] leading-relaxed">
+                    {uploadResult.message}
+                  </p>
+
+                  <div className="flex items-center justify-between rounded-[6px] border border-[#1E5241]/80 bg-[#0B0E12]/60 px-2.5 py-1.5 text-[11px]">
+                    <span className="text-[#8E95A0]">Извлечено тарифов:</span>
+                    <strong className="text-white font-semibold tabular-nums">
+                      {uploadResult.tariffs_count}{" "}
+                      {pluralizeRu(uploadResult.tariffs_count, [
+                        "тариф",
+                        "тарифа",
+                        "тарифов",
+                      ])}
+                    </strong>
+                  </div>
+
+                  {onOpenEventDetails && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={uploadMutation.isPending}
-                      onClick={onClose}
-                      className="border-[#262D35] bg-[#161B22] text-xs text-[#D1D5DB] hover:border-[#E5C378] hover:text-white"
+                      onClick={() => {
+                        const eventId = uploadResult.event_id;
+                        onClose();
+                        onOpenEventDetails(eventId);
+                      }}
+                      className="w-full h-8 border-[#34D399]/50 bg-[#12161A] text-xs font-semibold text-[#34D399] hover:border-[#34D399] hover:bg-[#1E5241]/40 hover:text-white"
                     >
-                      {uploadResult ? "Закрыть" : "Отмена"}
+                      <span>Открыть паспорт площадки</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
-                    <Button
-                      type="submit"
-                      variant="monolith"
-                      size="sm"
-                      disabled={uploadMutation.isPending || filledSourcesCount === 0}
-                      className="text-xs font-semibold px-4"
-                    >
-                      {uploadMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E5C378]" />
-                          <span>Распознаём...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" />
-                          <span>Распознать и сохранить</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  )}
                 </div>
+              ) : null}
+
+              {/* Компактный футер */}
+              <div className="flex flex-col-reverse gap-2 border-t border-[#21262F] pt-3 sm:flex-row sm:items-center sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadMutation.isPending}
+                  onClick={onClose}
+                  className="border-[#262D35] bg-[#161B22] text-xs text-[#D1D5DB] hover:border-[#E5C378] hover:text-white"
+                >
+                  {uploadResult ? "Закрыть" : "Отмена"}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="monolith"
+                  size="sm"
+                  disabled={uploadMutation.isPending || filledSourcesCount === 0}
+                  className="text-xs font-semibold px-4"
+                >
+                  {uploadMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E5C378]" />
+                      <span>Распознаём...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5 text-[#E5C378] monolith-icon" />
+                      <span>Распознать и сохранить</span>
+                    </>
+                  )}
+                </Button>
               </div>
             </form>
           </motion.div>

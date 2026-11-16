@@ -28,7 +28,7 @@ const SCRAPER_SOURCE_META: Record<
   { label: string; subLabel: string }
 > = {
   all: {
-    label: "Все 9 утвержденных площадок",
+    label: "Все отраслевые площадки",
     subLabel: "Полный обход",
   },
   expomap_construction: {
@@ -236,12 +236,6 @@ export function ScraperRunModal({ isOpen, onClose }: ScraperRunModalProps) {
               </div>
 
               <div className="mt-4 space-y-3.5">
-                <p className="text-xs leading-relaxed text-[#8E95A0]">
-                  Выберите одну из 9 утвержденных отраслевых площадок или полный
-                  обход каталогов. Парсер работает асинхронно в фоне и уведомляет
-                  об итогах в Telegram.
-                </p>
-
                 <div>
                   <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[#8E95A0]">
                     Источник сбора данных

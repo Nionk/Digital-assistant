@@ -8,7 +8,6 @@ import {
   Compass,
   Edit3,
   Building,
-  Sparkles,
   ChevronRight,
   ChevronDown,
   AlertTriangle,
@@ -193,7 +192,12 @@ export function BundleConstructorSection({
         <div className="rounded-[12px] border border-[#262D35] bg-[#161B22] p-3.5 shadow-sm">
           <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-[#21262F] pb-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[#E5C378]" strokeWidth={1.5} />
+              <span
+                className="text-xs not-italic leading-none text-[#E5C378] select-none shrink-0"
+                aria-hidden="true"
+              >
+                ✦
+              </span>
               <span className="font-serif italic text-xs font-semibold tracking-wide text-[#E5C378]">
                 Дополнительные возможности: спецпроекты и стенды «По запросу»
               </span>

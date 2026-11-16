@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import {
   Search,
-  Sparkles,
   CalendarCheck,
   X,
   RotateCcw,
@@ -334,7 +333,12 @@ export function CatalogHeaderAndFilters({
                 : "border border-[#262D35] bg-[#12161A] text-[#8E95A0] hover:border-[#38414F] hover:text-white"
             )}
           >
-            <Sparkles className="h-3 w-3 text-inherit shrink-0" strokeWidth={1.75} />
+            <span
+              className="text-xs not-italic leading-none select-none shrink-0"
+              aria-hidden="true"
+            >
+              ✦
+            </span>
             <span>Только со скидкой Early Bird</span>
             {onlyEarlyBird && (
               <span className="ml-0.5 rounded bg-[#E5C378]/20 px-1.5 py-0.5 text-[11px] text-[#E5C378]">

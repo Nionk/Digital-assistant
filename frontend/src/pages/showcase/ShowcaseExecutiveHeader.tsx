@@ -70,7 +70,7 @@ export function ShowcaseExecutiveHeader({
   }, 0);
 
   // Извлекаем чистое имя куратора и инициалы для персонального бейджа
-  const rawName = showcase.manager_full_name || "Анна Соколова";
+  const rawName = showcase.manager_full_name || "Персональный куратор";
   const parenIndex = rawName.indexOf("(");
   const cleanName = (
     parenIndex !== -1 ? rawName.slice(0, parenIndex) : rawName
@@ -80,7 +80,7 @@ export function ShowcaseExecutiveHeader({
       .split(/\s+/)
       .slice(0, 2)
       .map((word) => word[0]?.toUpperCase() || "")
-      .join("") || "АС";
+      .join("") || "ПК";
 
   return (
     <header className="relative border-b border-[#1A2026] bg-[#0E1215]/95 backdrop-blur-md text-white">

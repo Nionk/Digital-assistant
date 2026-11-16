@@ -110,7 +110,13 @@ export function ProducerProfileModal({
                   </div>
 
                   <span className="shrink-0 inline-flex items-center gap-1 rounded-[3px] border border-[#7C5A20]/60 bg-[#261E0F] px-2 py-0.5 text-[11px] font-serif italic text-[#E5C378]">
-                    ✦ Активен
+                    <span
+                      className="not-italic leading-none select-none shrink-0"
+                      aria-hidden="true"
+                    >
+                      ✦
+                    </span>
+                    <span>Активен</span>
                   </span>
                 </div>
 
