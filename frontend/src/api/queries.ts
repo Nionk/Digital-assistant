@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiClient } from "./client";
 import type {
@@ -15,6 +16,9 @@ import type {
   MatchRequestIn,
   PublishSelectionIn,
   ScraperRunIn,
+  ScraperSourceCreateIn,
+  ScraperSourcePreviewIn,
+  ScraperSourceUpdateIn,
   ShowcaseViewOut,
 } from "./types";
 
@@ -37,6 +41,11 @@ export const queryKeys = {
   managerEventsRoot: ["manager", "events"] as const,
   managerEvents: (filters?: CatalogEventsFilterParams) =>
     filters ? (["manager", "events", filters] as const) : (["manager", "events"] as const),
+  scraperSources: ["manager", "scraper", "sources"] as const,
+  scraperRunsRoot: ["manager", "scraper", "runs"] as const,
+  scraperRuns: (limit: number) =>
+    ["manager", "scraper", "runs", limit] as const,
+  scraperLatestRun: ["manager", "scraper", "runs", "latest"] as const,
   selectionActivity: (selectionId: number) =>
     ["manager", "selectionActivity", selectionId] as const,
   showcase: (magicToken: string) => ["public", "showcase", magicToken] as const,
@@ -150,11 +159,120 @@ export function useUploadEventPdfMutation() {
   });
 }
 
+export function useScraperSources(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.scraperSources,
+    queryFn: () => apiClient.getScraperSources(),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateScraperSourceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ScraperSourceCreateIn) =>
+      apiClient.createScraperSource(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperSources });
+    },
+  });
+}
+
+export function useUpdateScraperSourceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      sourceKey,
+      payload,
+    }: {
+      sourceKey: string;
+      payload: ScraperSourceUpdateIn;
+    }) => apiClient.updateScraperSource(sourceKey, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperSources });
+    },
+  });
+}
+
+export function useDeleteScraperSourceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceKey: string) =>
+      apiClient.deleteScraperSource(sourceKey),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperSources });
+    },
+  });
+}
+
+export function usePreviewScraperSourceMutation() {
+  return useMutation({
+    mutationFn: (payload: ScraperSourcePreviewIn) =>
+      apiClient.previewScraperSource(payload),
+  });
+}
+
+export function useScraperRuns(limit = 15, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.scraperRuns(limit),
+    queryFn: () => apiClient.getScraperRuns(limit),
+    enabled,
+    staleTime: 5_000,
+  });
+}
+
+export function useLatestScraperRun(enabled = true) {
+  const queryClient = useQueryClient();
+  const prevRunRef = React.useRef<{ id: number; status: string } | null>(null);
+
+  const query = useQuery({
+    queryKey: queryKeys.scraperLatestRun,
+    queryFn: () => apiClient.getLatestScraperRun(),
+    enabled,
+    refetchInterval: (q) => {
+      if (!enabled || isTerminalPollingError(q.state.error)) {
+        return false;
+      }
+      const status = q.state.data?.status;
+      return status === "queued" || status === "running" ? 2_500 : false;
+    },
+    refetchIntervalInBackground: false,
+    staleTime: 2_000,
+  });
+
+  React.useEffect(() => {
+    const current = query.data;
+    const prev = prevRunRef.current;
+
+    if (current) {
+      const wasActive =
+        prev !== null &&
+        prev.id === current.id &&
+        (prev.status === "queued" || prev.status === "running");
+
+      if (wasActive && current.status === "completed") {
+        queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
+        queryClient.invalidateQueries({ queryKey: queryKeys.scraperRunsRoot });
+      } else if (wasActive && current.status === "failed") {
+        queryClient.invalidateQueries({ queryKey: queryKeys.scraperRunsRoot });
+      }
+      prevRunRef.current = { id: current.id, status: current.status };
+    } else if (current === null) {
+      prevRunRef.current = null;
+    }
+  }, [query.data, queryClient]);
+
+  return query;
+}
+
 export function useRunScraperMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: ScraperRunIn) => apiClient.runScraper(payload),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperLatestRun });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperRunsRoot });
       queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
     },
   });
