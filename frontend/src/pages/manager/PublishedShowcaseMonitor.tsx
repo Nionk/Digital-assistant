@@ -8,6 +8,9 @@ import {
   Send,
   Loader2,
   HelpCircle,
+  ChevronDown,
+  History,
+  UserCheck,
 } from "lucide-react";
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +33,7 @@ import {
   formatDateRange,
   formatRub,
 } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
 
 interface PublishedShowcaseMonitorProps {
   selectionId: number | null;
@@ -79,12 +83,14 @@ export function PublishedShowcaseMonitor({
   const [sendingMessageId, setSendingMessageId] = React.useState<number | null>(
     null
   );
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const copyTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     setCopied(false);
     setReplyDrafts({});
     setSendingMessageId(null);
+    setIsHistoryOpen(false);
   }, [magicToken, selectionId]);
 
   React.useEffect(() => {
@@ -152,14 +158,45 @@ export function PublishedShowcaseMonitor({
         queryKeys.selectionActivity(selectionId),
         (prev) => {
           if (!prev) return prev;
+          const answeredQ = prev.pending_questions.find(
+            (q) => q.message_id === messageId
+          );
+          const nowIso = new Date().toISOString();
+          const newReply = {
+            reply_message_id: res.reply_message_id,
+            reply_text: text,
+            created_at: nowIso,
+          };
+          const nextResolved = answeredQ
+            ? [
+                {
+                  message_id: answeredQ.message_id,
+                  event_id: answeredQ.event_id,
+                  event_title: answeredQ.event_title,
+                  question_text: answeredQ.question_text,
+                  question_created_at: answeredQ.created_at,
+                  replies: [newReply],
+                  latest_reply_text: text,
+                  replied_at: nowIso,
+                },
+                ...prev.resolved_questions.filter(
+                  (r) => r.message_id !== answeredQ.message_id
+                ),
+              ]
+            : prev.resolved_questions;
+
           return {
             ...prev,
             pending_questions: prev.pending_questions.filter(
               (q) => q.message_id !== messageId
             ),
+            resolved_questions: nextResolved,
           };
         }
       );
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.selectionActivity(selectionId),
+      });
       queryClient.invalidateQueries({
         queryKey: queryKeys.showcase(magicToken),
       });
@@ -183,6 +220,7 @@ export function PublishedShowcaseMonitor({
 
   const hasShowcaseItems = Boolean(showcaseItems && showcaseItems.length > 0);
   const pendingQuestions = activity?.pending_questions ?? [];
+  const resolvedQuestions = activity?.resolved_questions ?? [];
 
   if (!selectionId && !hasShowcaseItems) {
     return null;
@@ -523,6 +561,93 @@ export function PublishedShowcaseMonitor({
           <p className="mt-1.5 text-[11px] text-[#727985]">
             Когда клиент передаст сложный вопрос куратору через чат на витрине, он появится здесь с формой прямого ответа.
           </p>
+        )}
+
+        {resolvedQuestions.length > 0 && (
+          <div className="mt-3 border-t border-[#21262F] pt-2.5">
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen((prev) => !prev)}
+              aria-expanded={isHistoryOpen}
+              className="flex w-full items-center justify-between gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-3 py-2 text-left text-xs transition-colors hover:border-[#34D399]/50 hover:bg-[#161B21] cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2 font-medium text-[#D1D5DB]">
+                <History className="h-3.5 w-3.5 text-[#34D399]" strokeWidth={1.75} />
+                <span>История ответов куратора ({resolvedQuestions.length})</span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 text-[#8E95A0] transition-transform duration-150",
+                  isHistoryOpen && "rotate-180 text-[#34D399]"
+                )}
+              />
+            </button>
+
+            {isHistoryOpen && (
+              <div className="mt-2 space-y-2">
+                {resolvedQuestions.map((resolved) => {
+                  const qTime = formatQuestionTime(resolved.question_created_at);
+                  return (
+                    <div
+                      key={resolved.message_id}
+                      className="rounded-[8px] border border-[#262C35] bg-[#12161A] p-3 space-y-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        <span className="font-semibold text-[#E5C378]">
+                          {resolved.event_title || "Общий вопрос по подборке"}
+                        </span>
+                        {qTime && (
+                          <span className="text-[#8E95A0] tabular-nums">
+                            {qTime}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs leading-relaxed text-[#D1D5DB]">
+                        {resolved.question_text}
+                      </p>
+
+                      <div className="space-y-1.5">
+                        {(resolved.replies.length > 0
+                          ? resolved.replies
+                          : [
+                              {
+                                reply_message_id: resolved.message_id,
+                                reply_text: resolved.latest_reply_text,
+                                created_at: resolved.replied_at,
+                              },
+                            ]
+                        ).map((reply) => {
+                          const rTime = formatQuestionTime(reply.created_at);
+                          return (
+                            <div
+                              key={reply.reply_message_id}
+                              className="rounded-[6px] border border-[#1E5241] bg-[#0E241E]/75 p-2.5 space-y-1"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <span className="inline-flex items-center gap-1 font-semibold text-[#34D399]">
+                                  <UserCheck className="h-3 w-3 shrink-0" strokeWidth={2} />
+                                  <span>Ответ куратора</span>
+                                </span>
+                                {rTime && (
+                                  <span className="text-[#A7F3D0]/80 tabular-nums">
+                                    {rTime}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="whitespace-pre-line text-xs leading-relaxed text-white">
+                                {reply.reply_text}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </section>

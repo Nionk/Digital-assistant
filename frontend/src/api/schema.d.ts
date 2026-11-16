@@ -79,6 +79,50 @@ export interface paths {
          */
         get: operations["get_manager_clients_api_manager_clients_get"];
         put?: never;
+        /**
+         * Создание новой карточки клиента менеджера
+         * @description Создает нового активного клиента с привязкой к текущему авторизованному менеджеру.
+         */
+        post: operations["create_client_endpoint_api_manager_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/clients/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Редактирование карточки клиента и мягкая архивация/восстановление
+         * @description Обновляет название компании, контактное лицо, конспект встречи или флаг is_active со строгой проверкой принадлежности клиента текущему менеджеру.
+         */
+        patch: operations["update_client_endpoint_api_manager_clients__client_id__patch"];
+        trace?: never;
+    };
+    "/api/manager/clients/{client_id}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Восстановление серверного рабочего состояния клиента (профиль, последняя подборка, КП)
+         * @description Возвращает сохраненный профиль клиента (Client.extracted_profile) и последнюю подборку (draft или published) с восстановленными вариантами пакетов, тарифами и письмом КП.
+         */
+        get: operations["get_client_workspace_endpoint_api_manager_clients__client_id__workspace_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -615,6 +659,28 @@ export interface components {
             missing_data_warnings?: string[];
         };
         /**
+         * ClientCreateIn
+         * @description Запрос на создание нового клиента в кабинете менеджера.
+         */
+        ClientCreateIn: {
+            /**
+             * Company Name
+             * @description Название компании клиента
+             */
+            company_name: string;
+            /**
+             * Contact Person
+             * @description Контактное лицо клиента
+             */
+            contact_person?: string | null;
+            /**
+             * Raw Manager Notes
+             * @description Первичный конспект встречи с клиентом
+             * @default
+             */
+            raw_manager_notes: string | null;
+        };
+        /**
          * ClientQueryExtracted
          * @description Схема извлечения параметров из свободной заметки менеджера (NER-профайлер).
          *     Полностью совпадает с контрактом модуля profiler.py.
@@ -757,6 +823,12 @@ export interface components {
              */
             raw_manager_notes: string;
             /**
+             * Is Active
+             * @description Признак активности клиента (False — архивирован)
+             * @default true
+             */
+            is_active: boolean;
+            /**
              * Latest Selection Id
              * @description ID последней созданной подборки
              */
@@ -771,6 +843,68 @@ export interface components {
              * @description UUID токен витрины, если подборка опубликована
              */
             magic_token?: string | null;
+        };
+        /**
+         * ClientUpdateIn
+         * @description Запрос на обновление данных клиента или мягкую архивацию/восстановление.
+         */
+        ClientUpdateIn: {
+            /**
+             * Company Name
+             * @description Новое название компании
+             */
+            company_name?: string | null;
+            /**
+             * Contact Person
+             * @description Контактное лицо
+             */
+            contact_person?: string | null;
+            /**
+             * Raw Manager Notes
+             * @description Конспект встречи
+             */
+            raw_manager_notes?: string | null;
+            /**
+             * Is Active
+             * @description Флаг активности клиента (False — мягкая архивация, True — восстановление)
+             */
+            is_active?: boolean | null;
+        };
+        /**
+         * ClientWorkspaceOut
+         * @description Серверное состояние рабочего пространства клиента для восстановления секций 01-03.
+         */
+        ClientWorkspaceOut: {
+            /**
+             * Client Id
+             * @description ID клиента
+             */
+            client_id: number;
+            /**
+             * Company Name
+             * @description Название компании клиента
+             */
+            company_name: string;
+            /**
+             * Contact Person
+             * @description Контактное лицо клиента
+             */
+            contact_person?: string | null;
+            /**
+             * Raw Manager Notes
+             * @description Последний сохраненный конспект созвона
+             */
+            raw_manager_notes: string;
+            /**
+             * Is Active
+             * @description Признак активности клиента
+             * @default true
+             */
+            is_active: boolean;
+            /** @description Сохраненный в БД структурированный профиль клиента (или None) */
+            extracted_profile?: components["schemas"]["ClientQueryExtracted"] | null;
+            /** @description Последняя подборка клиента (draft или published) с позициями, либо None */
+            selection?: components["schemas"]["WorkspaceSelectionOut"] | null;
         };
         /**
          * EscalateQuestionIn
@@ -1129,6 +1263,8 @@ export interface components {
             reactions?: components["schemas"]["SelectionItemReactionActivity"][];
             /** Pending Questions */
             pending_questions?: components["schemas"]["SelectionQuestionActivity"][];
+            /** Resolved Questions */
+            resolved_questions?: components["schemas"]["SelectionResolvedQuestionActivity"][];
         };
         /**
          * SelectionItemReactionActivity
@@ -1163,6 +1299,40 @@ export interface components {
             created_at?: string | null;
         };
         /**
+         * SelectionResolvedQuestionActivity
+         * @description История решенного вопроса клиента и ответа(ов) куратора.
+         */
+        SelectionResolvedQuestionActivity: {
+            /** Message Id */
+            message_id: number;
+            /** Event Id */
+            event_id?: number | null;
+            /** Event Title */
+            event_title?: string | null;
+            /** Question Text */
+            question_text: string;
+            /** Question Created At */
+            question_created_at?: string | null;
+            /** Replies */
+            replies?: components["schemas"]["SelectionResolvedReplyOut"][];
+            /** Latest Reply Text */
+            latest_reply_text: string;
+            /** Replied At */
+            replied_at?: string | null;
+        };
+        /**
+         * SelectionResolvedReplyOut
+         * @description Ответное сообщение куратора на вопрос клиента.
+         */
+        SelectionResolvedReplyOut: {
+            /** Reply Message Id */
+            reply_message_id: number;
+            /** Reply Text */
+            reply_text: string;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /**
          * ShowcaseChatMessageOut
          * @description Сообщение в истории чата по мероприятию на витрине клиента.
          */
@@ -1172,6 +1342,11 @@ export interface components {
              * @description ID сообщения
              */
             id: number;
+            /**
+             * Reply To Message Id
+             * @description ID исходного сообщения клиента, на которое отвечает данное сообщение
+             */
+            reply_to_message_id?: number | null;
             /**
              * Sender Role
              * @description Роль отправителя: client, ai_assistant или manager
@@ -1341,6 +1516,11 @@ export interface components {
              */
             manager_full_name: string;
             /**
+             * Manager Email
+             * @description Контактный email персонального куратора
+             */
+            manager_email?: string | null;
+            /**
              * Pitch Text
              * @description Приветственное сопроводительное письмо от менеджера
              */
@@ -1457,6 +1637,49 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * WorkspaceSelectionOut
+         * @description Восстановленное состояние последней подборки клиента из БД (draft или published).
+         */
+        WorkspaceSelectionOut: {
+            /**
+             * Selection Id
+             * @description ID подборки в таблице selections
+             */
+            selection_id: number;
+            /**
+             * Status
+             * @description Статус подборки
+             * @enum {string}
+             */
+            status: "draft" | "published";
+            /**
+             * Magic Token
+             * @description UUID токен публичной витрины (при статусе published)
+             */
+            magic_token?: string | null;
+            /**
+             * Total Budget Limit
+             * @description Зафиксированный лимит бюджета подборки
+             */
+            total_budget_limit: number;
+            /**
+             * Bundle Variants
+             * @description Восстановленные варианты пакетов мероприятий
+             */
+            bundle_variants?: components["schemas"]["BundleVariantOut"][];
+            /**
+             * Bonus On Request Items
+             * @description Бонусные мероприятия по запросу (для совместимости со схемой конструктора)
+             */
+            bonus_on_request_items?: components["schemas"]["BundleEventItemOut"][];
+            /**
+             * Generated Pitch Text
+             * @description Сохраненный текст сопроводительного письма КП
+             * @default
+             */
+            generated_pitch_text: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1541,7 +1764,9 @@ export interface operations {
     };
     get_manager_clients_api_manager_clients_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_archived?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1555,6 +1780,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagerDashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_client_endpoint_api_manager_clients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_client_endpoint_api_manager_clients__client_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_client_workspace_endpoint_api_manager_clients__client_id__workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientWorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

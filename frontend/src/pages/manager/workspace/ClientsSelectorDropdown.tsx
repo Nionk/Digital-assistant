@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Building2, UserCheck, PanelLeftOpen, Search } from "lucide-react";
+import {
+  Building2,
+  UserCheck,
+  PanelLeftOpen,
+  Search,
+  Plus,
+  Pencil,
+} from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ClientSummaryOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +24,8 @@ interface ClientsSelectorDropdownProps {
   onClose: () => void;
   onSearchQueryChange: (query: string) => void;
   onSelectClient: (client: ClientSummaryOut) => void;
+  onCreateClient: () => void;
+  onEditClient: (client: ClientSummaryOut) => void;
 }
 
 export function ClientsSelectorDropdown({
@@ -30,6 +39,8 @@ export function ClientsSelectorDropdown({
   onClose,
   onSearchQueryChange,
   onSelectClient,
+  onCreateClient,
+  onEditClient,
 }: ClientsSelectorDropdownProps) {
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -65,8 +76,9 @@ export function ClientsSelectorDropdown({
   }, [clients, clientSearchQuery]);
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="relative inline-block" ref={clientDropdownRef}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <div className="relative inline-block" ref={clientDropdownRef}>
         <button
           type="button"
           onClick={onToggleOpen}
@@ -224,20 +236,59 @@ export function ClientsSelectorDropdown({
                               <span className="text-[#636B78]">Контакт не указан</span>
                             )}
                           </span>
-                          {isSelected && (
-                            <Badge variant="ebGold" className="text-[9px]">
-                              Выбран
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {isSelected && (
+                              <Badge variant="ebGold" className="text-[9px]">
+                                Выбран
+                              </Badge>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onClose();
+                                onEditClient(client);
+                              }}
+                              aria-label={`Редактировать клиента ${client.company_name}`}
+                              title="Редактировать или архивировать клиента"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-[5px] border border-[#262D35] bg-[#12161A] text-[#8E95A0] transition-colors hover:border-[#E5C378] hover:text-[#E5C378]"
+                            >
+                              <Pencil className="h-3 w-3" strokeWidth={1.75} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
+
+              <div className="mt-3 border-t border-[#21262F] pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onCreateClient();
+                  }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-[#7C5A20]/70 bg-[#1E190E] px-3 py-2 text-xs font-semibold text-[#E5C378] transition-colors hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  <span>Новый клиент</span>
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCreateClient}
+        className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#7C5A20]/70 bg-[#1A150B] px-3 py-1.5 text-xs font-medium text-[#E5C378] shadow-sm transition-colors duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white cursor-pointer select-none"
+      >
+        <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+        <span>Новый клиент</span>
+      </button>
       </div>
     </div>
   );

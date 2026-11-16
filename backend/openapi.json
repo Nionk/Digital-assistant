@@ -96,6 +96,23 @@
         "summary": "Список клиентов менеджера и алерты горящих дедлайнов Early Bird",
         "description": "Возвращает список закрепленных за менеджером клиентов со статусами их последних подборок и панель срочных алертов по мероприятиям с активными скидками раннего бронирования (Early Bird).",
         "operationId": "get_manager_clients_api_manager_clients_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -106,13 +123,169 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
+        }
+      },
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Создание новой карточки клиента менеджера",
+        "description": "Создает нового активного клиента с привязкой к текущему авторизованному менеджеру.",
+        "operationId": "create_client_endpoint_api_manager_clients_post",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientCreateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/clients/{client_id}": {
+      "patch": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Редактирование карточки клиента и мягкая архивация/восстановление",
+        "description": "Обновляет название компании, контактное лицо, конспект встречи или флаг is_active со строгой проверкой принадлежности клиента текущему менеджеру.",
+        "operationId": "update_client_endpoint_api_manager_clients__client_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/clients/{client_id}/workspace": {
+      "get": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Восстановление серверного рабочего состояния клиента (профиль, последняя подборка, КП)",
+        "description": "Возвращает сохраненный профиль клиента (Client.extracted_profile) и последнюю подборку (draft или published) с восстановленными вариантами пакетов, тарифами и письмом КП.",
+        "operationId": "get_client_workspace_endpoint_api_manager_clients__client_id__workspace_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientWorkspaceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/clients/{client_id}/match": {
@@ -1284,6 +1457,50 @@
         "title": "CatalogEventItemOut",
         "description": "Карточка мероприятия в базе отслеживаемых площадок менеджера."
       },
+      "ClientCreateIn": {
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Company Name",
+            "description": "Название компании клиента"
+          },
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person",
+            "description": "Контактное лицо клиента"
+          },
+          "raw_manager_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Manager Notes",
+            "description": "Первичный конспект встречи с клиентом",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_name"
+        ],
+        "title": "ClientCreateIn",
+        "description": "Запрос на создание нового клиента в кабинете менеджера."
+      },
       "ClientQueryExtracted": {
         "properties": {
           "cities": {
@@ -1507,6 +1724,12 @@
             "title": "Raw Manager Notes",
             "description": "Последний сохраненный конспект созвона"
           },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Признак активности клиента (False — архивирован)",
+            "default": true
+          },
           "latest_selection_id": {
             "anyOf": [
               {
@@ -1557,6 +1780,131 @@
         ],
         "title": "ClientSummaryOut",
         "description": "Сводная карточка клиента в сайдбаре менеджера."
+      },
+      "ClientUpdateIn": {
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name",
+            "description": "Новое название компании"
+          },
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person",
+            "description": "Контактное лицо"
+          },
+          "raw_manager_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Manager Notes",
+            "description": "Конспект встречи"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "description": "Флаг активности клиента (False — мягкая архивация, True — восстановление)"
+          }
+        },
+        "type": "object",
+        "title": "ClientUpdateIn",
+        "description": "Запрос на обновление данных клиента или мягкую архивацию/восстановление."
+      },
+      "ClientWorkspaceOut": {
+        "properties": {
+          "client_id": {
+            "type": "integer",
+            "title": "Client Id",
+            "description": "ID клиента"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name",
+            "description": "Название компании клиента"
+          },
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person",
+            "description": "Контактное лицо клиента"
+          },
+          "raw_manager_notes": {
+            "type": "string",
+            "title": "Raw Manager Notes",
+            "description": "Последний сохраненный конспект созвона"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Признак активности клиента",
+            "default": true
+          },
+          "extracted_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientQueryExtracted"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сохраненный в БД структурированный профиль клиента (или None)"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSelectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последняя подборка клиента (draft или published) с позициями, либо None"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "company_name",
+          "raw_manager_notes"
+        ],
+        "title": "ClientWorkspaceOut",
+        "description": "Серверное состояние рабочего пространства клиента для восстановления секций 01-03."
       },
       "EscalateQuestionIn": {
         "properties": {
@@ -2096,6 +2444,13 @@
             },
             "type": "array",
             "title": "Pending Questions"
+          },
+          "resolved_questions": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionResolvedQuestionActivity"
+            },
+            "type": "array",
+            "title": "Resolved Questions"
           }
         },
         "type": "object",
@@ -2197,12 +2552,129 @@
         "title": "SelectionQuestionActivity",
         "description": "Вопрос клиента, требующий внимания персонального менеджера."
       },
+      "SelectionResolvedQuestionActivity": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "event_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Title"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "question_created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Created At"
+          },
+          "replies": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionResolvedReplyOut"
+            },
+            "type": "array",
+            "title": "Replies"
+          },
+          "latest_reply_text": {
+            "type": "string",
+            "title": "Latest Reply Text"
+          },
+          "replied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replied At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "question_text",
+          "latest_reply_text"
+        ],
+        "title": "SelectionResolvedQuestionActivity",
+        "description": "История решенного вопроса клиента и ответа(ов) куратора."
+      },
+      "SelectionResolvedReplyOut": {
+        "properties": {
+          "reply_message_id": {
+            "type": "integer",
+            "title": "Reply Message Id"
+          },
+          "reply_text": {
+            "type": "string",
+            "title": "Reply Text"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply_message_id",
+          "reply_text"
+        ],
+        "title": "SelectionResolvedReplyOut",
+        "description": "Ответное сообщение куратора на вопрос клиента."
+      },
       "ShowcaseChatMessageOut": {
         "properties": {
           "id": {
             "type": "integer",
             "title": "Id",
             "description": "ID сообщения"
+          },
+          "reply_to_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Message Id",
+            "description": "ID исходного сообщения клиента, на которое отвечает данное сообщение"
           },
           "sender_role": {
             "type": "string",
@@ -2471,6 +2943,18 @@
             "title": "Manager Full Name",
             "description": "ФИО персонального менеджера сопровождения"
           },
+          "manager_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Email",
+            "description": "Контактный email персонального куратора"
+          },
           "pitch_text": {
             "type": "string",
             "title": "Pitch Text",
@@ -2692,6 +3176,72 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkspaceSelectionOut": {
+        "properties": {
+          "selection_id": {
+            "type": "integer",
+            "title": "Selection Id",
+            "description": "ID подборки в таблице selections"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "description": "Статус подборки"
+          },
+          "magic_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magic Token",
+            "description": "UUID токен публичной витрины (при статусе published)"
+          },
+          "total_budget_limit": {
+            "type": "number",
+            "title": "Total Budget Limit",
+            "description": "Зафиксированный лимит бюджета подборки"
+          },
+          "bundle_variants": {
+            "items": {
+              "$ref": "#/components/schemas/BundleVariantOut"
+            },
+            "type": "array",
+            "title": "Bundle Variants",
+            "description": "Восстановленные варианты пакетов мероприятий"
+          },
+          "bonus_on_request_items": {
+            "items": {
+              "$ref": "#/components/schemas/BundleEventItemOut"
+            },
+            "type": "array",
+            "title": "Bonus On Request Items",
+            "description": "Бонусные мероприятия по запросу (для совместимости со схемой конструктора)"
+          },
+          "generated_pitch_text": {
+            "type": "string",
+            "title": "Generated Pitch Text",
+            "description": "Сохраненный текст сопроводительного письма КП",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection_id",
+          "status",
+          "total_budget_limit"
+        ],
+        "title": "WorkspaceSelectionOut",
+        "description": "Восстановленное состояние последней подборки клиента из БД (draft или published)."
       }
     },
     "securitySchemes": {

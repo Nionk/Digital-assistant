@@ -478,12 +478,18 @@ def test_selection_activity_filters_out_non_client_pending_questions(client):
             if "FROM chat_messages" in sql_str:
                 captured_chat_sql.append(sql_str)
                 rows = [(ai_msg, test_event), (client_msg, test_event)]
-                filtered = [
-                    (msg, ev)
-                    for msg, ev in rows
-                    if ("sender_role = 'client'" not in sql_str or msg.sender_role == "client")
-                    and ("needs_manager_attention IS true" not in sql_str or msg.needs_manager_attention)
-                ]
+                if "needs_manager_attention IS true" in sql_str:
+                    filtered = [
+                        (msg, ev)
+                        for msg, ev in rows
+                        if msg.sender_role == "client" and msg.needs_manager_attention
+                    ]
+                else:
+                    filtered = [
+                        (msg, ev)
+                        for msg, ev in rows
+                        if msg.sender_role in ("client", "manager")
+                    ]
                 mock_res.all.return_value = filtered
                 return mock_res
             mock_res.all.return_value = []
@@ -497,8 +503,11 @@ def test_selection_activity_filters_out_non_client_pending_questions(client):
 
     res = client.get("/api/manager/selections/55/activity")
     assert res.status_code == 200, res.text
-    assert len(captured_chat_sql) == 1
-    assert "chat_messages.sender_role = 'client'" in captured_chat_sql[0]
+    assert len(captured_chat_sql) >= 1
+    assert any(
+        "chat_messages.sender_role = 'client'" in sql and "needs_manager_attention IS true" in sql
+        for sql in captured_chat_sql
+    )
 
     data = res.json()
     assert data["selection_id"] == 55

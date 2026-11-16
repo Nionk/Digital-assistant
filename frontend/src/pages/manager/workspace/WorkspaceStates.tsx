@@ -1,4 +1,4 @@
-import { Compass, PanelLeftOpen } from "lucide-react";
+import { Compass, PanelLeftOpen, Pencil, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function WorkspaceLoadingState() {
@@ -10,23 +10,43 @@ export function WorkspaceLoadingState() {
 }
 
 interface WorkspaceEmptyClientStateProps {
+  hasClients?: boolean;
   onOpenClientsDropdown: () => void;
+  onCreateClient?: () => void;
 }
 
 export function WorkspaceEmptyClientState({
+  hasClients = true,
   onOpenClientsDropdown,
+  onCreateClient,
 }: WorkspaceEmptyClientStateProps) {
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] p-6 text-center shadow-card">
-      <p className="text-sm font-medium text-white">Клиент не выбран</p>
-      <button
-        type="button"
-        onClick={onOpenClientsDropdown}
-        className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-4 py-2 text-xs font-semibold text-white transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-[#E5C378] hover:shadow-[0_0_10px_rgba(229,195,120,0.2)]"
-      >
-        <PanelLeftOpen className="h-4 w-4" />
-        <span>Выбрать компанию из списка</span>
-      </button>
+      <p className="text-sm font-medium text-white">
+        {hasClients ? "Клиент не выбран" : "В портфеле пока нет активных клиентов"}
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-2.5">
+        {hasClients && (
+          <button
+            type="button"
+            onClick={onOpenClientsDropdown}
+            className="inline-flex items-center gap-2 rounded-[8px] border border-[#262D35] bg-[#12161A] px-4 py-2 text-xs font-semibold text-white transition-all duration-150 hover:border-[#E5C378] hover:bg-[#1A2128] hover:text-[#E5C378] hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] cursor-pointer"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+            <span>Выбрать компанию из списка</span>
+          </button>
+        )}
+        {onCreateClient && (
+          <button
+            type="button"
+            onClick={onCreateClient}
+            className="inline-flex items-center gap-2 rounded-[8px] border border-[#7C5A20]/70 bg-[#1E190E] px-4 py-2 text-xs font-semibold text-[#E5C378] transition-all duration-150 hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Новый клиент</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -34,11 +54,13 @@ export function WorkspaceEmptyClientState({
 interface ActiveClientHeaderProps {
   companyName: string;
   contactPerson: string | null;
+  onEditClient?: () => void;
 }
 
 export function ActiveClientHeader({
   companyName,
   contactPerson,
+  onEditClient,
 }: ActiveClientHeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#262D35] bg-[#161B22] px-5 py-3.5 shadow-sm">
@@ -55,6 +77,17 @@ export function ActiveClientHeader({
           </>
         )}
       </div>
+
+      {onEditClient && (
+        <button
+          type="button"
+          onClick={onEditClient}
+          className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#262D35] bg-[#12161A] px-2.5 py-1 text-xs font-medium text-[#D1D5DB] transition-colors hover:border-[#E5C378] hover:bg-[#1E252E] hover:text-[#E5C378] cursor-pointer"
+        >
+          <Pencil className="h-3 w-3" strokeWidth={1.75} />
+          <span>Редактировать</span>
+        </button>
+      )}
     </div>
   );
 }

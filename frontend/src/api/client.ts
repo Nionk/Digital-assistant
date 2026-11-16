@@ -2,8 +2,12 @@ import type {
   AskRegulationQuestionIn,
   AskRegulationQuestionOut,
   CatalogEventsFilterParams,
+  ClientCreateIn,
   ClientReactionIn,
   ClientReactionOut,
+  ClientSummaryOut,
+  ClientUpdateIn,
+  ClientWorkspaceOut,
   EscalateQuestionIn,
   EscalateQuestionOut,
   EventUploadIn,
@@ -213,10 +217,41 @@ export const apiClient = {
   },
 
   // ---- Кабинет менеджера (/api/manager/*) ----
-  getManagerDashboard(): Promise<ManagerDashboardOut> {
-    return requestJson<ManagerDashboardOut>("/api/manager/clients", {
+  getManagerDashboard(includeArchived = false): Promise<ManagerDashboardOut> {
+    const qs = includeArchived ? "?include_archived=true" : "";
+    return requestJson<ManagerDashboardOut>(`/api/manager/clients${qs}`, {
       timeoutMs: DEFAULT_TIMEOUT_MS,
     });
+  },
+
+  createClient(payload: ClientCreateIn): Promise<ClientSummaryOut> {
+    return requestJson<ClientSummaryOut>("/api/manager/clients", {
+      method: "POST",
+      body: JSON.stringify({
+        company_name: payload.company_name,
+        contact_person: payload.contact_person ?? null,
+        raw_manager_notes: payload.raw_manager_notes ?? "",
+      }),
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+  },
+
+  updateClient(
+    clientId: number,
+    payload: ClientUpdateIn
+  ): Promise<ClientSummaryOut> {
+    return requestJson<ClientSummaryOut>(`/api/manager/clients/${clientId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+  },
+
+  getClientWorkspace(clientId: number): Promise<ClientWorkspaceOut> {
+    return requestJson<ClientWorkspaceOut>(
+      `/api/manager/clients/${clientId}/workspace`,
+      { timeoutMs: DEFAULT_TIMEOUT_MS }
+    );
   },
 
   getManagerEventsCatalog(

@@ -21,6 +21,10 @@ from app.core.database import async_session_maker, get_async_session
 from app.core.security import CurrentManagerDep
 from app.models.models import EventTariff
 from app.schemas.manager import (
+    ClientCreateIn,
+    ClientSummaryOut,
+    ClientUpdateIn,
+    ClientWorkspaceOut,
     EventUploadOut,
     ManagerDashboardOut,
     ManagerEventsCatalogOut,
@@ -39,11 +43,14 @@ from app.services.manager_workspace import (
     ManagerEventFormat,
     WorkspaceNotFoundError,
     WorkspaceValidationError,
+    create_manager_client,
+    get_client_workspace,
     get_selection_activity_summary,
     list_catalog_events,
     list_manager_clients_dashboard,
     publish_selection_workspace,
     reply_to_client_question_workspace,
+    update_manager_client,
     verify_client_owned_by_manager,
 )
 from app.services.matcher import run_client_matching_pipeline
@@ -94,15 +101,93 @@ async def _execute_background_monitoring(source_key: str | None) -> None:
 async def get_manager_clients(
     current_manager: CurrentManagerDep,
     db: AsyncSessionDep,
+    include_archived: bool = False,
 ) -> ManagerDashboardOut:
     """
     Загружает из БД клиентов менеджера, статус их последней подборки (selections)
     и ближайшие горящие дедлайны скидок Early Bird из таблицы event_tariffs.
     """
     try:
-        return await list_manager_clients_dashboard(db, current_manager.id)
+        return await list_manager_clients_dashboard(
+            db, current_manager.id, include_archived=include_archived
+        )
     except (SQLAlchemyError, OSError) as exc:
         logger.error("Ошибка БД при запросе /clients: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.post(
+    "/clients",
+    response_model=ClientSummaryOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создание новой карточки клиента менеджера",
+    description="Создает нового активного клиента с привязкой к текущему авторизованному менеджеру.",
+)
+async def create_client_endpoint(
+    payload: ClientCreateIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ClientSummaryOut:
+    try:
+        return await create_manager_client(db, current_manager.id, payload)
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при создании клиента: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.patch(
+    "/clients/{client_id}",
+    response_model=ClientSummaryOut,
+    summary="Редактирование карточки клиента и мягкая архивация/восстановление",
+    description=(
+        "Обновляет название компании, контактное лицо, конспект встречи или флаг is_active "
+        "со строгой проверкой принадлежности клиента текущему менеджеру."
+    ),
+)
+async def update_client_endpoint(
+    client_id: int,
+    payload: ClientUpdateIn,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ClientSummaryOut:
+    try:
+        return await update_manager_client(db, client_id, current_manager.id, payload)
+    except WorkspaceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при обновлении клиента %s: %s", client_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.get(
+    "/clients/{client_id}/workspace",
+    response_model=ClientWorkspaceOut,
+    summary="Восстановление серверного рабочего состояния клиента (профиль, последняя подборка, КП)",
+    description=(
+        "Возвращает сохраненный профиль клиента (Client.extracted_profile) и последнюю "
+        "подборку (draft или published) с восстановленными вариантами пакетов, тарифами и письмом КП."
+    ),
+)
+async def get_client_workspace_endpoint(
+    client_id: int,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> ClientWorkspaceOut:
+    try:
+        return await get_client_workspace(db, client_id, current_manager.id)
+    except WorkspaceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при загрузке workspace клиента %s: %s", client_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="База данных временно недоступна",
@@ -401,5 +486,7 @@ async def reply_to_client_question(
         return await reply_to_client_question_workspace(
             db, selection_id, current_manager.id, payload
         )
+    except WorkspaceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except WorkspaceNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

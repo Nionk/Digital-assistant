@@ -105,9 +105,22 @@ export function buildMergedConversation(
         text: msg.message_text,
         createdAtLabel: formatChatTime(msg.created_at),
       };
-      if (serverTurns.length === 0) {
+      if (
+        msg.reply_to_message_id !== null &&
+        msg.reply_to_message_id !== undefined
+      ) {
+        const exactIdx = serverTurns.findIndex(
+          (turn) => turn.clientMsgId === msg.reply_to_message_id
+        );
+        if (exactIdx !== -1) {
+          serverTurns[exactIdx].managerReplies.push(replyEntry);
+        } else {
+          orphanManagerReplies.push(replyEntry);
+        }
+      } else if (serverTurns.length === 0) {
         orphanManagerReplies.push(replyEntry);
       } else {
+        // Fallback исключительно для исторических записей до миграции (reply_to_message_id == null)
         const targetIdx = findTargetTurnIndexForManagerReply(serverTurns);
         serverTurns[targetIdx].managerReplies.push(replyEntry);
       }

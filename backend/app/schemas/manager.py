@@ -2,7 +2,7 @@ from datetime import date
 from typing import Literal, Self, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.constants import is_online_format, normalize_city
 
@@ -22,11 +22,78 @@ class ClientSummaryOut(BaseModel):
     company_name: str = Field(..., description="Название компании клиента (например, ГК Пионер)")
     contact_person: str | None = Field(None, description="Контактное лицо клиента")
     raw_manager_notes: str = Field(..., description="Последний сохраненный конспект созвона")
+    is_active: bool = Field(default=True, description="Признак активности клиента (False — архивирован)")
     latest_selection_id: int | None = Field(None, description="ID последней созданной подборки")
     latest_selection_status: Literal["draft", "published"] | None = Field(
         None, description="Статус подборки: черновик или опубликована"
     )
     magic_token: UUID | None = Field(None, description="UUID токен витрины, если подборка опубликована")
+
+
+class ClientCreateIn(BaseModel):
+    """Запрос на создание нового клиента в кабинете менеджера."""
+    company_name: str = Field(..., min_length=1, max_length=255, description="Название компании клиента")
+    contact_person: str | None = Field(None, max_length=255, description="Контактное лицо клиента")
+    raw_manager_notes: str | None = Field(
+        default="", max_length=10000, description="Первичный конспект встречи с клиентом"
+    )
+
+    @field_validator("company_name")
+    @classmethod
+    def validate_company_name(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Название компании клиента не может быть пустым.")
+        return cleaned
+
+    @field_validator("contact_person")
+    @classmethod
+    def normalize_contact_person(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned or None
+
+    @field_validator("raw_manager_notes")
+    @classmethod
+    def normalize_notes(cls, v: str | None) -> str:
+        return v.strip() if v is not None else ""
+
+
+class ClientUpdateIn(BaseModel):
+    """Запрос на обновление данных клиента или мягкую архивацию/восстановление."""
+    company_name: str | None = Field(default=None, max_length=255, description="Новое название компании")
+    contact_person: str | None = Field(default=None, max_length=255, description="Контактное лицо")
+    raw_manager_notes: str | None = Field(default=None, max_length=10000, description="Конспект встречи")
+    is_active: bool | None = Field(
+        default=None, description="Флаг активности клиента (False — мягкая архивация, True — восстановление)"
+    )
+
+    @field_validator("company_name")
+    @classmethod
+    def validate_company_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Название компании клиента не может быть пустым.")
+        return cleaned
+
+    @field_validator("contact_person")
+    @classmethod
+    def normalize_contact_person(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned or None
+
+    @model_validator(mode="after")
+    def validate_non_null_required_fields(self) -> Self:
+        if "company_name" in self.model_fields_set and self.company_name is None:
+            raise ValueError("Название компании клиента не может быть пустым (null).")
+        if "is_active" in self.model_fields_set and self.is_active is None:
+            raise ValueError("Флаг активности is_active не может быть null.")
+        return self
 
 class ManagerDashboardOut(BaseModel):
     """Ответ дашборда менеджера: клиенты и горящие дедлайны."""
@@ -199,6 +266,45 @@ class MatchResponseOut(BaseModel):
         description="Сгенерированный ИИ текст приветственного КП с подтвержденными Python-цифрами"
     )
 
+
+class WorkspaceSelectionOut(BaseModel):
+    """Восстановленное состояние последней подборки клиента из БД (draft или published)."""
+    selection_id: int = Field(..., description="ID подборки в таблице selections")
+    status: Literal["draft", "published"] = Field(..., description="Статус подборки")
+    magic_token: UUID | None = Field(
+        None, description="UUID токен публичной витрины (при статусе published)"
+    )
+    total_budget_limit: float = Field(..., description="Зафиксированный лимит бюджета подборки")
+    bundle_variants: list[BundleVariantOut] = Field(
+        default_factory=list,
+        description="Восстановленные варианты пакетов мероприятий"
+    )
+    bonus_on_request_items: list[BundleEventItemOut] = Field(
+        default_factory=list,
+        description="Бонусные мероприятия по запросу (для совместимости со схемой конструктора)"
+    )
+    generated_pitch_text: str = Field(
+        default="",
+        description="Сохраненный текст сопроводительного письма КП"
+    )
+
+
+class ClientWorkspaceOut(BaseModel):
+    """Серверное состояние рабочего пространства клиента для восстановления секций 01-03."""
+    client_id: int = Field(..., description="ID клиента")
+    company_name: str = Field(..., description="Название компании клиента")
+    contact_person: str | None = Field(None, description="Контактное лицо клиента")
+    raw_manager_notes: str = Field(..., description="Последний сохраненный конспект созвона")
+    is_active: bool = Field(default=True, description="Признак активности клиента")
+    extracted_profile: ClientQueryExtracted | None = Field(
+        None,
+        description="Сохраненный в БД структурированный профиль клиента (или None)"
+    )
+    selection: WorkspaceSelectionOut | None = Field(
+        None,
+        description="Последняя подборка клиента (draft или published) с позициями, либо None"
+    )
+
 class SelectedEventTariffPairIn(BaseModel):
     """Пара (мероприятие, выбранный тариф), утвержденная менеджером для публикации."""
     event_id: int = Field(..., description="ID события")
@@ -330,17 +436,45 @@ class SelectionQuestionActivity(BaseModel):
     created_at: str | None = None
 
 
+class SelectionResolvedReplyOut(BaseModel):
+    """Ответное сообщение куратора на вопрос клиента."""
+    reply_message_id: int
+    reply_text: str
+    created_at: str | None = None
+
+
+class SelectionResolvedQuestionActivity(BaseModel):
+    """История решенного вопроса клиента и ответа(ов) куратора."""
+    message_id: int
+    event_id: int | None = None
+    event_title: str | None = None
+    question_text: str
+    question_created_at: str | None = None
+    replies: list[SelectionResolvedReplyOut] = Field(default_factory=list)
+    latest_reply_text: str
+    replied_at: str | None = None
+
+
 class SelectionActivityOut(BaseModel):
     """Сводка активности клиента по витрине для регулярного опроса (Polling) менеджером."""
     selection_id: int
     reactions: list[SelectionItemReactionActivity] = Field(default_factory=list)
     pending_questions: list[SelectionQuestionActivity] = Field(default_factory=list)
+    resolved_questions: list[SelectionResolvedQuestionActivity] = Field(default_factory=list)
 
 
 class ManagerReplyIn(BaseModel):
     """Ответ менеджера на вопрос клиента в чате витрины."""
     message_id: int = Field(..., description="ID сообщения клиента с needs_manager_attention = True")
     reply_text: str = Field(..., min_length=1, description="Текст ответа менеджера")
+
+    @field_validator("reply_text")
+    @classmethod
+    def validate_reply_text(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Текст ответа менеджера не может быть пустым.")
+        return cleaned
 
 
 class ManagerReplyOut(BaseModel):

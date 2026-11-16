@@ -12,6 +12,10 @@ class ShowcaseChatMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(..., description="ID сообщения")
+    reply_to_message_id: int | None = Field(
+        None,
+        description="ID исходного сообщения клиента, на которое отвечает данное сообщение",
+    )
     sender_role: Literal["client", "ai_assistant", "manager"] = Field(
         ..., description="Роль отправителя: client, ai_assistant или manager"
     )
@@ -73,6 +77,7 @@ class ShowcaseViewOut(BaseModel):
     selection_id: int = Field(..., description="ID подборки")
     company_name: str = Field(..., description="Название компании клиента")
     manager_full_name: str = Field(..., description="ФИО персонального менеджера сопровождения")
+    manager_email: str | None = Field(None, description="Контактный email персонального куратора")
     pitch_text: str = Field(..., description="Приветственное сопроводительное письмо от менеджера")
 
     # Сводные показатели утвержденного пакета
