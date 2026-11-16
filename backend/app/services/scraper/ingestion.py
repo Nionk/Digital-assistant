@@ -5,6 +5,7 @@ import logging
 import re
 from collections.abc import Sequence
 from typing import Literal, TypeAlias
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from instructor.core import InstructorError
@@ -13,6 +14,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import CITY_ALIASES, normalize_city
 from app.models.models import Event, EventChunk, EventTariff, LLMCache, SelectionItem
 from app.schemas.event_ingestion import EventIngestionSchema
 from app.services.scraper.pdf_reader import VisionOCRProviderProtocol
@@ -21,6 +23,71 @@ logger = logging.getLogger(__name__)
 
 DataQualityStatus: TypeAlias = Literal["ready", "needs_enrichment"]
 MAX_DOSSIER_CHARS: int = 60_000
+
+_RUSSIA_COUNTRY_ALIASES: frozenset[str] = frozenset(
+    {"россия", "рф", "российская федерация", "russia", "russian federation"}
+)
+_NON_RUSSIA_CIS_CITIES: frozenset[str] = frozenset(
+    {"Минск", "Алматы", "Астана", "Ереван", "Ташкент", "Бишкек", "Баку"}
+)
+_RUSSIA_CITY_SET: frozenset[str] = frozenset(CITY_ALIASES.keys()) - _NON_RUSSIA_CIS_CITIES
+
+
+class EventRejectedError(ValueError):
+    """Контролируемое отклонение события на валидации даты или географии ДО вызова эмбеддингов."""
+
+    def __init__(
+        self,
+        outcome: Literal["rejected_past", "rejected_geo"],
+        reason: str,
+    ) -> None:
+        self.outcome = outcome
+        self.reason = reason
+        super().__init__(reason)
+
+
+def _get_app_today() -> datetime.date:
+    import app.services.scraper as scraper_pkg
+
+    tz_name = scraper_pkg.settings.APP_TIMEZONE or "Europe/Moscow"
+    tz: datetime.tzinfo
+    try:
+        tz = ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        tz = datetime.UTC
+    return datetime.datetime.now(tz).date()
+
+
+def is_russia_or_online_event(
+    schema: EventIngestionSchema,
+    *,
+    allow_online: bool = True,
+) -> bool:
+    """
+    Проверяет, относится ли извлеченное событие к РФ или допустимому онлайну.
+    Переиспользует CITY_ALIASES и normalize_city из app/core/constants.py.
+    """
+    norm_country = re.sub(r"\s+", " ", (schema.country or "").strip().lower())
+    is_russia_country = norm_country in _RUSSIA_COUNTRY_ALIASES
+
+    if schema.is_online:
+        if is_russia_country:
+            return True
+        if not norm_country and schema.city:
+            norm_city = normalize_city(schema.city)
+            if norm_city and norm_city in _RUSSIA_CITY_SET:
+                return True
+        return allow_online
+
+    if norm_country and not is_russia_country:
+        return False
+    if is_russia_country:
+        return True
+    if schema.city:
+        norm_city = normalize_city(schema.city)
+        if norm_city and norm_city in _RUSSIA_CITY_SET:
+            return True
+    return False
 
 
 async def _sync_event_chunks(
@@ -156,10 +223,16 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
     if not scraper_pkg.settings.LLM_API_KEY:
         raise RuntimeError("LLM_API_KEY не задан для извлечения карточки мероприятия.")
 
+    today_str = _get_app_today().isoformat()
     system_prompt = (
+        f"Сегодняшняя дата: {today_str}.\n"
         "Ты — аналитик базы знаний B2B-мероприятий. Извлеки из текста структурированную карточку "
         "события по схеме EventIngestionSchema: официальное название, формат, город (или null для онлайн), "
-        "даты проведения, содержательное summary (250-850 символов), подробный full_regulation_markdown, "
+        "страну проведения country (например, 'Россия' для российских городов или фактическую зарубежную страну; "
+        "для глобальных онлайн-вебинаров без привязки к стране — null), "
+        "даты проведения, содержательное summary (250-850 символов), максимально подробный full_regulation_markdown "
+        "(сохраняй конкретные факты без сокращений: программу, аудиторию и статистику участников, требования к посетителям/участникам, "
+        "спикеров и VIP-гостей, партнеров/СМИ, условия участия и стендов, контакты и материалы из PDF), "
         "все тарифы и 3 ответа faq_cache строго по вопросам: "
         "'Что входит в рекомендованный тариф?', "
         "'Какие условия раннего бронирования и дедлайны?', "
@@ -177,7 +250,7 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
                     ],
                     max_retries=2,
                 ),
-                timeout=30.0,
+                timeout=90.0,
             )
             return schema
     except (TimeoutError, APIError, httpx.HTTPError, InstructorError):
@@ -287,6 +360,122 @@ async def _populate_faq_cache(
         )
 
 
+def _strip_schema_org_json_prefix(text: str) -> str:
+    """Удаляет технический блок --- SCHEMA.ORG LD+JSON --- из текста карточки перед сохранением в регламент."""
+    marker = "--- SCHEMA.ORG LD+JSON ---"
+    stripped = text.lstrip()
+    if not stripped.startswith(marker):
+        return text.strip()
+    rest = stripped[len(marker) :].lstrip()
+    decoder = json.JSONDecoder()
+    while rest and rest[0] in ("{", "["):
+        try:
+            _, idx = decoder.raw_decode(rest)
+            rest = rest[idx:].lstrip()
+        except json.JSONDecodeError:
+            break
+    return rest.strip()
+
+
+_DOSSIER_SECTION_HEADER_RE = re.compile(r"(?m)^(===\s+[^\n]+?\s+===)\s*$")
+
+
+def _extract_clean_dossier_materials(
+    raw_dossier_text: str,
+    base_regulation_md: str,
+    *,
+    max_chars: int = 22_000,
+) -> str:
+    """
+    Извлекает содержательные материалы из досье (PDF, OCR, страницы организатора, текст),
+    очищает от сырого LD+JSON и уже включенных параграфов, чтобы RAG видел все детали первоисточников.
+    """
+    raw = raw_dossier_text.strip()
+    if not raw:
+        return ""
+
+    matches = list(_DOSSIER_SECTION_HEADER_RE.finditer(raw))
+    priority_blocks: list[tuple[str, str]] = []
+    secondary_blocks: list[tuple[str, str]] = []
+
+    if not matches:
+        cleaned = _strip_schema_org_json_prefix(raw)
+        if len(cleaned) >= 120:
+            secondary_blocks.append(("Текст первоисточника", cleaned))
+    else:
+        for idx, match in enumerate(matches):
+            header = match.group(1).strip()
+            body_start = match.end()
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(raw)
+            body = _strip_schema_org_json_prefix(raw[body_start:body_end])
+            if len(body) < 80:
+                continue
+            h_low = header.lower()
+            if any(
+                tag in h_low
+                for tag in (
+                    "pdf",
+                    "ocr",
+                    "официальный сайт",
+                    "подстраница организатора",
+                    "данные со страницы",
+                    "текстовое описание",
+                )
+            ):
+                priority_blocks.append((header, body))
+            else:
+                secondary_blocks.append((header, body))
+
+    selected_blocks = priority_blocks if priority_blocks else secondary_blocks
+    if not selected_blocks:
+        return ""
+
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    base_paragraphs = {
+        _norm(p)
+        for p in base_regulation_md.split("\n\n")
+        if len(p.strip()) >= 30
+    }
+    base_norm_full = _norm(base_regulation_md)
+
+    rendered_sections: list[str] = []
+    for header, body in selected_blocks:
+        kept_paragraphs: list[str] = []
+        for para in re.split(r"\n{2,}", body):
+            p_clean = para.strip()
+            if not p_clean:
+                continue
+            p_norm = _norm(p_clean)
+            if len(p_norm) >= 40 and (p_norm in base_paragraphs or p_norm in base_norm_full):
+                continue
+            kept_paragraphs.append(p_clean)
+        if kept_paragraphs:
+            rendered_sections.append(f"### {header.strip('= ')}\n" + "\n\n".join(kept_paragraphs))
+
+    combined = "\n\n".join(rendered_sections).strip()
+    if len(combined) < 120:
+        return ""
+    if len(combined) > max_chars:
+        return f"{combined[:max_chars].rstrip()}\n...[материалы сокращены]"
+    return combined
+
+
+def _build_detailed_regulation_markdown(
+    base_regulation_md: str,
+    raw_dossier_text: str,
+) -> str:
+    """Дополняет выжимку LLM очищенными материалами первоисточников (PDF/сайт) для полноты RAG."""
+    base_clean = (base_regulation_md or "").strip()
+    appendix = _extract_clean_dossier_materials(raw_dossier_text, base_clean)
+    if not appendix:
+        return base_clean
+    if not base_clean:
+        return appendix
+    return f"{base_clean}\n\n---\n\n## Подробные материалы и первоисточники\n\n{appendix}"
+
+
 def _merge_regulation_markdown(
     existing_md: str | None,
     new_md: str,
@@ -321,6 +510,7 @@ def _merge_into_existing(
     schema: EventIngestionSchema,
     embedding_vec: list[float],
     source_url: str | None,
+    extra_source_urls: Sequence[str] = (),
 ) -> None:
     """Обогащает карточку новыми данными без ухудшения исходных названия, дат и города."""
     if len(schema.summary) > len(target.summary or ""):
@@ -337,9 +527,11 @@ def _merge_into_existing(
             source_url,
         )
 
-    is_new_source = bool(source_url) and source_url not in (target.source_urls or [])
-    if is_new_source and source_url:
-        target.source_urls = [*(target.source_urls or []), source_url]
+    incoming_urls = [u.strip() for u in (source_url, *extra_source_urls) if u and u.strip()]
+    if incoming_urls:
+        target.source_urls = list(dict.fromkeys([*(target.source_urls or []), *incoming_urls]))
+
+    target.last_scraped_at = datetime.datetime.now(datetime.UTC)
 
 
 async def ingest_event_from_text(
@@ -347,6 +539,11 @@ async def ingest_event_from_text(
     raw_dossier_text: str,
     source_url: str | None = None,
     extra_warnings: Sequence[str] = (),
+    *,
+    enforce_russia_online: bool = False,
+    allow_global_online: bool = True,
+    reject_past: bool = False,
+    extra_source_urls: Sequence[str] = (),
 ) -> Event:
     """
     Полный цикл извлечения и обогащения карточки мероприятия.
@@ -364,15 +561,51 @@ async def ingest_event_from_text(
         collected_warnings.append("dossier_truncated_before_llm")
 
     schema = await _extract_structured_event_via_llm(dossier_to_parse)
+    detailed_regulation_md = _build_detailed_regulation_markdown(
+        schema.full_regulation_markdown,
+        dossier_to_parse,
+    )
+    if detailed_regulation_md != schema.full_regulation_markdown:
+        schema = schema.model_copy(
+            update={"full_regulation_markdown": detailed_regulation_md}
+        )
+
+    if reject_past:
+        today = _get_app_today()
+        if schema.end_date < today:
+            raise EventRejectedError(
+                "rejected_past",
+                f"Мероприятие уже завершилось ({schema.end_date.isoformat()} < {today.isoformat()}).",
+            )
+
+    if enforce_russia_online and not is_russia_or_online_event(
+        schema, allow_online=allow_global_online
+    ):
+        raise EventRejectedError(
+            "rejected_geo",
+            f"Локация вне РФ/допустимого онлайна (country={schema.country!r}, city={schema.city!r}, is_online={schema.is_online}).",
+        )
+
     emb_text = f"{schema.canonical_title}. {schema.summary}. Темы: {', '.join(schema.themes)}"
     embedding_vec = await scraper_pkg.get_embedding(emb_text)
 
     existing = await scraper_pkg.find_duplicate_event(session, schema)
+    was_created = existing is None
+    was_ready = existing is not None and existing.data_status == "ready"
     if existing is not None:
         await scraper_pkg.invalidate_rag_cache(session, existing.id)
         event_obj = existing
-        _merge_into_existing(event_obj, schema, embedding_vec, source_url)
+        _merge_into_existing(
+            event_obj,
+            schema,
+            embedding_vec,
+            source_url,
+            extra_source_urls=extra_source_urls,
+        )
     else:
+        initial_urls = list(
+            dict.fromkeys([u.strip() for u in (source_url, *extra_source_urls) if u and u.strip()])
+        )
         event_obj = Event(
             canonical_title=schema.canonical_title,
             normalized_title=schema.canonical_title.strip().lower(),
@@ -385,8 +618,9 @@ async def ingest_event_from_text(
             summary=schema.summary,
             full_regulation_markdown=schema.full_regulation_markdown,
             themes=schema.themes,
-            source_urls=[source_url] if source_url else [],
+            source_urls=initial_urls,
             summary_embedding=embedding_vec,
+            last_scraped_at=datetime.datetime.now(datetime.UTC),
         )
         session.add(event_obj)
         await session.flush()
@@ -409,34 +643,57 @@ async def ingest_event_from_text(
         city=event_obj.city,
         extra_warnings=all_warnings,
     )
-    event_obj.data_status = data_status
-    event_obj.missing_data_warnings = warnings
-    event_obj.is_active = data_status == "ready"
+    if was_ready and data_status == "needs_enrichment":
+        event_obj.data_status = "ready"
+        event_obj.is_active = True
+    else:
+        event_obj.data_status = data_status
+        event_obj.missing_data_warnings = warnings
+        event_obj.is_active = data_status == "ready"
 
     await session.flush()
+    event_obj._was_created_in_ingest = was_created  # type: ignore[attr-defined]
     return event_obj
 
 
 async def _extract_pdf_dossier_parts(
     pdf_bytes: bytes,
     vision_ocr: VisionOCRProviderProtocol | None,
+    existing_dossier_text: str = "",
+    max_ocr_pages: int | None = None,
 ) -> tuple[list[str], list[str]]:
     """Извлекает текстовый слой и результаты Vision OCR из PDF-документа для общего досье."""
     import app.services.scraper as scraper_pkg
 
     parts: list[str] = []
     warnings: list[str] = []
-    pdf_text, ocr_images = await scraper_pkg.extract_pdf_text_async(pdf_bytes)
+    effective_max_pages = (
+        max_ocr_pages
+        if max_ocr_pages is not None
+        else scraper_pkg.settings.VISION_OCR_MAX_PAGES_MANUAL
+    )
+    pdf_text, ocr_images = await scraper_pkg.extract_pdf_text_async(
+        pdf_bytes,
+        max_ocr_pages=effective_max_pages,
+        include_all_if_compact=True,
+    )
     if pdf_text:
         parts.append(f"=== ТЕКСТ ИЗ PDF-РЕГЛАМЕНТА ===\n{pdf_text}")
-    if ocr_images:
-        ocr_text = ""
-        if vision_ocr is not None:
-            ocr_text = await vision_ocr.extract_text_from_images(ocr_images)
-        if ocr_text.strip():
-            parts.append(f"=== РАСПОЗНАННЫЙ OCR ТЕКСТ PDF ===\n{ocr_text.strip()}")
+    if ocr_images and scraper_pkg.should_run_vision_ocr(
+        existing_dossier_text, pdf_text, ocr_images
+    ):
+        if vision_ocr is None:
+            warnings.append("vision_ocr_not_configured")
         else:
-            warnings.append("pdf_scanned_pages_not_recognized")
+            try:
+                ocr_text = await vision_ocr.extract_text_from_images(ocr_images)
+            except (TimeoutError, APIError, httpx.HTTPError, RuntimeError, ValueError) as exc:
+                logger.warning("Сбой Vision OCR при ручном импорте PDF: %s", exc)
+                ocr_text = ""
+            if ocr_text.strip():
+                parts.append(f"=== РАСПОЗНАННЫЙ OCR ТЕКСТ PDF ===\n{ocr_text.strip()}")
+            else:
+                warnings.append("pdf_scanned_pages_not_recognized")
     return parts, warnings
 
 
@@ -467,11 +724,25 @@ async def ingest_smart_event(
         dossier_parts.append(f"=== ТЕКСТОВОЕ ОПИСАНИЕ / ЗАМЕТКА ===\n{raw_text.strip()}")
 
     if pdf_bytes:
-        pdf_parts, pdf_warnings = await _extract_pdf_dossier_parts(pdf_bytes, vision_ocr)
+        effective_vision_ocr = (
+            vision_ocr
+            if vision_ocr is not None
+            else scraper_pkg.build_vision_ocr_provider()
+        )
+        pdf_parts, pdf_warnings = await _extract_pdf_dossier_parts(
+            pdf_bytes,
+            effective_vision_ocr,
+            existing_dossier_text="\n\n".join(dossier_parts),
+            max_ocr_pages=scraper_pkg.settings.VISION_OCR_MAX_PAGES_MANUAL,
+        )
         dossier_parts.extend(pdf_parts)
         extra_warnings.extend(pdf_warnings)
 
     if not dossier_parts:
+        if pdf_bytes:
+            raise ValueError(
+                "Не удалось извлечь текст из PDF-файла (возможно, это скан без настроенного Vision OCR)."
+            )
         raise ValueError("Необходимо передать хотя бы один источник данных: source_url, raw_text или pdf_bytes.")
 
     event_obj = await scraper_pkg.ingest_event_from_text(
