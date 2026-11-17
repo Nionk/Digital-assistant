@@ -9,9 +9,14 @@ import {
   Layers,
 } from "lucide-react";
 import * as React from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { ComputedFinancialSummary } from "@/store/useManagerStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  GoldShimmerBar,
+  RotatingStatusText,
+} from "@/components/ui/ai-shimmer-bar";
 import { formatDateShort, formatRub } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +32,12 @@ interface FinancialAndPitchPanelProps {
   publishedUrl: string | null;
   onCopyLink: (url: string) => Promise<boolean> | boolean | void;
 }
+
+const PITCH_AI_STEPS = [
+  "Анализируем выбранный состав площадок и тарифы...",
+  "Учитываем задачи клиента и бюджетные ориентиры...",
+  "Формулируем персональное обращение к клиенту...",
+] as const;
 
 export function FinancialAndPitchPanel({
   companyName,
@@ -200,7 +211,40 @@ export function FinancialAndPitchPanel({
           </h2>
         </div>
 
-        <div className="mt-2.5 overflow-hidden rounded-[8px] border border-[#262D35] bg-[#12161A] transition-[border-color,box-shadow] duration-150 focus-within:border-[#E5C378] focus-within:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]">
+        <div
+          className={cn(
+            "mt-2.5 overflow-hidden rounded-[8px] border bg-[#12161A] transition-[border-color,box-shadow] duration-200 focus-within:border-[#E5C378] focus-within:shadow-[0_0_0_1px_rgba(229,195,120,0.25)]",
+            isGeneratingPitch
+              ? "border-[#7C5A20] shadow-[0_0_14px_rgba(229,195,120,0.08)]"
+              : "border-[#262D35]"
+          )}
+        >
+          <AnimatePresence initial={false}>
+            {isGeneratingPitch && (
+              <motion.div
+                key="pitch-ai-progress"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden border-b border-[#21262F] bg-[#0E1215]/90"
+              >
+                <div className="px-3 py-2 space-y-1.5">
+                  <RotatingStatusText
+                    active={isGeneratingPitch}
+                    steps={PITCH_AI_STEPS}
+                    intervalMs={2400}
+                  />
+                  <GoldShimmerBar
+                    active={isGeneratingPitch}
+                    size="thin"
+                    tone="gold"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <textarea
             ref={textareaRef}
             id="client-pitch-text"
@@ -208,9 +252,13 @@ export function FinancialAndPitchPanel({
             aria-label="Персональное обращение к клиенту"
             value={pitchText}
             onChange={(e) => onPitchChange(e.target.value)}
+            disabled={isGeneratingPitch}
             placeholder="Напишите сопроводительное письмо или нажмите «✦ Обновить письмо»..."
             style={{ minHeight: "130px", maxHeight: "400px" }}
-            className="block w-full resize-y bg-transparent p-3 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none overflow-y-auto scrollbar-thin"
+            className={cn(
+              "block w-full resize-y bg-transparent p-3 text-xs leading-relaxed text-white placeholder:text-[#8E95A0] [color-scheme:dark] outline-none focus:outline-none focus-visible:outline-none active:outline-none overflow-y-auto scrollbar-thin transition-opacity duration-200",
+              isGeneratingPitch && "opacity-45"
+            )}
           />
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#21262F] bg-[#0E1215]/75 px-3 py-2">
