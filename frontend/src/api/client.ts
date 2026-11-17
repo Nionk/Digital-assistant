@@ -10,6 +10,9 @@ import type {
   ClientWorkspaceOut,
   EscalateQuestionIn,
   EscalateQuestionOut,
+  EventArchiveOut,
+  EventRefreshIn,
+  EventRefreshOut,
   EventUploadIn,
   EventUploadOut,
   GeneratePitchIn,
@@ -289,6 +292,30 @@ export const apiClient = {
       body: formData,
       timeoutMs: LLM_TIMEOUT_MS,
     });
+  },
+
+  archiveEvent(eventId: number): Promise<EventArchiveOut> {
+    return requestJson<EventArchiveOut>(
+      `/api/manager/events/${eventId}/archive`,
+      {
+        method: "POST",
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      }
+    );
+  },
+
+  refreshEvent(
+    eventId: number,
+    payload: EventRefreshIn = { force: false }
+  ): Promise<EventRefreshOut> {
+    return requestJson<EventRefreshOut>(
+      `/api/manager/events/${eventId}/refresh`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        timeoutMs: LLM_TIMEOUT_MS,
+      }
+    );
   },
 
   runScraper(payload: ScraperRunIn): Promise<ScraperRunOut> {

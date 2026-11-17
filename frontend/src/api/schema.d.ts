@@ -230,6 +230,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/manager/events/{event_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Архивация неактуального или ненужного мероприятия
+         * @description Переводит мероприятие в архив (is_active=False, data_status='archived'), помечает все его source_urls как 'ignored' в scraper_seen_urls и очищает RAG-кэш.
+         */
+        post: operations["archive_event_endpoint_api_manager_events__event_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/events/{event_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Точечное обновление карточки мероприятия с сайта-первоисточника
+         * @description Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash (если force=False) и при наличии изменений обновляет карточку через LLM.
+         */
+        post: operations["refresh_event_endpoint_api_manager_events__event_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/manager/scraper/run": {
         parameters: {
             query?: never;
@@ -1052,6 +1092,68 @@ export interface components {
              * @default Вопрос передан персональному куратору.
              */
             message: string;
+        };
+        /**
+         * EventArchiveOut
+         * @description Результат архивации мероприятия менеджером.
+         */
+        EventArchiveOut: {
+            /**
+             * Event Id
+             * @description ID архивированного мероприятия
+             */
+            event_id: number;
+            /**
+             * Status
+             * @description Итоговый статус мероприятия
+             * @default archived
+             * @constant
+             */
+            status: "archived";
+            /**
+             * Message
+             * @description Сообщение о результате архивации
+             */
+            message: string;
+        };
+        /**
+         * EventRefreshIn
+         * @description Параметры точечного обновления карточки мероприятия с сайта-первоисточника.
+         */
+        EventRefreshIn: {
+            /**
+             * Force
+             * @description Принудительно перечитать и перепарсить через LLM, даже если content_hash не изменился
+             * @default false
+             */
+            force: boolean;
+        };
+        /**
+         * EventRefreshOut
+         * @description Результат точечного обновления карточки мероприятия с сайта.
+         */
+        EventRefreshOut: {
+            /**
+             * Event Id
+             * @description ID мероприятия
+             */
+            event_id: number;
+            /**
+             * Updated
+             * @description True если карточка была обновлена через LLM, False если изменений нет
+             */
+            updated: boolean;
+            /**
+             * Message
+             * @description Статус обновления
+             */
+            message: string;
+            /**
+             * Data Status
+             * @description Актуальный статус полноты данных карточки
+             * @enum {string}
+             */
+            data_status: "ready" | "needs_enrichment" | "archived";
         };
         /**
          * EventUploadOut
@@ -2737,6 +2839,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_event_endpoint_api_manager_events__event_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventArchiveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_event_endpoint_api_manager_events__event_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EventRefreshIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventRefreshOut"];
                 };
             };
             /** @description Validation Error */

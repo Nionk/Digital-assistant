@@ -11,9 +11,16 @@ import {
   ExternalLink,
   AlertTriangle,
   Upload,
+  RefreshCw,
+  Archive,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import type { CatalogEventItemOut } from "@/api/types";
+import {
+  useArchiveEventMutation,
+  useRefreshEventMutation,
+} from "@/api/queries";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventImportModal } from "./EventImportModal";
@@ -62,6 +69,10 @@ export function EventDetailsDrawer({
   const [copied, setCopied] = React.useState(false);
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isEnrichModalOpen, setIsEnrichModalOpen] = React.useState(false);
+  const [confirmArchive, setConfirmArchive] = React.useState(false);
+
+  const refreshMutation = useRefreshEventMutation();
+  const archiveMutation = useArchiveEventMutation();
 
   const summaryTimerRef = React.useRef<number | null>(null);
   const addressTimerRef = React.useRef<number | null>(null);
@@ -69,7 +80,8 @@ export function EventDetailsDrawer({
   React.useEffect(() => {
     setCopied(false);
     setCopiedAddress(false);
-  }, [event?.event_id]);
+    setConfirmArchive(false);
+  }, [event?.event_id, isOpen]);
 
   React.useEffect(() => {
     return () => {
@@ -136,6 +148,37 @@ export function EventDetailsDrawer({
       setCopied(false);
       summaryTimerRef.current = null;
     }, 2000);
+  };
+
+  const handleRefreshFromSite = async () => {
+    try {
+      const res = await refreshMutation.mutateAsync({
+        eventId: event.event_id,
+        payload: { force: false },
+      });
+      if (res.updated) {
+        toast.success(res.message || "Обновлено");
+      } else {
+        toast.info(res.message || "На сайте изменений нет");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось обновить карточку с сайта"
+      );
+    }
+  };
+
+  const handleConfirmArchive = async () => {
+    try {
+      await archiveMutation.mutateAsync(event.event_id);
+      toast.success("Мероприятие убрано в архив");
+      setConfirmArchive(false);
+      onClose();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось убрать мероприятие в архив"
+      );
+    }
   };
 
   if (typeof document === "undefined") return null;
@@ -469,37 +512,98 @@ export function EventDetailsDrawer({
                   </div>
                 </div>
 
-                <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex flex-col sm:flex-row items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEnrichModalOpen(true)}
-                    className="w-full sm:w-auto h-9 border-[#262D35] bg-[#161B21] text-xs font-medium text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] transition-all shrink-0"
-                  >
-                    <Upload className="h-3.5 w-3.5 text-[#E5C378]" />
-                    <span>Обогатить из PDF / ссылки</span>
-                  </Button>
+                <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex flex-col gap-2">
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!safeWebsiteUrl || refreshMutation.isPending || archiveMutation.isPending}
+                      onClick={handleRefreshFromSite}
+                      title={
+                        safeWebsiteUrl
+                          ? "Проверить изменения на сайте и обновить карточку"
+                          : "У мероприятия нет ссылки на сайт"
+                      }
+                      className="w-full sm:flex-1 h-9 border-[#262D35] bg-[#161B21] text-xs font-medium text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] transition-all"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 text-[#E5C378] ${refreshMutation.isPending ? "animate-spin" : ""}`}
+                      />
+                      <span>
+                        {refreshMutation.isPending ? "Обновление..." : "Обновить с сайта"}
+                      </span>
+                    </Button>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopySummary}
-                    className="w-full flex-1 h-9 border-[#7C5A20]/60 bg-[#1E190E] text-xs font-serif italic text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] transition-all"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-3.5 w-3.5 text-[#34D399]" />
-                        <span>Описание скопировано в буфер</span>
-                      </>
+                    {confirmArchive ? (
+                      <div className="w-full sm:w-auto flex items-center justify-between gap-1.5 rounded-[6px] border border-rose-500/40 bg-rose-950/30 px-2.5 h-9 text-xs shrink-0">
+                        <span className="text-rose-200 whitespace-nowrap">Убрать в архив?</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={archiveMutation.isPending}
+                            onClick={handleConfirmArchive}
+                            className="rounded px-2 py-0.5 font-semibold bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-50 transition-colors"
+                          >
+                            {archiveMutation.isPending ? "..." : "Да"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={archiveMutation.isPending}
+                            onClick={() => setConfirmArchive(false)}
+                            className="rounded px-2 py-0.5 text-[#D1D5DB] hover:bg-[#262D35] transition-colors"
+                          >
+                            Нет
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <>
-                        <Copy className="h-3.5 w-3.5 text-[#E5C378]" />
-                        <span>Скопировать описание и тарифы</span>
-                      </>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={refreshMutation.isPending || archiveMutation.isPending}
+                        onClick={() => setConfirmArchive(true)}
+                        className="w-full sm:w-auto h-9 border-[#262D35] bg-[#161B21] text-xs font-medium text-[#8E95A0] hover:border-rose-500/50 hover:text-rose-300 hover:bg-rose-950/20 transition-all shrink-0"
+                      >
+                        <Archive className="h-3.5 w-3.5" />
+                        <span>В архив</span>
+                      </Button>
                     )}
-                  </Button>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEnrichModalOpen(true)}
+                      className="w-full sm:w-auto h-9 border-[#262D35] bg-[#161B21] text-xs font-medium text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] transition-all shrink-0"
+                    >
+                      <Upload className="h-3.5 w-3.5 text-[#E5C378]" />
+                      <span>Обогатить из PDF / ссылки</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopySummary}
+                      className="w-full flex-1 h-9 border-[#7C5A20]/60 bg-[#1E190E] text-xs font-serif italic text-[#E5C378] hover:border-[#E5C378] hover:bg-[#261E0F] hover:text-white hover:shadow-[0_0_10px_rgba(229,195,120,0.2)] transition-all"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-[#34D399]" />
+                          <span>Описание скопировано в буфер</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-[#E5C378]" />
+                          <span>Скопировать описание и тарифы</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </motion.aside>
             </div>
