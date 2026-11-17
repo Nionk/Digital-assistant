@@ -933,3 +933,28 @@ class ManagerReplyOut(BaseModel):
     reply_message_id: int = Field(..., description="ID созданного сообщения менеджера в чате")
     success: bool = True
     message: str = Field(..., description="Статус обработки")
+
+
+class EventArchiveOut(BaseModel):
+    """Результат архивации мероприятия менеджером."""
+    event_id: int = Field(..., description="ID архивированного мероприятия")
+    status: Literal["archived"] = Field(default="archived", description="Итоговый статус мероприятия")
+    message: str = Field(..., description="Сообщение о результате архивации")
+
+
+class EventRefreshIn(BaseModel):
+    """Параметры точечного обновления карточки мероприятия с сайта-первоисточника."""
+    force: bool = Field(
+        default=False,
+        description="Принудительно перечитать и перепарсить через LLM, даже если content_hash не изменился",
+    )
+
+
+class EventRefreshOut(BaseModel):
+    """Результат точечного обновления карточки мероприятия с сайта."""
+    event_id: int = Field(..., description="ID мероприятия")
+    updated: bool = Field(..., description="True если карточка была обновлена через LLM, False если изменений нет")
+    message: str = Field(..., description="Статус обновления")
+    data_status: Literal["ready", "needs_enrichment", "archived"] = Field(
+        ..., description="Актуальный статус полноты данных карточки"
+    )

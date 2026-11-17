@@ -6,6 +6,7 @@ import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Body,
     Depends,
     File,
     Form,
@@ -21,12 +22,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_async_session
 from app.core.security import CurrentManagerDep
-from app.models.models import EventTariff, ScraperRun, ScraperSource
+from app.models.models import (
+    Event,
+    EventTariff,
+    ScraperRun,
+    ScraperSeenUrl,
+    ScraperSource,
+)
 from app.schemas.manager import (
     ClientCreateIn,
     ClientSummaryOut,
     ClientUpdateIn,
     ClientWorkspaceOut,
+    EventArchiveOut,
+    EventRefreshIn,
+    EventRefreshOut,
     EventUploadOut,
     GeneratePitchIn,
     GeneratePitchOut,
@@ -63,23 +73,30 @@ from app.services.manager_workspace import (
     get_selection_activity_summary,
     list_catalog_events,
     list_manager_clients_dashboard,
+    normalize_data_status,
     publish_selection_workspace,
     reply_to_client_question_workspace,
     update_manager_client,
     verify_client_owned_by_manager,
 )
 from app.services.matcher import run_client_matching_pipeline
+from app.services.rag import invalidate_rag_cache
 from app.services.scraper import (
     CaptchaBlockedError,
     CustomerSourceConfig,
     HttpCatalogSourceScraper,
     UnsafeUrlError,
+    build_vision_ocr_provider,
+    collect_event_dossier,
     ensure_builtin_scraper_sources,
+    ingest_event_from_text,
     ingest_smart_event,
     run_persisted_scraper_job,
     try_enqueue_scraper_run,
     validate_safe_public_url,
 )
+from app.services.scraper.monitoring import _compute_dossier_hash, _url_lookup_key
+from app.services.scraper.sources import DiscoveredCandidate, canonicalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -510,6 +527,251 @@ async def upload_event_material(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка обработки мероприятия: {exc}",
+        ) from exc
+
+
+async def _find_seen_url_row(db: AsyncSession, raw_url: str) -> tuple[str, ScraperSeenUrl | None]:
+    canon_url = canonicalize_url(raw_url) or raw_url.strip()
+    url_key = _url_lookup_key(canon_url)
+    res = await db.execute(select(ScraperSeenUrl).where(ScraperSeenUrl.url == url_key))
+    row = res.scalar_one_or_none()
+    if row is None:
+        for legacy in (f"{url_key}/", canon_url):
+            if legacy and legacy != url_key:
+                leg_res = await db.execute(
+                    select(ScraperSeenUrl).where(ScraperSeenUrl.url == legacy)
+                )
+                row = leg_res.scalar_one_or_none()
+                if row is not None:
+                    break
+    return url_key, row
+
+
+@router.post(
+    "/events/{event_id}/archive",
+    response_model=EventArchiveOut,
+    summary="Архивация неактуального или ненужного мероприятия",
+    description=(
+        "Переводит мероприятие в архив (is_active=False, data_status='archived'), "
+        "помечает все его source_urls как 'ignored' в scraper_seen_urls и очищает RAG-кэш."
+    ),
+)
+async def archive_event_endpoint(
+    event_id: int,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+) -> EventArchiveOut:
+    try:
+        ev_res = await db.execute(select(Event).where(Event.id == event_id))
+        event = ev_res.scalar_one_or_none()
+        if event is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Мероприятие с ID={event_id} не найдено.",
+            )
+
+        event.is_active = False
+        event.data_status = "archived"
+
+        now_ts = datetime.datetime.now(datetime.UTC)
+        seen_keys: set[str] = set()
+        for raw_url in event.source_urls or []:
+            if not isinstance(raw_url, str) or not raw_url.strip():
+                continue
+            url_key, seen_row = await _find_seen_url_row(db, raw_url)
+            if url_key in seen_keys:
+                continue
+            seen_keys.add(url_key)
+            if seen_row is not None:
+                seen_row.url = url_key
+                seen_row.outcome = "ignored"
+                seen_row.event_id = event.id
+                seen_row.last_checked_at = now_ts
+            else:
+                db.add(
+                    ScraperSeenUrl(
+                        url=url_key,
+                        source_key="manual",
+                        outcome="ignored",
+                        event_id=event.id,
+                        recheck_attempts=0,
+                        last_error=None,
+                        last_checked_at=now_ts,
+                    )
+                )
+
+        await invalidate_rag_cache(db, event.id)
+        await db.commit()
+        return EventArchiveOut(
+            event_id=event.id,
+            status="archived",
+            message="Мероприятие перемещено в архив и исключено из повторного сбора.",
+        )
+    except HTTPException:
+        raise
+    except (SQLAlchemyError, OSError) as exc:
+        await db.rollback()
+        logger.error("Ошибка БД при архивации мероприятия %s: %s", event_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
+        ) from exc
+
+
+@router.post(
+    "/events/{event_id}/refresh",
+    response_model=EventRefreshOut,
+    summary="Точечное обновление карточки мероприятия с сайта-первоисточника",
+    description=(
+        "Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash "
+        "(если force=False) и при наличии изменений обновляет карточку через LLM."
+    ),
+)
+async def refresh_event_endpoint(
+    event_id: int,
+    current_manager: CurrentManagerDep,
+    db: AsyncSessionDep,
+    payload: Annotated[EventRefreshIn | None, Body()] = None,
+) -> EventRefreshOut:
+    force = payload.force if payload is not None else False
+    try:
+        ev_res = await db.execute(select(Event).where(Event.id == event_id))
+        event = ev_res.scalar_one_or_none()
+        if event is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Мероприятие с ID={event_id} не найдено.",
+            )
+
+        raw_urls = [u.strip() for u in (event.source_urls or []) if isinstance(u, str) and u.strip()]
+        if not raw_urls:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="У мероприятия отсутствует URL первоисточника для обновления.",
+            )
+
+        primary_url = raw_urls[0]
+        try:
+            await validate_safe_public_url(primary_url)
+        except UnsafeUrlError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        url_key, seen_row = await _find_seen_url_row(db, primary_url)
+        refresh_source = CustomerSourceConfig(
+            source_key=seen_row.source_key if seen_row is not None else "manual_refresh",
+            display_name="Точечное обновление карточки",
+            catalog_urls=(primary_url,),
+            adapter_type="html_list",
+            russia_online_only=False,
+        )
+        candidate = DiscoveredCandidate(
+            url=primary_url,
+            source_key=refresh_source.source_key,
+            title=event.canonical_title,
+        )
+
+        now_ts = datetime.datetime.now(datetime.UTC)
+        collected_without_ocr = False
+        dossier = None
+        new_hash = ""
+
+        if not force and seen_row is not None and seen_row.content_hash:
+            dossier = await collect_event_dossier(
+                candidate,
+                refresh_source,
+                vision_ocr=None,
+                ocr_budget=None,
+            )
+            collected_without_ocr = True
+            new_hash = _compute_dossier_hash([dossier])
+            if new_hash == seen_row.content_hash:
+                seen_row.last_checked_at = now_ts
+                await db.commit()
+                return EventRefreshOut(
+                    event_id=event.id,
+                    updated=False,
+                    message="Изменений на сайте не обнаружено",
+                    data_status=normalize_data_status(event.data_status),
+                )
+
+        vision_ocr = build_vision_ocr_provider()
+        if not collected_without_ocr or vision_ocr is not None or dossier is None:
+            dossier = await collect_event_dossier(
+                candidate,
+                refresh_source,
+                vision_ocr=vision_ocr,
+                ocr_budget=None,
+            )
+            new_hash = _compute_dossier_hash([dossier])
+
+        updated_event = await ingest_event_from_text(
+            db,
+            dossier.dossier_text,
+            source_url=primary_url,
+            extra_warnings=dossier.warnings,
+            enforce_russia_online=False,
+            reject_past=False,
+            skip_archived=False,
+            extra_source_urls=dossier.source_urls,
+        )
+
+        new_outcome = (
+            "ingested_ready"
+            if updated_event.data_status == "ready"
+            else "ingested_needs_enrichment"
+        )
+        if seen_row is not None:
+            seen_row.url = url_key
+            seen_row.outcome = new_outcome
+            seen_row.event_id = updated_event.id
+            seen_row.content_hash = new_hash
+            seen_row.last_error = None
+            seen_row.last_checked_at = now_ts
+        else:
+            db.add(
+                ScraperSeenUrl(
+                    url=url_key,
+                    source_key=refresh_source.source_key,
+                    outcome=new_outcome,
+                    event_id=updated_event.id,
+                    recheck_attempts=0,
+                    content_hash=new_hash,
+                    last_error=None,
+                    last_checked_at=now_ts,
+                )
+            )
+
+        await db.commit()
+        return EventRefreshOut(
+            event_id=updated_event.id,
+            updated=True,
+            message="Карточка мероприятия успешно обновлена с сайта.",
+            data_status=normalize_data_status(updated_event.data_status),
+        )
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        await db.rollback()
+        logger.warning("Ошибка загрузки URL при обновлении события %s: %s", event_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Не удалось загрузить страницу мероприятия по указанному URL.",
+        ) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except (SQLAlchemyError, OSError) as exc:
+        await db.rollback()
+        logger.error("Ошибка БД при обновлении мероприятия %s: %s", event_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База данных временно недоступна",
         ) from exc
 
 
