@@ -641,6 +641,119 @@
         ]
       }
     },
+    "/api/manager/events/{event_id}/archive": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Архивация неактуального или ненужного мероприятия",
+        "description": "Переводит мероприятие в архив (is_active=False, data_status='archived'), помечает все его source_urls как 'ignored' в scraper_seen_urls и очищает RAG-кэш.",
+        "operationId": "archive_event_endpoint_api_manager_events__event_id__archive_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventArchiveOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/events/{event_id}/refresh": {
+      "post": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Точечное обновление карточки мероприятия с сайта-первоисточника",
+        "description": "Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash (если force=False) и при наличии изменений обновляет карточку через LLM.",
+        "operationId": "refresh_event_endpoint_api_manager_events__event_id__refresh_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/EventRefreshIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventRefreshOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/scraper/run": {
       "post": {
         "tags": [
@@ -2322,6 +2435,85 @@
         ],
         "title": "EscalateQuestionOut",
         "description": "Результат передачи вопроса персональному куратору в Telegram."
+      },
+      "EventArchiveOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID архивированного мероприятия"
+          },
+          "status": {
+            "type": "string",
+            "const": "archived",
+            "title": "Status",
+            "description": "Итоговый статус мероприятия",
+            "default": "archived"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Сообщение о результате архивации"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "message"
+        ],
+        "title": "EventArchiveOut",
+        "description": "Результат архивации мероприятия менеджером."
+      },
+      "EventRefreshIn": {
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Принудительно перечитать и перепарсить через LLM, даже если content_hash не изменился",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EventRefreshIn",
+        "description": "Параметры точечного обновления карточки мероприятия с сайта-первоисточника."
+      },
+      "EventRefreshOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID мероприятия"
+          },
+          "updated": {
+            "type": "boolean",
+            "title": "Updated",
+            "description": "True если карточка была обновлена через LLM, False если изменений нет"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Статус обновления"
+          },
+          "data_status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "needs_enrichment",
+              "archived"
+            ],
+            "title": "Data Status",
+            "description": "Актуальный статус полноты данных карточки"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "updated",
+          "message",
+          "data_status"
+        ],
+        "title": "EventRefreshOut",
+        "description": "Результат точечного обновления карточки мероприятия с сайта."
       },
       "EventUploadOut": {
         "properties": {

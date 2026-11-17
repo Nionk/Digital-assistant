@@ -8,6 +8,7 @@ import type {
   ClientReactionIn,
   ClientUpdateIn,
   EscalateQuestionIn,
+  EventRefreshIn,
   EventUploadIn,
   GeneratePitchIn,
   LoginRequestIn,
@@ -146,6 +147,36 @@ export function useManagerEventsCatalog(
     queryFn: () => apiClient.getManagerEventsCatalog(filters),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+export function useArchiveEventMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: number) => apiClient.archiveEvent(eventId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperLatestRun });
+    },
+  });
+}
+
+export function useRefreshEventMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      payload,
+    }: {
+      eventId: number;
+      payload?: EventRefreshIn;
+    }) => apiClient.refreshEvent(eventId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperLatestRun });
+    },
   });
 }
 
