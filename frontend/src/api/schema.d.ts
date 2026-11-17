@@ -260,10 +260,27 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Точечное обновление карточки мероприятия с сайта-первоисточника
-         * @description Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash (если force=False) и при наличии изменений обновляет карточку через LLM.
+         * Фоновое точечное обновление карточки мероприятия с сайта-первоисточника
+         * @description Проверяет URL первоисточника и запускает фоновую задачу обновления карточки. Результат отслеживается через GET /events/{event_id}/refresh/status.
          */
         post: operations["refresh_event_endpoint_api_manager_events__event_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/manager/events/{event_id}/refresh/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Статус фонового обновления карточки мероприятия */
+        get: operations["get_event_refresh_status_api_manager_events__event_id__refresh_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1130,7 +1147,7 @@ export interface components {
         };
         /**
          * EventRefreshOut
-         * @description Результат точечного обновления карточки мероприятия с сайта.
+         * @description Результат постановки точечного обновления карточки мероприятия в фоновую задачу.
          */
         EventRefreshOut: {
             /**
@@ -1139,21 +1156,77 @@ export interface components {
              */
             event_id: number;
             /**
+             * Status
+             * @description Статус фоновой задачи обновления
+             * @default queued
+             * @enum {string}
+             */
+            status: "queued" | "running";
+            /**
              * Updated
-             * @description True если карточка была обновлена через LLM, False если изменений нет
+             * @description True если карточка уже обновлена (для обратной совместимости)
+             * @default false
              */
             updated: boolean;
             /**
              * Message
-             * @description Статус обновления
+             * @description Статус запуска обновления
+             */
+            message: string;
+            /**
+             * Data Status
+             * @description Текущий статус полноты данных карточки
+             */
+            data_status?: ("ready" | "needs_enrichment" | "archived") | null;
+        };
+        /**
+         * EventRefreshStatusOut
+         * @description Текущий статус фонового обновления карточки мероприятия.
+         */
+        EventRefreshStatusOut: {
+            /**
+             * Event Id
+             * @description ID мероприятия
+             */
+            event_id: number;
+            /**
+             * Status
+             * @description Состояние задачи обновления
+             * @enum {string}
+             */
+            status: "idle" | "queued" | "running" | "completed" | "failed";
+            /**
+             * Updated
+             * @description True если карточка была обновлена через LLM, False если изменений нет
+             * @default false
+             */
+            updated: boolean;
+            /**
+             * Message
+             * @description Человекочитаемый статус обновления
+             * @default
              */
             message: string;
             /**
              * Data Status
              * @description Актуальный статус полноты данных карточки
-             * @enum {string}
              */
-            data_status: "ready" | "needs_enrichment" | "archived";
+            data_status?: ("ready" | "needs_enrichment" | "archived") | null;
+            /**
+             * Error
+             * @description Текст ошибки при status='failed'
+             */
+            error?: string | null;
+            /**
+             * Started At
+             * @description ISO-время старта обновления
+             */
+            started_at?: string | null;
+            /**
+             * Finished At
+             * @description ISO-время завершения обновления
+             */
+            finished_at?: string | null;
         };
         /**
          * EventUploadOut
@@ -2905,6 +2978,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventRefreshOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_event_refresh_status_api_manager_events__event_id__refresh_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventRefreshStatusOut"];
                 };
             };
             /** @description Validation Error */

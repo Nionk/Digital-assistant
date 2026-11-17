@@ -15,14 +15,21 @@ import {
   Archive,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CatalogEventItemOut } from "@/api/types";
 import {
+  queryKeys,
   useArchiveEventMutation,
+  useEventRefreshStatus,
   useRefreshEventMutation,
 } from "@/api/queries";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  GoldShimmerBar,
+  RotatingStatusText,
+} from "@/components/ui/ai-shimmer-bar";
 import { EventImportModal } from "./EventImportModal";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
@@ -70,9 +77,15 @@ export function EventDetailsDrawer({
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isEnrichModalOpen, setIsEnrichModalOpen] = React.useState(false);
   const [confirmArchive, setConfirmArchive] = React.useState(false);
+  const [isPollingRefresh, setIsPollingRefresh] = React.useState(false);
 
+  const queryClient = useQueryClient();
   const refreshMutation = useRefreshEventMutation();
   const archiveMutation = useArchiveEventMutation();
+  const { data: refreshStatus } = useEventRefreshStatus(
+    event?.event_id,
+    isOpen && isPollingRefresh
+  );
 
   const summaryTimerRef = React.useRef<number | null>(null);
   const addressTimerRef = React.useRef<number | null>(null);
@@ -81,7 +94,30 @@ export function EventDetailsDrawer({
     setCopied(false);
     setCopiedAddress(false);
     setConfirmArchive(false);
+    setIsPollingRefresh(false);
   }, [event?.event_id, isOpen]);
+
+  React.useEffect(() => {
+    if (!isPollingRefresh || !refreshStatus) return;
+    if (refreshStatus.status === "completed") {
+      setIsPollingRefresh(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
+      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scraperLatestRun });
+      if (refreshStatus.updated) {
+        toast.success(refreshStatus.message || "Карточка мероприятия обновлена с сайта");
+      } else {
+        toast.info(refreshStatus.message || "Изменений на сайте не обнаружено");
+      }
+    } else if (refreshStatus.status === "failed") {
+      setIsPollingRefresh(false);
+      toast.error(
+        refreshStatus.error ||
+          refreshStatus.message ||
+          "Не удалось обновить карточку с сайта"
+      );
+    }
+  }, [isPollingRefresh, refreshStatus, queryClient]);
 
   React.useEffect(() => {
     return () => {
@@ -150,13 +186,21 @@ export function EventDetailsDrawer({
     }, 2000);
   };
 
+  const isRefreshing =
+    refreshMutation.isPending ||
+    isPollingRefresh ||
+    refreshStatus?.status === "queued" ||
+    refreshStatus?.status === "running";
+
   const handleRefreshFromSite = async () => {
     try {
       const res = await refreshMutation.mutateAsync({
         eventId: event.event_id,
         payload: { force: false },
       });
-      if (res.updated) {
+      if (res.status === "queued" || res.status === "running") {
+        setIsPollingRefresh(true);
+      } else if (res.updated) {
         toast.success(res.message || "Обновлено");
       } else {
         toast.info(res.message || "На сайте изменений нет");
@@ -513,12 +557,38 @@ export function EventDetailsDrawer({
                 </div>
 
                 <div className="border-t border-[#21262F] bg-[#12161A] p-4 flex flex-col gap-2">
+                  <AnimatePresence initial={false}>
+                    {isRefreshing && (
+                      <motion.div
+                        key="event-refresh-progress"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mb-1.5 rounded-[8px] border border-[#262D35] bg-[#0E1116] px-3 py-2 space-y-1.5">
+                          <RotatingStatusText
+                            active={isRefreshing}
+                            steps={[
+                              "Загружаем актуальную страницу с первоисточника...",
+                              "Сверяем хэш и анализируем изменения через ИИ...",
+                              "Обновляем тарифы и регламент в базе...",
+                            ]}
+                            intervalMs={2600}
+                          />
+                          <GoldShimmerBar active={isRefreshing} size="thin" tone="gold" />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   <div className="flex flex-col sm:flex-row items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={!safeWebsiteUrl || refreshMutation.isPending || archiveMutation.isPending}
+                      disabled={!safeWebsiteUrl || isRefreshing || archiveMutation.isPending}
                       onClick={handleRefreshFromSite}
                       title={
                         safeWebsiteUrl
@@ -528,10 +598,10 @@ export function EventDetailsDrawer({
                       className="w-full sm:flex-1 h-9 border-[#262D35] bg-[#161B21] text-xs font-medium text-[#D1D5DB] hover:border-[#E5C378] hover:text-[#E5C378] hover:bg-[#1E252E] transition-all"
                     >
                       <RefreshCw
-                        className={`h-3.5 w-3.5 text-[#E5C378] ${refreshMutation.isPending ? "animate-spin" : ""}`}
+                        className={`h-3.5 w-3.5 text-[#E5C378] ${isRefreshing ? "animate-spin" : ""}`}
                       />
                       <span>
-                        {refreshMutation.isPending ? "Обновление..." : "Обновить с сайта"}
+                        {isRefreshing ? "Обновление в фоне..." : "Обновить с сайта"}
                       </span>
                     </Button>
 
