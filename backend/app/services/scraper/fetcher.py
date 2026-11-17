@@ -1,11 +1,12 @@
 import asyncio
 import ipaddress
 import logging
+import re
 import socket
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, quote, urljoin, urlsplit
 from weakref import WeakKeyDictionary
 
 import httpx
@@ -22,6 +23,7 @@ from app.services.scraper.sources import (
 logger = logging.getLogger(__name__)
 
 _HOST_POLITENESS_DELAY_SEC: float = 0.65
+_DEFAULT_MAX_PDF_BYTES: int = 15 * 1024 * 1024
 _BLOCKED_HOST_SUFFIXES: tuple[str, ...] = (".localhost", ".local", ".internal")
 _BLOCKED_EXACT_HOSTS: frozenset[str] = frozenset({"localhost", "localhost.localdomain"})
 
@@ -153,6 +155,27 @@ async def _ssrf_request_hook(request: httpx.Request) -> None:
     await validate_safe_public_url(str(request.url))
 
 
+def _scope_cookies_to_host(cookies: dict[str, str] | None, host: str) -> httpx.Cookies | None:
+    """
+    Привязывает приватные cookies источника к домену исходного запроса.
+
+    Плоский dict в httpx.AsyncClient(cookies=...) отправляется на ЛЮБОЙ хост цепочки редиректов;
+    cookie-jar с явным domain не утекает на сторонние/CDN-домены после 30x.
+    """
+    if not cookies:
+        return None
+    jar = httpx.Cookies()
+    for name, value in cookies.items():
+        jar.set(name, value, domain=host)
+    return jar
+
+
+def _publish_resolved_url(sink: list[str] | None, url: str) -> None:
+    """Записывает финальный URL в необязательный выходной параметр (всегда ровно один элемент)."""
+    if sink is not None:
+        sink[:] = [url]
+
+
 def _is_captcha_page(decoded_html: str, visible_text: str, final_url: str) -> bool:
     html_low = decoded_html.lower()
     vis_low = visible_text.lower()
@@ -217,11 +240,19 @@ async def _fetch_raw_page_content(
     encoding: str = "utf-8",
     use_jina_reader: bool = False,
     cookies: dict[str, str] | None = None,
+    resolved_url_out: list[str] | None = None,
+    pdf_bytes_out: list[bytes] | None = None,
+    max_pdf_bytes: int = _DEFAULT_MAX_PDF_BYTES,
 ) -> tuple[str, bool]:
     """
     Загружает содержимое веб-страницы с SSRF-защитой, per-host politeness, учетом кодировки/cookies,
     детекцией CAPTCHA и фолбэком на r.jina.ai при 403/429, заглушке хостинга или SPA (< 300 символов).
     Возвращает кортеж (content, is_markdown).
+
+    Необязательные выходные параметры (базовый контракт кортежа не меняется):
+    - resolved_url_out: получает финальный URL после редиректов (str(resp.url) или safe_url для Jina);
+    - pdf_bytes_out: если ответ — PDF (Content-Type или сигнатура %PDF), байты кладутся в список
+      (при размере <= max_pdf_bytes) и возвращается ("", False) без декодирования бинарника в текст.
     """
     safe_url = await validate_safe_public_url(url)
     target_host = (urlsplit(safe_url).hostname or "").lower()
@@ -234,15 +265,29 @@ async def _fetch_raw_page_content(
     async with httpx.AsyncClient(
         timeout=20.0,
         follow_redirects=True,
-        cookies=cookies,
+        cookies=_scope_cookies_to_host(cookies, target_host),
         event_hooks={"request": [_ssrf_request_hook]},
     ) as client:
         if use_jina_reader:
             md_text = await _fetch_via_jina_reader(client, safe_url)
+            _publish_resolved_url(resolved_url_out, safe_url)
             return md_text, True
 
         async with _host_rate_limit(target_host):
             resp = await client.get(safe_url, headers=headers)
+        _publish_resolved_url(resolved_url_out, str(resp.url))
+
+        if pdf_bytes_out is not None and resp.status_code < 400:
+            content_type = str(resp.headers.get("content-type") or "")
+            if _is_acceptable_pdf_content_type(
+                content_type, safe_url, str(resp.url)
+            ) or resp.content[:16].lstrip().startswith(b"%PDF"):
+                if len(resp.content) > max_pdf_bytes:
+                    raise ValueError(
+                        f"Размер PDF ({len(resp.content)} байт) превышает лимит {max_pdf_bytes} байт."
+                    )
+                pdf_bytes_out.append(resp.content)
+                return "", False
 
         decoded_html = resp.content.decode(encoding, errors="replace")
 
@@ -259,6 +304,7 @@ async def _fetch_raw_page_content(
 
         if resp.status_code in (403, 429):
             md_text = await _fetch_via_jina_reader(client, safe_url)
+            _publish_resolved_url(resolved_url_out, safe_url)
             return md_text, True
 
         if resp.status_code >= 400:
@@ -266,6 +312,7 @@ async def _fetch_raw_page_content(
 
         if len(visible_text) < 300 or "хостадмин.онлайн" in visible_text.lower():
             md_text = await _fetch_via_jina_reader(client, safe_url)
+            _publish_resolved_url(resolved_url_out, safe_url)
             return md_text, True
 
         return decoded_html, False
@@ -397,7 +444,7 @@ def _is_acceptable_pdf_content_type(content_type: str, *candidate_urls: str) -> 
 async def fetch_pdf_bytes_safe(
     url: str,
     *,
-    max_bytes: int = 15 * 1024 * 1024,
+    max_bytes: int = _DEFAULT_MAX_PDF_BYTES,
     cookies: dict[str, str] | None = None,
 ) -> bytes:
     """
@@ -421,7 +468,7 @@ async def fetch_pdf_bytes_safe(
         httpx.AsyncClient(
             timeout=30.0,
             follow_redirects=True,
-            cookies=cookies,
+            cookies=_scope_cookies_to_host(cookies, target_host),
             event_hooks={"request": [_ssrf_request_hook]},
         ) as client,
         _host_rate_limit(target_host),
@@ -463,6 +510,177 @@ async def fetch_pdf_bytes_safe(
     if not pdf_bytes or not pdf_bytes.lstrip().startswith(b"%PDF"):
         raise ValueError(f"Файл по адресу {safe_url} не является валидным PDF (отсутствует %PDF).")
     return pdf_bytes
+
+
+_YANDEX_DISK_HOST_RE = re.compile(r"^(?:disk\.yandex\.(?:ru|com|kz|by)|yadi\.sk)$")
+_YANDEX_DISK_PATH_RE = re.compile(r"^/(?:i|d)/[^/\s]+")
+_GOOGLE_DRIVE_FILE_PATH_RE = re.compile(r"^/file/(?:u/\d+/)?d/([^/\s]+)")
+_GOOGLE_DRIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,}$")
+_YANDEX_PUBLIC_API_URL = "https://cloud-api.yandex.net/v1/disk/public/resources"
+_YANDEX_API_HOST = "cloud-api.yandex.net"
+_YANDEX_SOFT_FAIL_STATUSES: frozenset[int] = frozenset({403, 404, 429})
+_CLOUD_DIR_MAX_PDF_FILES: int = 2
+_CLOUD_FILE_NAME_PRIORITY: tuple[str, ...] = (
+    "услов",
+    "тариф",
+    "прайс",
+    "программ",
+    "регламент",
+    "оферт",
+    "презентац",
+    "буклет",
+)
+
+
+def is_yandex_disk_public_url(url: str) -> bool:
+    """Публичная ссылка Яндекс.Диска: disk.yandex.(ru|com|kz|by)/(i|d)/... или yadi.sk/(i|d)/..."""
+    parts = urlsplit((url or "").strip())
+    host = (parts.hostname or "").lower()
+    return (
+        parts.scheme.lower() in ("http", "https")
+        and bool(_YANDEX_DISK_HOST_RE.match(host))
+        and bool(_YANDEX_DISK_PATH_RE.match(parts.path))
+    )
+
+
+def extract_google_drive_file_id(url: str) -> str | None:
+    """ID файла из drive.google.com/file/d/<ID>, /open?id=<ID> или /uc?id=<ID>; иначе None."""
+    parts = urlsplit((url or "").strip())
+    if parts.scheme.lower() not in ("http", "https") or (parts.hostname or "").lower() != "drive.google.com":
+        return None
+    candidate: str | None = None
+    file_match = _GOOGLE_DRIVE_FILE_PATH_RE.match(parts.path)
+    if file_match:
+        candidate = file_match.group(1)
+    elif parts.path in ("/open", "/uc"):
+        id_values = parse_qs(parts.query).get("id")
+        candidate = id_values[0] if id_values else None
+    if candidate and _GOOGLE_DRIVE_ID_RE.match(candidate):
+        return candidate
+    return None
+
+
+def is_cloud_document_url(url: str) -> bool:
+    return is_yandex_disk_public_url(url) or extract_google_drive_file_id(url) is not None
+
+
+async def _yandex_api_get_json(client: httpx.AsyncClient, api_url: str) -> dict[str, object] | None:
+    """GET к публичному API Яндекс.Диска; 403/404/429 -> warning и None (событие не падает)."""
+    async with _host_rate_limit(_YANDEX_API_HOST):
+        resp = await client.get(api_url, headers={"Accept": "application/json"})
+    if resp.status_code in _YANDEX_SOFT_FAIL_STATUSES:
+        logger.warning("Яндекс.Диск API вернул HTTP %s для %s", resp.status_code, api_url)
+        return None
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, dict):
+        logger.warning("Яндекс.Диск API вернул неожиданный JSON (не объект) для %s", api_url)
+        return None
+    return payload
+
+
+def _is_fetchable_yandex_pdf_item(item: dict[str, object], max_bytes: int) -> bool:
+    """PDF по mime_type/имени и size <= max_bytes — проверка ДО скачивания."""
+    name = str(item.get("name") or "").lower()
+    mime = str(item.get("mime_type") or "").lower()
+    if mime not in ("application/pdf", "application/x-pdf") and not name.endswith(".pdf"):
+        return False
+    size = item.get("size")
+    return not (isinstance(size, int) and size > max_bytes)
+
+
+def _yandex_item_relevance(item: dict[str, object]) -> int:
+    name = str(item.get("name") or "").lower()
+    return sum(1 for kw in _CLOUD_FILE_NAME_PRIORITY if kw in name)
+
+
+async def _yandex_item_direct_url(
+    client: httpx.AsyncClient,
+    public_key: str,
+    item: dict[str, object],
+    *,
+    item_path: str | None,
+) -> str | None:
+    """
+    Прямая ссылка на файл: поле item["file"] из публичного API, иначе GET .../download -> href.
+    Любая ссылка проходит validate_safe_public_url; небезопасная отбрасывается с warning.
+    """
+    direct = item.get("file")
+    if not isinstance(direct, str) or not direct:
+        download_url = f"{_YANDEX_PUBLIC_API_URL}/download?public_key={quote(public_key, safe='')}"
+        if item_path:
+            download_url += f"&path={quote(item_path, safe='')}"
+        payload = await _yandex_api_get_json(client, download_url)
+        direct = payload.get("href") if payload else None
+    if not isinstance(direct, str) or not direct:
+        return None
+    try:
+        return await validate_safe_public_url(direct)
+    except UnsafeUrlError as exc:
+        logger.warning("Заблокирована небезопасная прямая ссылка Яндекс.Диска для %s: %s", public_key, exc)
+        return None
+
+
+async def _resolve_yandex_disk_pdf_urls(url: str, *, max_bytes: int) -> list[str]:
+    api_url = f"{_YANDEX_PUBLIC_API_URL}?public_key={quote(url, safe='')}&limit=20"
+    async with httpx.AsyncClient(
+        timeout=15.0,
+        follow_redirects=True,
+        event_hooks={"request": [_ssrf_request_hook]},
+    ) as client:
+        data = await _yandex_api_get_json(client, api_url)
+        if data is None:
+            return []
+
+        resource_type = data.get("type")
+        if resource_type == "file":
+            if not _is_fetchable_yandex_pdf_item(data, max_bytes):
+                return []
+            direct = await _yandex_item_direct_url(client, url, data, item_path=None)
+            return [direct] if direct else []
+
+        if resource_type != "dir":
+            return []
+
+        embedded = data.get("_embedded")
+        raw_items = embedded.get("items") if isinstance(embedded, dict) else None
+        items = [
+            item
+            for item in (raw_items if isinstance(raw_items, list) else [])
+            if isinstance(item, dict)
+            and item.get("type") == "file"
+            and _is_fetchable_yandex_pdf_item(item, max_bytes)
+        ]
+        items.sort(key=_yandex_item_relevance, reverse=True)
+
+        direct_urls: list[str] = []
+        for item in items:
+            raw_path = item.get("path")
+            direct = await _yandex_item_direct_url(
+                client, url, item, item_path=raw_path if isinstance(raw_path, str) else None
+            )
+            if direct:
+                direct_urls.append(direct)
+            if len(direct_urls) >= _CLOUD_DIR_MAX_PDF_FILES:
+                break
+        return direct_urls
+
+
+async def resolve_cloud_pdf_urls(url: str, *, max_bytes: int = _DEFAULT_MAX_PDF_BYTES) -> list[str]:
+    """
+    Превращает публичную облачную ссылку в список прямых URL PDF для fetch_pdf_bytes_safe:
+    - Яндекс.Диск (/i/ — файл, /d/ — папка): публичный API, фильтр PDF и size <= max_bytes до скачивания,
+      для папки — не более 2 самых релевантных по имени файлов; 403/404/429 -> [];
+    - Google Drive (file/d/<ID>, open?id=<ID>): https://drive.google.com/uc?export=download&id=<ID>;
+    - любой другой URL возвращается как есть.
+    Все обращения и прямые ссылки проходят SSRF-валидацию; скачивание выполняет fetch_pdf_bytes_safe.
+    """
+    if is_yandex_disk_public_url(url):
+        return await _resolve_yandex_disk_pdf_urls(url, max_bytes=max_bytes)
+    drive_id = extract_google_drive_file_id(url)
+    if drive_id is not None:
+        return [f"https://drive.google.com/uc?export=download&id={drive_id}"]
+    return [url]
 
 
 async def fetch_url_dossier_text(

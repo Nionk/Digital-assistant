@@ -180,7 +180,7 @@ async def _retrieve_regulation_chunks(
     if settings.EMBEDDING_API_KEY:
         try:
             q_vec = await get_embedding(question)
-        except (Exception,) as exc:
+        except Exception as exc:
             logger.warning(
                 "Не удалось получить вектор вопроса для поиска по чанкам: %s",
                 exc,

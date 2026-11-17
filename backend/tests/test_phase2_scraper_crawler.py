@@ -1,6 +1,7 @@
 import datetime
 import sys
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,6 +22,7 @@ from app.services.scraper import (
     CustomerSourceConfig,
     DiscoveredCandidate,
     EventRejectedError,
+    OcrBudgetTracker,
     OrganizerLinksSelection,
     UnsafeUrlError,
     collect_event_dossier,
@@ -32,6 +34,15 @@ from app.services.scraper import (
     run_customer_sources_monitoring,
     triage_discovery_candidate,
 )
+from app.services.scraper import fetcher as fetcher_mod
+from app.services.scraper.crawler import (
+    _convert_organizer_html_to_markdown,
+    _discover_official_site_and_card_pdfs,
+    _extract_organizer_candidate_links,
+    _score_organizer_link,
+    is_document_candidate_url,
+)
+from app.services.scraper.fetcher import resolve_cloud_pdf_urls
 from app.services.scraper.sources import _is_obvious_b2c, _passes_russia_online_geo
 
 _PUBLIC_ADDRINFO = [(2, 1, 6, "", ("93.184.216.34", 0))]
@@ -47,6 +58,11 @@ def _make_sample_pdf_bytes(page1_text: str, page2_text: str | None = None) -> by
     data = doc.tobytes()
     doc.close()
     return data
+
+
+def _make_long_pdf_bytes(marker: str) -> bytes:
+    """PDF с текстовым слоем >= 50 символов на странице (иначе страница считается сканом)."""
+    return _make_sample_pdf_bytes(f"{marker}. Подробное описание условий участия, тарифов и регламента форума.")
 
 
 def _make_source_row(cfg: CustomerSourceConfig, idx: int = 1) -> ScraperSource:
@@ -1116,6 +1132,812 @@ class TestPhase2AuditCleanupFixes(unittest.IsolatedAsyncioTestCase):
             self.assertRaises(TimeoutError),
         ):
             await triage_discovery_candidate(cand, votkuda_cfg)
+
+
+class TestPhase2CloudDocumentsAndRedirects(unittest.IsolatedAsyncioTestCase):
+    """Облачные документы (Яндекс.Диск / Google Drive), футер, анкеты, редиректы сокращателей, /download?id=."""
+
+    @staticmethod
+    def _agg_html(official_url: str, *, extra_links: str = "") -> str:
+        return f"""
+        <html><body><main>
+          <script type="application/ld+json">
+            {{"@type": "Event", "url": "https://expomap.ru/expo/cloud-forum/", "offers": {{"url": "{official_url}"}}}}
+          </script>
+          <h1>Cloud Forum 2026</h1>
+          <p>Крупная B2B выставка в Москве.</p>
+          {extra_links}
+        </main></body></html>
+        """
+
+    @staticmethod
+    def _candidate() -> DiscoveredCandidate:
+        return DiscoveredCandidate(
+            url="https://expomap.ru/expo/cloud-forum/",
+            title="Cloud Forum 2026",
+            source_key="expomap_construction",
+        )
+
+    @staticmethod
+    def _expomap_source() -> CustomerSourceConfig:
+        return next(s for s in CUSTOMER_SOURCES_REGISTRY if s.source_key == "expomap_construction")
+
+    @staticmethod
+    @contextmanager
+    def _mock_http(handler, *, private_hosts: tuple[str, ...] = ()):
+        real_async_client = httpx.AsyncClient
+        transport = httpx.MockTransport(handler)
+
+        def _client_factory(**kwargs):
+            kwargs["transport"] = transport
+            return real_async_client(**kwargs)
+
+        def _addrinfo(host, *args, **kwargs):
+            if host in private_hosts:
+                return [(2, 1, 6, "", ("10.0.0.5", 0))]
+            return _PUBLIC_ADDRINFO
+
+        with (
+            patch("app.services.scraper.fetcher.socket.getaddrinfo", side_effect=_addrinfo),
+            patch("app.services.scraper.fetcher.httpx.AsyncClient", side_effect=_client_factory),
+        ):
+            yield
+
+    # ---------- классификация ----------
+
+    def test_is_document_candidate_url_classification(self) -> None:
+        positives = [
+            "https://x.ru/files/Price.PDF",
+            "https://disk.yandex.ru/i/AbCdEf",
+            "https://disk.yandex.ru/d/AbCdEf/sub-folder",
+            "https://disk.yandex.com/d/AbCdEf",
+            "https://disk.yandex.kz/i/AbCdEf",
+            "https://yadi.sk/i/AbCdEf",
+            "https://yadi.sk/d/AbCdEf",
+            "https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing",
+            "https://drive.google.com/open?id=1AbCdEfGhIjK",
+        ]
+        negatives = [
+            "https://disk.yandex.ru/",
+            "https://disk.yandex.ru/client/disk",
+            "https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform",
+            "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjK/edit",
+            "https://drive.google.com/drive/folders/1AbCdEfGhIjK",
+            "https://drive.google.com/open?id=short",
+            "https://x.ru/download?id=1",
+            "https://x.ru/tariffs",
+        ]
+        for url in positives:
+            with self.subTest(url=url):
+                self.assertTrue(is_document_candidate_url(url))
+        for url in negatives:
+            with self.subTest(url=url):
+                self.assertFalse(is_document_candidate_url(url))
+
+    def test_social_and_form_domains_are_never_official_sites(self) -> None:
+        from app.services.scraper.sources import _SOCIAL_DOMAINS
+
+        for dom in ("max.ru", "tenchat.ru", "vc.ru", "habr.com", "telegra.ph"):
+            self.assertIn(dom, _SOCIAL_DOMAINS)
+
+        junk_md = (
+            "[Анкета — официальный сайт](https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform)\n"
+            "[Регистрация](https://forms.yandex.ru/u/abc123/)\n"
+            "[Опрос](https://forms.gle/xyz)\n"
+            "[Канал агрегатора — сайт](https://max.ru/expomap)\n"
+            "[Лид-форма](https://expolead.ru/event/1)\n"
+            "[tenchat](https://tenchat.ru/a) [vc](https://vc.ru/b)\n"
+            "[habr](https://habr.com/c) [telegraph](https://telegra.ph/d)"
+        )
+        official, pdfs = _discover_official_site_and_card_pdfs(junk_md, self._candidate(), self._expomap_source())
+        self.assertIsNone(official)
+        self.assertEqual(pdfs, [])
+
+        official2, _ = _discover_official_site_and_card_pdfs(
+            junk_md + "\n[Официальный сайт форума](https://real-org.ru/)",
+            self._candidate(),
+            self._expomap_source(),
+        )
+        self.assertEqual(official2, "https://real-org.ru/")
+
+    # ---------- резолвер облака ----------
+
+    async def test_yandex_file_link_accepts_only_small_pdf_and_uses_public_api(self) -> None:
+        seen: list[httpx.Request] = []
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            key = request.url.params.get("public_key", "")
+            if key.endswith("/PDFOK1"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "type": "file",
+                        "name": "Условия.pdf",
+                        "mime_type": "application/pdf",
+                        "size": 1000,
+                        "file": "https://downloader.disk.yandex.ru/disk/tok/uslovia.pdf",
+                    },
+                )
+            if key.endswith("/IMAGE1"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "type": "file",
+                        "name": "photo.png",
+                        "mime_type": "image/png",
+                        "size": 10,
+                        "file": "https://downloader.disk.yandex.ru/disk/tok/photo.png",
+                    },
+                )
+            if key.endswith("/BIGPDF1"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "type": "file",
+                        "name": "huge.pdf",
+                        "mime_type": "application/pdf",
+                        "size": 99 * 1024 * 1024,
+                        "file": "https://downloader.disk.yandex.ru/disk/tok/huge.pdf",
+                    },
+                )
+            return httpx.Response(404)
+
+        with self._mock_http(_handler):
+            ok = await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/PDFOK1")
+            short = await resolve_cloud_pdf_urls("https://yadi.sk/i/PDFOK1")
+            image = await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/IMAGE1")
+            big = await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/BIGPDF1", max_bytes=15 * 1024 * 1024)
+
+        self.assertEqual(ok, ["https://downloader.disk.yandex.ru/disk/tok/uslovia.pdf"])
+        self.assertEqual(short, ok)
+        self.assertEqual(image, [])
+        self.assertEqual(big, [])
+        self.assertEqual({r.url.host for r in seen}, {"cloud-api.yandex.net"})
+        self.assertEqual(seen[0].url.path, "/v1/disk/public/resources")
+        self.assertEqual(seen[0].url.params["public_key"], "https://disk.yandex.ru/i/PDFOK1")
+        self.assertEqual(seen[0].url.params["limit"], "20")
+
+    async def test_yandex_dir_link_picks_top_two_relevant_pdfs_and_skips_images(self) -> None:
+        download_requests: list[httpx.Request] = []
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/download"):
+                download_requests.append(request)
+                return httpx.Response(
+                    200, json={"href": "https://downloader.disk.yandex.ru/disk/tok/buklet.pdf"}
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "type": "dir",
+                    "name": "Docs",
+                    "_embedded": {
+                        "items": [
+                            {
+                                "type": "file",
+                                "name": "photo.jpg",
+                                "mime_type": "image/jpeg",
+                                "size": 1,
+                                "path": "/photo.jpg",
+                                "file": "https://downloader.disk.yandex.ru/photo.jpg",
+                            },
+                            {
+                                "type": "file",
+                                "name": "random.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 10,
+                                "path": "/random.pdf",
+                                "file": "https://downloader.disk.yandex.ru/random.pdf",
+                            },
+                            {
+                                "type": "file",
+                                "name": "БУКЛЕТ ДП.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 10,
+                                "path": "/БУКЛЕТ ДП.pdf",
+                            },
+                            {
+                                "type": "file",
+                                "name": "УСЛОВИЯ УЧАСТИЯ ВЫСТАВКА 2026.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 10,
+                                "path": "/УСЛОВИЯ УЧАСТИЯ ВЫСТАВКА 2026.pdf",
+                                "file": "https://downloader.disk.yandex.ru/uslovia.pdf",
+                            },
+                            {
+                                "type": "file",
+                                "name": "тариф огромный.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 99 * 1024 * 1024,
+                                "path": "/big.pdf",
+                                "file": "https://downloader.disk.yandex.ru/big.pdf",
+                            },
+                            {"type": "dir", "name": "Вложенная папка", "path": "/sub"},
+                        ]
+                    },
+                },
+            )
+
+        with self._mock_http(_handler):
+            urls = await resolve_cloud_pdf_urls("https://disk.yandex.ru/d/FOLDER1")
+
+        self.assertEqual(
+            urls,
+            [
+                "https://downloader.disk.yandex.ru/disk/tok/buklet.pdf",
+                "https://downloader.disk.yandex.ru/uslovia.pdf",
+            ],
+        )
+        self.assertEqual(len(download_requests), 1)
+        self.assertEqual(download_requests[0].url.params["path"], "/БУКЛЕТ ДП.pdf")
+        self.assertEqual(download_requests[0].url.params["public_key"], "https://disk.yandex.ru/d/FOLDER1")
+
+    async def test_yandex_api_soft_failures_return_empty_list_with_warning(self) -> None:
+        for status in (403, 404, 429):
+            with self.subTest(status=status):
+                with (
+                    self._mock_http(lambda _req, s=status: httpx.Response(s)),
+                    self.assertLogs("app.services.scraper.fetcher", level="WARNING") as logs,
+                ):
+                    urls = await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/GONE123")
+                self.assertEqual(urls, [])
+                self.assertTrue(any(str(status) in line for line in logs.output))
+
+    async def test_yandex_resolver_blocks_private_file_links_and_redirects(self) -> None:
+        requested_hosts: list[str] = []
+
+        def _file_handler(private_file: str):
+            def _handler(request: httpx.Request) -> httpx.Response:
+                requested_hosts.append(request.url.host)
+                return httpx.Response(
+                    200,
+                    json={
+                        "type": "file",
+                        "name": "x.pdf",
+                        "mime_type": "application/pdf",
+                        "size": 10,
+                        "file": private_file,
+                    },
+                )
+
+            return _handler
+
+        with self._mock_http(_file_handler("http://127.0.0.1/secret.pdf")):
+            self.assertEqual(await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/EVILIP1"), [])
+
+        with self._mock_http(_file_handler("https://evil.example/x.pdf"), private_hosts=("evil.example",)):
+            self.assertEqual(await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/EVILDNS"), [])
+        self.assertEqual(set(requested_hosts), {"cloud-api.yandex.net"})
+
+        def _redirect_handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(302, headers={"Location": "http://127.0.0.1/internal"})
+
+        with self._mock_http(_redirect_handler), self.assertRaises(UnsafeUrlError):
+            await resolve_cloud_pdf_urls("https://disk.yandex.ru/i/REDIR12")
+
+    async def test_yandex_dir_skips_unsafe_item_but_keeps_safe_sibling(self) -> None:
+        def _handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "type": "dir",
+                    "_embedded": {
+                        "items": [
+                            {
+                                "type": "file",
+                                "name": "тарифы evil.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 1,
+                                "file": "http://169.254.169.254/latest/meta-data",
+                            },
+                            {
+                                "type": "file",
+                                "name": "программа.pdf",
+                                "mime_type": "application/pdf",
+                                "size": 1,
+                                "file": "https://downloader.disk.yandex.ru/program.pdf",
+                            },
+                        ]
+                    },
+                },
+            )
+
+        with self._mock_http(_handler):
+            urls = await resolve_cloud_pdf_urls("https://disk.yandex.ru/d/MIXED12")
+        self.assertEqual(urls, ["https://downloader.disk.yandex.ru/program.pdf"])
+
+    async def test_google_drive_links_resolve_to_export_download_and_plain_urls_pass_through(self) -> None:
+        expected = "https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlM"
+        self.assertEqual(
+            await resolve_cloud_pdf_urls("https://drive.google.com/file/d/1AbCdEfGhIjKlM/view?usp=sharing"),
+            [expected],
+        )
+        self.assertEqual(
+            await resolve_cloud_pdf_urls("https://drive.google.com/open?id=1AbCdEfGhIjKlM"), [expected]
+        )
+        self.assertEqual(
+            await resolve_cloud_pdf_urls("https://example.ru/files/a.pdf"), ["https://example.ru/files/a.pdf"]
+        )
+
+    # ---------- краулер: облако, лимит по факту успеха ----------
+
+    async def test_crawler_cloud_links_keep_original_url_and_dead_link_does_not_burn_quota(self) -> None:
+        candidate = self._candidate()
+        org_home = (
+            "<html><body><header><nav>"
+            '<a href="https://disk.yandex.ru/i/DEAD">Прайс и тарифы</a>'
+            '<a href="https://disk.yandex.ru/i/AAAA">Условия участия</a>'
+            '<a href="https://disk.yandex.ru/d/BBBB">Презентация</a>'
+            '<a href="https://disk.yandex.ru/i/CCCC">Буклет</a>'
+            "</nav></header><main><p>Главная</p></main></body></html>"
+        )
+        cdn = {
+            "https://disk.yandex.ru/i/DEAD": [],
+            "https://disk.yandex.ru/i/AAAA": ["https://downloader.disk.yandex.ru/tok/a.pdf"],
+            "https://disk.yandex.ru/d/BBBB": [
+                "https://downloader.disk.yandex.ru/tok/b1.pdf",
+                "https://downloader.disk.yandex.ru/tok/b2.pdf",
+            ],
+            "https://disk.yandex.ru/i/CCCC": ["https://downloader.disk.yandex.ru/tok/c.pdf"],
+        }
+        pdf_payloads = {
+            "https://downloader.disk.yandex.ru/tok/a.pdf": _make_long_pdf_bytes("UNIQUE_ALPHA participation conditions"),
+            "https://downloader.disk.yandex.ru/tok/b1.pdf": _make_long_pdf_bytes("UNIQUE_BETA presentation one"),
+            "https://downloader.disk.yandex.ru/tok/b2.pdf": _make_long_pdf_bytes("UNIQUE_GAMMA presentation two"),
+            "https://downloader.disk.yandex.ru/tok/c.pdf": _make_long_pdf_bytes("UNIQUE_DELTA booklet"),
+        }
+        resolve_calls: list[str] = []
+        download_calls: list[str] = []
+
+        async def _fake_fetch(url: str, **kwargs):
+            if url == candidate.url:
+                return self._agg_html("https://real-org.ru/"), False
+            if url == "https://real-org.ru/":
+                return org_home, False
+            raise AssertionError(f"Неожиданный URL: {url}")
+
+        async def _fake_resolve(url: str, **kwargs):
+            resolve_calls.append(url)
+            return cdn[url]
+
+        async def _fake_pdf(url: str, **kwargs):
+            download_calls.append(url)
+            return pdf_payloads[url]
+
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch("app.services.scraper.fetcher.resolve_cloud_pdf_urls", new=AsyncMock(side_effect=_fake_resolve)),
+            patch("app.services.scraper.fetcher.fetch_pdf_bytes_safe", new=AsyncMock(side_effect=_fake_pdf)),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+        self.assertEqual(
+            resolve_calls,
+            ["https://disk.yandex.ru/i/DEAD", "https://disk.yandex.ru/i/AAAA", "https://disk.yandex.ru/d/BBBB"],
+        )
+        self.assertEqual(
+            download_calls,
+            [
+                "https://downloader.disk.yandex.ru/tok/a.pdf",
+                "https://downloader.disk.yandex.ru/tok/b1.pdf",
+                "https://downloader.disk.yandex.ru/tok/b2.pdf",
+            ],
+        )
+        self.assertEqual(
+            dossier.source_urls,
+            [
+                candidate.url,
+                "https://real-org.ru/",
+                "https://disk.yandex.ru/i/AAAA",
+                "https://disk.yandex.ru/d/BBBB",
+            ],
+        )
+        self.assertNotIn("downloader.disk.yandex.ru", "\n".join(dossier.source_urls))
+        self.assertNotIn("downloader.disk.yandex.ru", dossier.dossier_text)
+        for marker in ("UNIQUE_ALPHA", "UNIQUE_BETA", "UNIQUE_GAMMA"):
+            self.assertIn(marker, dossier.dossier_text)
+        self.assertNotIn("UNIQUE_DELTA", dossier.dossier_text)
+        self.assertIn("pdf_download_failed", dossier.warnings)
+
+    async def test_crawler_blocks_ssrf_file_link_from_yandex_api_end_to_end(self) -> None:
+        candidate = self._candidate()
+        org_home = (
+            "<html><body><nav>"
+            '<a href="https://disk.yandex.ru/i/EVIL1">Условия участия</a>'
+            "</nav></body></html>"
+        )
+
+        async def _fake_fetch(url: str, **kwargs):
+            if url == candidate.url:
+                return self._agg_html("https://real-org.ru/"), False
+            return org_home, False
+
+        def _api_handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "name": "Условия.pdf",
+                    "mime_type": "application/pdf",
+                    "size": 10,
+                    "file": "http://127.0.0.1:8080/internal.pdf",
+                },
+            )
+
+        pdf_mock = AsyncMock(return_value=b"%PDF-never")
+        with (
+            self._mock_http(_api_handler),
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch("app.services.scraper.fetcher.fetch_pdf_bytes_safe", new=pdf_mock),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+        self.assertEqual(pdf_mock.await_count, 0)
+        self.assertNotIn("https://disk.yandex.ru/i/EVIL1", dossier.source_urls)
+        self.assertIn("pdf_download_failed", dossier.warnings)
+
+    async def test_crawler_resolves_google_drive_and_ignores_google_forms(self) -> None:
+        candidate = self._candidate()
+        drive_url = "https://drive.google.com/file/d/1AbCdEfGhIjKlM/view?usp=sharing"
+        org_home = (
+            "<html><body><nav>"
+            f'<a href="{drive_url}">Презентация</a>'
+            '<a href="https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform">Анкета участника</a>'
+            "</nav></body></html>"
+        )
+        downloaded: list[str] = []
+        pdf_bytes = _make_long_pdf_bytes("UNIQUE_DRIVE presentation of the forum")
+
+        async def _fake_fetch(url: str, **kwargs):
+            if url == candidate.url:
+                return self._agg_html("https://real-org.ru/"), False
+            if url == "https://real-org.ru/":
+                return org_home, False
+            raise AssertionError(f"Неожиданный URL: {url}")
+
+        async def _fake_pdf(url: str, **kwargs):
+            downloaded.append(url)
+            return pdf_bytes
+
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch("app.services.scraper.fetcher.fetch_pdf_bytes_safe", new=AsyncMock(side_effect=_fake_pdf)),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+        self.assertEqual(downloaded, ["https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlM"])
+        self.assertIn(drive_url, dossier.source_urls)
+        self.assertIn("UNIQUE_DRIVE", dossier.dossier_text)
+        self.assertEqual(dossier.official_site_url, "https://real-org.ru/")
+        self.assertFalse(any("forms" in u for u in dossier.source_urls))
+
+    async def test_source_cookies_are_sent_only_to_card_host_documents(self) -> None:
+        src = next(s for s in CUSTOMER_SOURCES_REGISTRY if s.source_key == "helpinver")
+        self.assertTrue(src.required_cookies)
+        candidate = DiscoveredCandidate(
+            url="https://helpinver.com/events/cloud-forum/", title="Cloud Forum", source_key="helpinver"
+        )
+        agg_html = self._agg_html(
+            "https://real-org.ru/",
+            extra_links=(
+                '<a href="https://helpinver.com/files/regulation.pdf">Регламент</a>'
+                '<a href="https://disk.yandex.ru/i/AAAA">Условия</a>'
+            ),
+        )
+        calls: list[tuple[str, object]] = []
+
+        async def _fake_fetch(url: str, **kwargs):
+            if url == candidate.url:
+                return agg_html, False
+            return "<html><body><main><p>Главная организатора</p></main></body></html>", False
+
+        async def _fake_resolve(url: str, **kwargs):
+            return ["https://downloader.disk.yandex.ru/tok/a.pdf"] if "yandex" in url else [url]
+
+        async def _fake_pdf(url: str, **kwargs):
+            calls.append((url, kwargs.get("cookies")))
+            return _make_long_pdf_bytes(f"text for {url}")
+
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch("app.services.scraper.fetcher.resolve_cloud_pdf_urls", new=AsyncMock(side_effect=_fake_resolve)),
+            patch("app.services.scraper.fetcher.fetch_pdf_bytes_safe", new=AsyncMock(side_effect=_fake_pdf)),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            await collect_event_dossier(candidate, src, vision_ocr=None)
+
+        by_url = dict(calls)
+        self.assertEqual(by_url["https://helpinver.com/files/regulation.pdf"], dict(src.required_cookies))
+        self.assertIsNone(by_url["https://downloader.disk.yandex.ru/tok/a.pdf"])
+
+    async def test_fetchers_scope_cookies_to_origin_host_not_redirect_targets(self) -> None:
+        seen: list[tuple[str, str | None]] = []
+        pdf_payload = _make_sample_pdf_bytes("cookie scope check")
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            seen.append((request.url.host, request.headers.get("cookie")))
+            if request.url.host == "expomap.ru" and request.url.path == "/redirect.pdf":
+                return httpx.Response(302, headers={"Location": "https://cdn.other.ru/f.pdf"})
+            return httpx.Response(200, content=pdf_payload, headers={"Content-Type": "application/pdf"})
+
+        with self._mock_http(_handler):
+            await fetch_pdf_bytes_safe("https://expomap.ru/direct.pdf", cookies={"beget": "begetok"})
+            await fetch_pdf_bytes_safe("https://expomap.ru/redirect.pdf", cookies={"beget": "begetok"})
+
+        self.assertEqual(seen[0], ("expomap.ru", "beget=begetok"))
+        self.assertEqual(seen[1], ("expomap.ru", "beget=begetok"))
+        self.assertEqual(seen[2], ("cdn.other.ru", None))
+
+    # ---------- футер ----------
+
+    def test_footer_keeps_only_document_and_regulation_links_but_footer_text_is_dropped(self) -> None:
+        org_url = "https://real-org.ru/"
+        html = """
+        <html><body>
+          <header><nav><a href="/tariffs">Тарифы</a></nav></header>
+          <main><p>Основной контент</p></main>
+          <footer>
+            <p>© 2026 ООО Ромашка. Все права защищены. FOOTER_JUNK_TEXT</p>
+            <a href="/files/public-offer.pdf">Публичная оферта</a>
+            <a href="https://disk.yandex.ru/d/OFFER1">Публичная оферта (Яндекс.Диск)</a>
+            <a href="/terms-of-participation">Условия участия</a>
+            <a href="/privacy">Политика конфиденциальности</a>
+            <a href="/files/privacy-policy.pdf">Политика обработки персональных данных</a>
+            <a href="https://dev-studio.ru/">Разработка сайта — Студия</a>
+            <a href="/contacts">Контакты</a>
+            <a href="https://max.ru/org">Мы в MAX</a>
+          </footer>
+        </body></html>
+        """
+        urls = {c.url for c in _extract_organizer_candidate_links(html, is_markdown=False, organizer_url=org_url)}
+        self.assertEqual(
+            urls,
+            {
+                "https://real-org.ru/tariffs",
+                "https://real-org.ru/files/public-offer.pdf",
+                "https://disk.yandex.ru/d/OFFER1",
+                "https://real-org.ru/terms-of-participation",
+            },
+        )
+        md = _convert_organizer_html_to_markdown(html, base_url=org_url)
+        self.assertNotIn("FOOTER_JUNK_TEXT", md)
+        self.assertNotIn("Политика конфиденциальности", md)
+
+    # ---------- редиректы сокращателей ----------
+
+    async def test_shortener_redirect_updates_effective_organizer_url_and_finds_subpages(self) -> None:
+        candidate = self._candidate()
+        org_home = (
+            '<html><body><header><nav><a href="/tariffs">Тарифы участия</a></nav></header>'
+            "<main><p>Главная реального сайта</p></main></body></html>"
+        )
+        fetched: list[str] = []
+
+        async def _fake_fetch(url: str, *, resolved_url_out: list[str] | None = None, **kwargs):
+            fetched.append(url)
+            if url == candidate.url:
+                return self._agg_html("https://clck.ru/AbCdE"), False
+            if url == "https://clck.ru/AbCdE":
+                if resolved_url_out is not None:
+                    resolved_url_out[:] = ["https://real-org.ru/"]
+                return org_home, False
+            if url == "https://real-org.ru/tariffs":
+                return "<html><body><main><p>Тариф Делегат 77 000 руб.</p></main></body></html>", False
+            raise AssertionError(f"Неожиданный URL: {url}")
+
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+        self.assertIn("https://real-org.ru/tariffs", fetched)
+        self.assertEqual(dossier.official_site_url, "https://real-org.ru/")
+        self.assertEqual(
+            dossier.source_urls,
+            [candidate.url, "https://clck.ru/AbCdE", "https://real-org.ru/", "https://real-org.ru/tariffs"],
+        )
+        self.assertIn("77 000 руб", dossier.dossier_text)
+
+    async def test_shortener_redirect_to_social_or_form_does_not_search_subpages(self) -> None:
+        candidate = self._candidate()
+        for blocked_final in ("https://max.ru/expomap", "https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform"):
+            with self.subTest(final=blocked_final):
+
+                async def _fake_fetch(url: str, *, resolved_url_out: list[str] | None = None, _final=blocked_final, **kwargs):
+                    if url == candidate.url:
+                        return self._agg_html("https://clck.ru/Zz9"), False
+                    if url == "https://clck.ru/Zz9":
+                        if resolved_url_out is not None:
+                            resolved_url_out[:] = [_final]
+                        return '<html><body><nav><a href="/tariffs">Тарифы</a></nav></body></html>', False
+                    raise AssertionError(f"Подстраница не должна загружаться: {url}")
+
+                with (
+                    patch(
+                        "app.services.scraper.fetcher._fetch_raw_page_content",
+                        new=AsyncMock(side_effect=_fake_fetch),
+                    ),
+                    patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+                ):
+                    dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+                self.assertIsNone(dossier.official_site_url)
+                self.assertEqual(dossier.source_urls, [candidate.url])
+                self.assertIn("official_site_redirected_to_blocked_domain", dossier.warnings)
+
+    async def test_legacy_fetch_mock_without_new_kwargs_still_works(self) -> None:
+        candidate = self._candidate()
+
+        async def _legacy_fetch(url: str, *, encoding: str = "utf-8", use_jina_reader: bool = False, cookies=None):
+            if url == candidate.url:
+                return self._agg_html("https://legacy-org.ru/"), False
+            if url == "https://legacy-org.ru/":
+                return '<html><body><nav><a href="/tariffs">Тарифы</a></nav></body></html>', False
+            if url == "https://legacy-org.ru/tariffs":
+                return "<html><body><main><p>Тариф 11 000 руб.</p></main></body></html>", False
+            raise AssertionError(f"Неожиданный URL: {url}")
+
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_legacy_fetch)),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), vision_ocr=None)
+
+        self.assertEqual(dossier.official_site_url, "https://legacy-org.ru/")
+        self.assertIn("11 000 руб", dossier.dossier_text)
+
+    async def test_fetch_raw_page_content_publishes_resolved_url_after_redirect_and_jina(self) -> None:
+        long_html = "<html><body><main><p>" + ("Реальный сайт организатора. " * 40) + "</p></main></body></html>"
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "clck.ru":
+                return httpx.Response(302, headers={"Location": "https://real-org.ru/"})
+            if request.url.host == "r.jina.ai":
+                return httpx.Response(200, text="# Markdown страницы\n" + ("Текст. " * 50))
+            return httpx.Response(200, content=long_html.encode("utf-8"), headers={"Content-Type": "text/html"})
+
+        redirected: list[str] = []
+        jina_resolved: list[str] = []
+        with self._mock_http(_handler):
+            content, is_md = await fetcher_mod._fetch_raw_page_content(
+                "https://clck.ru/AbCdE", resolved_url_out=redirected
+            )
+            _, jina_is_md = await fetcher_mod._fetch_raw_page_content(
+                "https://spa-site.ru/", use_jina_reader=True, resolved_url_out=jina_resolved
+            )
+        self.assertFalse(is_md)
+        self.assertIn("Реальный сайт", content)
+        self.assertEqual(redirected, ["https://real-org.ru/"])
+        self.assertTrue(jina_is_md)
+        self.assertEqual(jina_resolved, ["https://spa-site.ru/"])
+
+    # ---------- скрипты скачивания без .pdf ----------
+
+    async def test_fetch_raw_page_content_hands_over_pdf_bytes_of_download_script(self) -> None:
+        pdf_payload = _make_sample_pdf_bytes("download script payload")
+        html_page = "<html><body><main><p>" + ("Обычная HTML страница. " * 40) + "</p></main></body></html>"
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/download":
+                return httpx.Response(200, content=pdf_payload, headers={"Content-Type": "application/pdf"})
+            if request.url.path == "/get_file.php":
+                return httpx.Response(
+                    200, content=pdf_payload, headers={"Content-Type": "application/octet-stream"}
+                )
+            return httpx.Response(200, content=html_page.encode("utf-8"), headers={"Content-Type": "text/html"})
+
+        with self._mock_http(_handler):
+            sink: list[bytes] = []
+            result = await fetcher_mod._fetch_raw_page_content(
+                "https://real-org.ru/download?id=99", pdf_bytes_out=sink
+            )
+            self.assertEqual(result, ("", False))
+            self.assertEqual(sink, [pdf_payload])
+
+            sink_magic: list[bytes] = []
+            result_magic = await fetcher_mod._fetch_raw_page_content(
+                "https://real-org.ru/get_file.php?x=1", pdf_bytes_out=sink_magic
+            )
+            self.assertEqual(result_magic, ("", False))
+            self.assertEqual(sink_magic, [pdf_payload])
+
+            sink_big: list[bytes] = []
+            with self.assertRaises(ValueError):
+                await fetcher_mod._fetch_raw_page_content(
+                    "https://real-org.ru/download?id=99", pdf_bytes_out=sink_big, max_pdf_bytes=64
+                )
+            self.assertEqual(sink_big, [])
+
+            sink_html: list[bytes] = []
+            html_content, html_is_md = await fetcher_mod._fetch_raw_page_content(
+                "https://real-org.ru/page", pdf_bytes_out=sink_html
+            )
+            self.assertFalse(html_is_md)
+            self.assertIn("Обычная HTML страница", html_content)
+            self.assertEqual(sink_html, [])
+
+    async def _run_download_script_crawl(self, pdf_payload: bytes, **crawl_kwargs):
+        candidate = self._candidate()
+        org_home = (
+            "<html><body><header><nav>"
+            '<a href="/download?id=99">Скачать презентацию</a>'
+            "</nav></header><main><p>Главная</p></main></body></html>"
+        )
+
+        async def _fake_fetch(
+            url: str,
+            *,
+            pdf_bytes_out: list[bytes] | None = None,
+            resolved_url_out: list[str] | None = None,
+            **kwargs,
+        ):
+            if url == candidate.url:
+                return self._agg_html("https://real-org.ru/"), False
+            if url == "https://real-org.ru/":
+                return org_home, False
+            if url == "https://real-org.ru/download?id=99":
+                assert pdf_bytes_out is not None
+                pdf_bytes_out.append(pdf_payload)
+                return "", False
+            raise AssertionError(f"Неожиданный URL: {url}")
+
+        pdf_mock = AsyncMock(return_value=b"%PDF-never")
+        with (
+            patch("app.services.scraper.fetcher._fetch_raw_page_content", new=AsyncMock(side_effect=_fake_fetch)),
+            patch("app.services.scraper.fetcher.fetch_pdf_bytes_safe", new=pdf_mock),
+            patch.object(scraper_pkg.settings, "LLM_API_KEY", ""),
+        ):
+            dossier = await collect_event_dossier(candidate, self._expomap_source(), **crawl_kwargs)
+        self.assertEqual(pdf_mock.await_count, 0)
+        return dossier
+
+    async def test_crawler_processes_download_script_pdf_via_pymupdf(self) -> None:
+        dossier = await self._run_download_script_crawl(
+            _make_long_pdf_bytes("UNIQUE_SCRIPT presentation tariffs 90 000 RUB"), vision_ocr=None
+        )
+        self.assertIn("UNIQUE_SCRIPT", dossier.dossier_text)
+        self.assertIn("https://real-org.ru/download?id=99", dossier.source_urls)
+        self.assertNotIn("=== ПОДСТРАНИЦА ОРГАНИЗАТОРА (https://real-org.ru/download?id=99)", dossier.dossier_text)
+        self.assertNotIn("%PDF", dossier.dossier_text)
+        self.assertNotIn("\ufffd", dossier.dossier_text)
+
+    async def test_crawler_processes_scanned_download_script_pdf_via_vision_ocr_budget(self) -> None:
+        doc = fitz.open()
+        page = doc.new_page(width=595, height=842)
+        page.draw_rect(fitz.Rect(40, 40, 300, 200), color=(0.1, 0.1, 0.1))
+        scanned = doc.tobytes()
+        doc.close()
+
+        mock_ocr = MagicMock()
+        mock_ocr.extract_text_from_images = AsyncMock(return_value="Тариф Делегат — 66 000 руб.")
+        budget = OcrBudgetTracker(remaining_pages=5)
+        dossier = await self._run_download_script_crawl(scanned, vision_ocr=mock_ocr, ocr_budget=budget)
+
+        self.assertEqual(mock_ocr.extract_text_from_images.await_count, 1)
+        self.assertEqual(budget.used_pages, 1)
+        self.assertIn("66 000 руб.", dossier.dossier_text)
+        self.assertIn("https://real-org.ru/download?id=99", dossier.source_urls)
+
+    def test_download_script_links_get_moderate_score_bonus(self) -> None:
+        plain = _score_organizer_link("https://real-org.ru/page?id=1", "Ссылка", is_pdf=False, in_nav_or_header=False)
+        script = _score_organizer_link(
+            "https://real-org.ru/download?id=1", "Скачать", is_pdf=False, in_nav_or_header=False
+        )
+        self.assertEqual(plain, 0)
+        self.assertEqual(script, 3)
+        cloud = _score_organizer_link(
+            "https://disk.yandex.ru/i/AAAA", "Условия", is_pdf=True, in_nav_or_header=False
+        )
+        direct = _score_organizer_link(
+            "https://real-org.ru/files/x.pdf", "Условия", is_pdf=True, in_nav_or_header=False
+        )
+        self.assertGreaterEqual(cloud, direct - 1)
+        self.assertGreater(cloud, 10)
 
 
 if __name__ == "__main__":

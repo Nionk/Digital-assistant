@@ -108,6 +108,11 @@ _SOCIAL_DOMAINS: tuple[str, ...] = (
     "rutube.ru",
     "pinterest.com",
     "tiktok.com",
+    "max.ru",
+    "tenchat.ru",
+    "vc.ru",
+    "habr.com",
+    "telegra.ph",
 )
 
 _TRACKING_QUERY_PARAMS: frozenset[str] = frozenset(
