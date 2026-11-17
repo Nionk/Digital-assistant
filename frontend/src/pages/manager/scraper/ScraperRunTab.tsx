@@ -20,6 +20,10 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  GoldShimmerBar,
+  RotatingStatusText,
+} from "@/components/ui/ai-shimmer-bar";
+import {
   CustomSelect,
   type CustomSelectOption,
 } from "@/components/ui/custom-select";
@@ -503,38 +507,53 @@ export function ScraperRunTab({
             </div>
 
             {isLatestActive && (
-              <div className="space-y-1.5 rounded-[6px] border border-[#262D35] bg-[#0E1116] p-2.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#D1D5DB]">
-                    Прогресс по площадкам:{" "}
-                    <strong className="text-white tabular-nums">
-                      {latestRun.sources_done} /{" "}
-                      {latestRun.sources_total > 0
-                        ? latestRun.sources_total
-                        : "—"}
-                    </strong>
-                  </span>
-                  {latestRun.sources_total > 0 && (
-                    <span className="text-[11px] font-semibold text-[#E5C378] tabular-nums">
-                      {progressPercent}%
-                    </span>
-                  )}
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1E252E]">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-300",
-                      latestRun.sources_total > 0
-                        ? "bg-gradient-to-r from-[#7C5A20] to-[#E5C378]"
-                        : "w-1/3 animate-pulse bg-[#E5C378]/70"
-                    )}
-                    style={
-                      latestRun.sources_total > 0
-                        ? { width: `${progressPercent}%` }
-                        : undefined
+              <div className="space-y-2 rounded-[8px] border border-[#262D35] bg-[#0E1116] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <RotatingStatusText
+                    active={isLatestActive}
+                    steps={
+                      latestRun.status === "queued"
+                        ? [
+                            "Подготовка очереди и инициализация краулера...",
+                            "Подключение к каталогам площадок...",
+                          ]
+                        : latestRun.sources_done === 0
+                          ? [
+                              "Сканируем каталоги и собираем релевантные ссылки...",
+                              "Фильтруем дубликаты и проверяем досье событий...",
+                            ]
+                          : [
+                              "Обработка площадок и извлечение регламентов...",
+                              "Сверка хэшей и обновление базы мероприятий...",
+                            ]
                     }
+                    className="flex-1 min-w-[200px]"
                   />
+                  <div className="flex items-center gap-2 shrink-0 text-[11px] tabular-nums">
+                    <span className="text-[#8E95A0]">
+                      Площадки:{" "}
+                      <strong className="text-white">
+                        {latestRun.sources_done} /{" "}
+                        {latestRun.sources_total > 0
+                          ? latestRun.sources_total
+                          : "—"}
+                      </strong>
+                    </span>
+                    {latestRun.sources_total > 0 && (
+                      <span className="rounded-[4px] border border-[#7C5A20]/50 bg-[#1E190E] px-1.5 py-0.5 font-semibold text-[#E5C378]">
+                        {progressPercent}%
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <GoldShimmerBar
+                  active={isLatestActive}
+                  size="md"
+                  tone="emerald-gold"
+                  progressPercent={
+                    latestRun.sources_total > 0 ? progressPercent : null
+                  }
+                />
               </div>
             )}
 

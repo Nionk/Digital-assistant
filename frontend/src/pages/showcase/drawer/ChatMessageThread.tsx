@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  GoldShimmerBar,
+  RotatingStatusText,
+} from "@/components/ui/ai-shimmer-bar";
 import type { MergedConversationResult } from "./mergeConversation";
 
 interface ChatMessageThreadProps {
@@ -126,9 +130,17 @@ export function ChatMessageThread({
 
                   {/* Состояние загрузки */}
                   {ex.isLoading && (
-                    <div className="flex items-center gap-2 py-1.5 text-xs text-[#8E95A0]">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E5C378]" />
-                      <span>Уточняем информацию по документации...</span>
+                    <div className="space-y-2 rounded-[8px] border border-[#262D35] bg-[#0E1116] px-3 py-2.5">
+                      <RotatingStatusText
+                        active={true}
+                        steps={[
+                          "Изучаем официальный регламент мероприятия...",
+                          "Проверяем тарифы, сроки и условия участия...",
+                          "Формируем точный ответ по документации...",
+                        ]}
+                        intervalMs={2200}
+                      />
+                      <GoldShimmerBar active={true} size="thin" tone="gold" />
                     </div>
                   )}
 
