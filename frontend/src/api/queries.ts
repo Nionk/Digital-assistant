@@ -42,6 +42,8 @@ export const queryKeys = {
   managerEventsRoot: ["manager", "events"] as const,
   managerEvents: (filters?: CatalogEventsFilterParams) =>
     filters ? (["manager", "events", filters] as const) : (["manager", "events"] as const),
+  eventRefreshStatus: (eventId: number) =>
+    ["manager", "events", eventId, "refreshStatus"] as const,
   scraperSources: ["manager", "scraper", "sources"] as const,
   scraperRunsRoot: ["manager", "scraper", "runs"] as const,
   scraperRuns: (limit: number) =>
@@ -163,7 +165,6 @@ export function useArchiveEventMutation() {
 }
 
 export function useRefreshEventMutation() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       eventId,
@@ -172,10 +173,22 @@ export function useRefreshEventMutation() {
       eventId: number;
       payload?: EventRefreshIn;
     }) => apiClient.refreshEvent(eventId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.managerEventsRoot });
-      queryClient.invalidateQueries({ queryKey: queryKeys.managerDashboard });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scraperLatestRun });
+  });
+}
+
+export function useEventRefreshStatus(
+  eventId: number | null | undefined,
+  enabled: boolean
+) {
+  return useQuery({
+    queryKey: queryKeys.eventRefreshStatus(eventId ?? 0),
+    queryFn: () => apiClient.getEventRefreshStatus(eventId!),
+    enabled: Boolean(eventId) && enabled,
+    retry: false,
+    refetchInterval: (query) => {
+      if (isTerminalPollingError(query.state.error)) return false;
+      const st = query.state.data?.status;
+      return st === "queued" || st === "running" || st === undefined ? 2000 : false;
     },
   });
 }

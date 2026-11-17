@@ -390,7 +390,23 @@ class ArchiveHashPreDedupTests(unittest.IsolatedAsyncioTestCase):
                     headers=self.auth_headers,
                 )
                 self.assertEqual(r1.status_code, 200)
-                self.assertFalse(r1.json()["updated"])
+                self.assertIn(r1.json()["status"], ("queued", "running"))
+
+                import asyncio
+                s1_body: dict = {}
+                for _ in range(40):
+                    s1 = await client.get(
+                        f"/api/manager/events/{ev_id}/refresh/status",
+                        headers=self.auth_headers,
+                    )
+                    self.assertEqual(s1.status_code, 200)
+                    s1_body = s1.json()
+                    if s1_body["status"] in ("completed", "failed"):
+                        break
+                    await asyncio.sleep(0.05)
+
+                self.assertEqual(s1_body.get("status"), "completed")
+                self.assertFalse(s1_body.get("updated"))
                 self.assertEqual(ingest_mock.call_count, 0)
 
                 async with async_session_maker() as s2:
@@ -403,5 +419,20 @@ class ArchiveHashPreDedupTests(unittest.IsolatedAsyncioTestCase):
                     headers=self.auth_headers,
                 )
                 self.assertEqual(r2.status_code, 200)
-                self.assertTrue(r2.json()["updated"])
+                self.assertIn(r2.json()["status"], ("queued", "running"))
+
+                s2_body: dict = {}
+                for _ in range(40):
+                    s2_resp = await client.get(
+                        f"/api/manager/events/{ev_id}/refresh/status",
+                        headers=self.auth_headers,
+                    )
+                    self.assertEqual(s2_resp.status_code, 200)
+                    s2_body = s2_resp.json()
+                    if s2_body["status"] in ("completed", "failed"):
+                        break
+                    await asyncio.sleep(0.05)
+
+                self.assertEqual(s2_body.get("status"), "completed")
+                self.assertTrue(s2_body.get("updated"))
                 self.assertEqual(ingest_mock.call_count, 1)

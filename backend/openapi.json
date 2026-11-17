@@ -694,8 +694,8 @@
         "tags": [
           "Manager Cabinet"
         ],
-        "summary": "Точечное обновление карточки мероприятия с сайта-первоисточника",
-        "description": "Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash (если force=False) и при наличии изменений обновляет карточку через LLM.",
+        "summary": "Фоновое точечное обновление карточки мероприятия с сайта-первоисточника",
+        "description": "Проверяет URL первоисточника и запускает фоновую задачу обновления карточки. Результат отслеживается через GET /events/{event_id}/refresh/status.",
         "operationId": "refresh_event_endpoint_api_manager_events__event_id__refresh_post",
         "security": [
           {
@@ -737,6 +737,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventRefreshOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/events/{event_id}/refresh/status": {
+      "get": {
+        "tags": [
+          "Manager Cabinet"
+        ],
+        "summary": "Статус фонового обновления карточки мероприятия",
+        "operationId": "get_event_refresh_status_api_manager_events__event_id__refresh_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventRefreshStatusOut"
                 }
               }
             }
@@ -2484,36 +2531,145 @@
             "title": "Event Id",
             "description": "ID мероприятия"
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running"
+            ],
+            "title": "Status",
+            "description": "Статус фоновой задачи обновления",
+            "default": "queued"
+          },
           "updated": {
             "type": "boolean",
             "title": "Updated",
-            "description": "True если карточка была обновлена через LLM, False если изменений нет"
+            "description": "True если карточка уже обновлена (для обратной совместимости)",
+            "default": false
           },
           "message": {
             "type": "string",
             "title": "Message",
-            "description": "Статус обновления"
+            "description": "Статус запуска обновления"
           },
           "data_status": {
-            "type": "string",
-            "enum": [
-              "ready",
-              "needs_enrichment",
-              "archived"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "needs_enrichment",
+                  "archived"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Data Status",
-            "description": "Актуальный статус полноты данных карточки"
+            "description": "Текущий статус полноты данных карточки"
           }
         },
         "type": "object",
         "required": [
           "event_id",
-          "updated",
-          "message",
-          "data_status"
+          "message"
         ],
         "title": "EventRefreshOut",
-        "description": "Результат точечного обновления карточки мероприятия с сайта."
+        "description": "Результат постановки точечного обновления карточки мероприятия в фоновую задачу."
+      },
+      "EventRefreshStatusOut": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id",
+            "description": "ID мероприятия"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "Состояние задачи обновления"
+          },
+          "updated": {
+            "type": "boolean",
+            "title": "Updated",
+            "description": "True если карточка была обновлена через LLM, False если изменений нет",
+            "default": false
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Человекочитаемый статус обновления",
+            "default": ""
+          },
+          "data_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "needs_enrichment",
+                  "archived"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Status",
+            "description": "Актуальный статус полноты данных карточки"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Текст ошибки при status='failed'"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "ISO-время старта обновления"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At",
+            "description": "ISO-время завершения обновления"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "status"
+        ],
+        "title": "EventRefreshStatusOut",
+        "description": "Текущий статус фонового обновления карточки мероприятия."
       },
       "EventUploadOut": {
         "properties": {

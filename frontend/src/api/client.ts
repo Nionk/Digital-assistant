@@ -13,6 +13,7 @@ import type {
   EventArchiveOut,
   EventRefreshIn,
   EventRefreshOut,
+  EventRefreshStatusOut,
   EventUploadIn,
   EventUploadOut,
   GeneratePitchIn,
@@ -313,8 +314,15 @@ export const apiClient = {
       {
         method: "POST",
         body: JSON.stringify(payload),
-        timeoutMs: LLM_TIMEOUT_MS,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
       }
+    );
+  },
+
+  getEventRefreshStatus(eventId: number): Promise<EventRefreshStatusOut> {
+    return requestJson<EventRefreshStatusOut>(
+      `/api/manager/events/${eventId}/refresh/status`,
+      { timeoutMs: DEFAULT_TIMEOUT_MS }
     );
   },
 

@@ -250,7 +250,7 @@ async def _extract_structured_event_via_llm(raw_dossier_text: str) -> EventInges
                     ],
                     max_retries=2,
                 ),
-                timeout=90.0,
+                timeout=150.0,
             )
             return schema
     except (TimeoutError, APIError, httpx.HTTPError, InstructorError):

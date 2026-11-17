@@ -951,10 +951,32 @@ class EventRefreshIn(BaseModel):
 
 
 class EventRefreshOut(BaseModel):
-    """Результат точечного обновления карточки мероприятия с сайта."""
+    """Результат постановки точечного обновления карточки мероприятия в фоновую задачу."""
     event_id: int = Field(..., description="ID мероприятия")
-    updated: bool = Field(..., description="True если карточка была обновлена через LLM, False если изменений нет")
-    message: str = Field(..., description="Статус обновления")
-    data_status: Literal["ready", "needs_enrichment", "archived"] = Field(
-        ..., description="Актуальный статус полноты данных карточки"
+    status: Literal["queued", "running"] = Field(
+        default="queued", description="Статус фоновой задачи обновления"
     )
+    updated: bool = Field(default=False, description="True если карточка уже обновлена (для обратной совместимости)")
+    message: str = Field(..., description="Статус запуска обновления")
+    data_status: Literal["ready", "needs_enrichment", "archived"] | None = Field(
+        default=None, description="Текущий статус полноты данных карточки"
+    )
+
+
+class EventRefreshStatusOut(BaseModel):
+    """Текущий статус фонового обновления карточки мероприятия."""
+    event_id: int = Field(..., description="ID мероприятия")
+    status: Literal["idle", "queued", "running", "completed", "failed"] = Field(
+        ..., description="Состояние задачи обновления"
+    )
+    updated: bool = Field(
+        default=False,
+        description="True если карточка была обновлена через LLM, False если изменений нет",
+    )
+    message: str = Field(default="", description="Человекочитаемый статус обновления")
+    data_status: Literal["ready", "needs_enrichment", "archived"] | None = Field(
+        default=None, description="Актуальный статус полноты данных карточки"
+    )
+    error: str | None = Field(default=None, description="Текст ошибки при status='failed'")
+    started_at: str | None = Field(default=None, description="ISO-время старта обновления")
+    finished_at: str | None = Field(default=None, description="ISO-время завершения обновления")

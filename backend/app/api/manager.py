@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 from typing import Annotated
@@ -20,7 +21,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import get_async_session
+from app.core.database import async_session_maker, get_async_session
 from app.core.security import CurrentManagerDep
 from app.models.models import (
     Event,
@@ -37,6 +38,7 @@ from app.schemas.manager import (
     EventArchiveOut,
     EventRefreshIn,
     EventRefreshOut,
+    EventRefreshStatusOut,
     EventUploadOut,
     GeneratePitchIn,
     GeneratePitchOut,
@@ -618,13 +620,210 @@ async def archive_event_endpoint(
         ) from exc
 
 
+_EVENT_REFRESH_STATES: dict[int, EventRefreshStatusOut] = {}
+_EVENT_REFRESH_TASKS: dict[int, asyncio.Task[None]] = {}
+
+
+async def _run_event_refresh_job(event_id: int, force: bool) -> None:
+    """Фоновая задача точечного обновления карточки мероприятия с сайта-первоисточника."""
+    started_iso = datetime.datetime.now(datetime.UTC).isoformat()
+    _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+        event_id=event_id,
+        status="running",
+        updated=False,
+        message="Загружаем актуальную страницу и проверяем изменения...",
+        started_at=started_iso,
+    )
+
+    try:
+        async with async_session_maker() as db:
+            ev_res = await db.execute(select(Event).where(Event.id == event_id))
+            event = ev_res.scalar_one_or_none()
+            if event is None:
+                _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+                    event_id=event_id,
+                    status="failed",
+                    error=f"Мероприятие с ID={event_id} не найдено.",
+                    message="Мероприятие не найдено.",
+                    started_at=started_iso,
+                    finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                )
+                return
+
+            raw_urls = [
+                u.strip()
+                for u in (event.source_urls or [])
+                if isinstance(u, str) and u.strip()
+            ]
+            if not raw_urls:
+                _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+                    event_id=event_id,
+                    status="failed",
+                    error="У мероприятия отсутствует URL первоисточника для обновления.",
+                    message="Нет URL первоисточника.",
+                    started_at=started_iso,
+                    finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                )
+                return
+
+            primary_url = raw_urls[0]
+            url_key, seen_row = await _find_seen_url_row(db, primary_url)
+            refresh_source = CustomerSourceConfig(
+                source_key=seen_row.source_key if seen_row is not None else "manual_refresh",
+                display_name="Точечное обновление карточки",
+                catalog_urls=(primary_url,),
+                adapter_type="html_list",
+                russia_online_only=False,
+            )
+            candidate = DiscoveredCandidate(
+                url=primary_url,
+                source_key=refresh_source.source_key,
+                title=event.canonical_title,
+            )
+
+            now_ts = datetime.datetime.now(datetime.UTC)
+            dossier = None
+            new_hash = ""
+
+            if not force and seen_row is not None and seen_row.content_hash:
+                dossier = await collect_event_dossier(
+                    candidate,
+                    refresh_source,
+                    vision_ocr=None,
+                    ocr_budget=None,
+                )
+                new_hash = _compute_dossier_hash([dossier])
+                if new_hash == seen_row.content_hash:
+                    seen_row.last_checked_at = now_ts
+                    await db.commit()
+                    _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+                        event_id=event.id,
+                        status="completed",
+                        updated=False,
+                        message="Изменений на сайте не обнаружено",
+                        data_status=normalize_data_status(event.data_status),
+                        started_at=started_iso,
+                        finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                    )
+                    return
+
+            vision_ocr = build_vision_ocr_provider()
+            if dossier is None or vision_ocr is not None:
+                dossier = await collect_event_dossier(
+                    candidate,
+                    refresh_source,
+                    vision_ocr=vision_ocr,
+                    ocr_budget=None,
+                )
+                new_hash = _compute_dossier_hash([dossier])
+
+            updated_event = await ingest_event_from_text(
+                db,
+                dossier.dossier_text,
+                source_url=primary_url,
+                extra_warnings=dossier.warnings,
+                enforce_russia_online=False,
+                reject_past=False,
+                skip_archived=False,
+                extra_source_urls=dossier.source_urls,
+            )
+
+            new_outcome = (
+                "ingested_ready"
+                if updated_event.data_status == "ready"
+                else "ingested_needs_enrichment"
+            )
+            if seen_row is not None:
+                seen_row.url = url_key
+                seen_row.outcome = new_outcome
+                seen_row.event_id = updated_event.id
+                seen_row.content_hash = new_hash
+                seen_row.last_error = None
+                seen_row.last_checked_at = now_ts
+            else:
+                db.add(
+                    ScraperSeenUrl(
+                        url=url_key,
+                        source_key=refresh_source.source_key,
+                        outcome=new_outcome,
+                        event_id=updated_event.id,
+                        recheck_attempts=0,
+                        content_hash=new_hash,
+                        last_error=None,
+                        last_checked_at=now_ts,
+                    )
+                )
+
+            await db.commit()
+            _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+                event_id=updated_event.id,
+                status="completed",
+                updated=True,
+                message="Карточка мероприятия успешно обновлена с сайта.",
+                data_status=normalize_data_status(updated_event.data_status),
+                started_at=started_iso,
+                finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+            )
+    except TimeoutError as exc:
+        logger.warning("Таймаут при фоновом обновлении события %s: %s", event_id, exc)
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event_id,
+            status="failed",
+            error="Превышено время ожидания ответа ИИ или сайта при разборе страницы. Повторите попытку позже.",
+            message="Превышено время ожидания ответа ИИ.",
+            started_at=started_iso,
+            finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Ошибка загрузки URL при обновлении события %s: %s", event_id, exc)
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event_id,
+            status="failed",
+            error="Не удалось загрузить страницу мероприятия по указанному URL.",
+            message="Ошибка загрузки страницы.",
+            started_at=started_iso,
+            finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+    except ValueError as exc:
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event_id,
+            status="failed",
+            error=str(exc),
+            message="Ошибка обработки данных мероприятия.",
+            started_at=started_iso,
+            finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+    except (SQLAlchemyError, OSError) as exc:
+        logger.error("Ошибка БД при фоновом обновлении мероприятия %s: %s", event_id, exc)
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event_id,
+            status="failed",
+            error="Внутренняя ошибка сервера при сохранении карточки.",
+            message="Ошибка сохранения.",
+            started_at=started_iso,
+            finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+    except Exception:
+        logger.exception("Непредвиденная ошибка при обновлении мероприятия %s", event_id)
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event_id,
+            status="failed",
+            error="Непредвиденная ошибка при обновлении карточки.",
+            message="Сбой обновления.",
+            started_at=started_iso,
+            finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+    finally:
+        _EVENT_REFRESH_TASKS.pop(event_id, None)
+
+
 @router.post(
     "/events/{event_id}/refresh",
     response_model=EventRefreshOut,
-    summary="Точечное обновление карточки мероприятия с сайта-первоисточника",
+    summary="Фоновое точечное обновление карточки мероприятия с сайта-первоисточника",
     description=(
-        "Загружает страницу мероприятия по первому URL из source_urls, проверяет content_hash "
-        "(если force=False) и при наличии изменений обновляет карточку через LLM."
+        "Проверяет URL первоисточника и запускает фоновую задачу обновления карточки. "
+        "Результат отслеживается через GET /events/{event_id}/refresh/status."
     ),
 )
 async def refresh_event_endpoint(
@@ -659,120 +858,62 @@ async def refresh_event_endpoint(
                 detail=str(exc),
             ) from exc
 
-        url_key, seen_row = await _find_seen_url_row(db, primary_url)
-        refresh_source = CustomerSourceConfig(
-            source_key=seen_row.source_key if seen_row is not None else "manual_refresh",
-            display_name="Точечное обновление карточки",
-            catalog_urls=(primary_url,),
-            adapter_type="html_list",
-            russia_online_only=False,
-        )
-        candidate = DiscoveredCandidate(
-            url=primary_url,
-            source_key=refresh_source.source_key,
-            title=event.canonical_title,
-        )
-
-        now_ts = datetime.datetime.now(datetime.UTC)
-        collected_without_ocr = False
-        dossier = None
-        new_hash = ""
-
-        if not force and seen_row is not None and seen_row.content_hash:
-            dossier = await collect_event_dossier(
-                candidate,
-                refresh_source,
-                vision_ocr=None,
-                ocr_budget=None,
-            )
-            collected_without_ocr = True
-            new_hash = _compute_dossier_hash([dossier])
-            if new_hash == seen_row.content_hash:
-                seen_row.last_checked_at = now_ts
-                await db.commit()
-                return EventRefreshOut(
-                    event_id=event.id,
-                    updated=False,
-                    message="Изменений на сайте не обнаружено",
-                    data_status=normalize_data_status(event.data_status),
-                )
-
-        vision_ocr = build_vision_ocr_provider()
-        if not collected_without_ocr or vision_ocr is not None or dossier is None:
-            dossier = await collect_event_dossier(
-                candidate,
-                refresh_source,
-                vision_ocr=vision_ocr,
-                ocr_budget=None,
-            )
-            new_hash = _compute_dossier_hash([dossier])
-
-        updated_event = await ingest_event_from_text(
-            db,
-            dossier.dossier_text,
-            source_url=primary_url,
-            extra_warnings=dossier.warnings,
-            enforce_russia_online=False,
-            reject_past=False,
-            skip_archived=False,
-            extra_source_urls=dossier.source_urls,
-        )
-
-        new_outcome = (
-            "ingested_ready"
-            if updated_event.data_status == "ready"
-            else "ingested_needs_enrichment"
-        )
-        if seen_row is not None:
-            seen_row.url = url_key
-            seen_row.outcome = new_outcome
-            seen_row.event_id = updated_event.id
-            seen_row.content_hash = new_hash
-            seen_row.last_error = None
-            seen_row.last_checked_at = now_ts
-        else:
-            db.add(
-                ScraperSeenUrl(
-                    url=url_key,
-                    source_key=refresh_source.source_key,
-                    outcome=new_outcome,
-                    event_id=updated_event.id,
-                    recheck_attempts=0,
-                    content_hash=new_hash,
-                    last_error=None,
-                    last_checked_at=now_ts,
-                )
+        existing_task = _EVENT_REFRESH_TASKS.get(event_id)
+        if existing_task is not None and not existing_task.done():
+            return EventRefreshOut(
+                event_id=event.id,
+                status="running",
+                updated=False,
+                message="Обновление карточки уже выполняется в фоне.",
+                data_status=normalize_data_status(event.data_status),
             )
 
-        await db.commit()
+        _EVENT_REFRESH_STATES[event_id] = EventRefreshStatusOut(
+            event_id=event.id,
+            status="queued",
+            updated=False,
+            message="Задача обновления поставлена в очередь...",
+            data_status=normalize_data_status(event.data_status),
+            started_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+        task = asyncio.create_task(_run_event_refresh_job(event_id, force))
+        _EVENT_REFRESH_TASKS[event_id] = task
+
         return EventRefreshOut(
-            event_id=updated_event.id,
-            updated=True,
-            message="Карточка мероприятия успешно обновлена с сайта.",
-            data_status=normalize_data_status(updated_event.data_status),
+            event_id=event.id,
+            status="queued",
+            updated=False,
+            message="Обновление карточки запущено в фоне.",
+            data_status=normalize_data_status(event.data_status),
         )
     except HTTPException:
         raise
-    except httpx.HTTPError as exc:
-        await db.rollback()
-        logger.warning("Ошибка загрузки URL при обновлении события %s: %s", event_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Не удалось загрузить страницу мероприятия по указанному URL.",
-        ) from exc
-    except ValueError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
     except (SQLAlchemyError, OSError) as exc:
-        await db.rollback()
-        logger.error("Ошибка БД при обновлении мероприятия %s: %s", event_id, exc)
+        logger.error("Ошибка БД при запуске обновления мероприятия %s: %s", event_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="База данных временно недоступна",
         ) from exc
+
+
+@router.get(
+    "/events/{event_id}/refresh/status",
+    response_model=EventRefreshStatusOut,
+    summary="Статус фонового обновления карточки мероприятия",
+)
+async def get_event_refresh_status(
+    event_id: int,
+    current_manager: CurrentManagerDep,
+) -> EventRefreshStatusOut:
+    state = _EVENT_REFRESH_STATES.get(event_id)
+    if state is not None:
+        return state
+    return EventRefreshStatusOut(
+        event_id=event_id,
+        status="idle",
+        updated=False,
+        message="",
+    )
 
 
 @router.post(

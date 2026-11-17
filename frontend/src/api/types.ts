@@ -86,7 +86,8 @@ export interface EventUploadIn {
 export type EventUploadOut = Required<Schema<"EventUploadOut">>;
 export type EventArchiveOut = Required<Schema<"EventArchiveOut">>;
 export type EventRefreshIn = Schema<"EventRefreshIn">;
-export type EventRefreshOut = Required<Schema<"EventRefreshOut">>;
+export type EventRefreshOut = Schema<"EventRefreshOut">;
+export type EventRefreshStatusOut = Schema<"EventRefreshStatusOut">;
 
 export type ScraperRunIn = Omit<
   Schema<"ScraperRunIn">,
