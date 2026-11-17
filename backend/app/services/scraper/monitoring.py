@@ -1,6 +1,9 @@
 import datetime
+import hashlib
 import inspect
+import json
 import logging
+import re
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit, urlunsplit
@@ -9,12 +12,14 @@ import httpx
 from instructor.core import InstructorError
 from openai import APIError
 from pydantic import ValidationError
+from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Event, ScraperSeenUrl, ScraperSource
-from app.services.scraper.crawler import _filter_supported_kwargs
+from app.services.scraper.crawler import CollectedEventDossier, _filter_supported_kwargs
+from app.services.scraper.ingestion import _clean_title_for_comparison, _get_app_today
 from app.services.scraper.pdf_reader import OcrBudgetTracker, VisionOCRProviderProtocol
 from app.services.scraper.sources import (
     CatalogSourceScraperProtocol,
@@ -53,6 +58,8 @@ class ScrapingRunSummary:
 class _SeenUrlState:
     outcome: str
     recheck_attempts: int
+    content_hash: str | None = None
+    event_id: int | None = None
 
 
 @dataclass
@@ -89,6 +96,94 @@ async def _load_known_source_urls(session: AsyncSession) -> set[str]:
     return known
 
 
+_OCR_SECTION_RE = re.compile(
+    r"===\s*РАСПОЗНАННЫЙ OCR ТЕКСТ PDF\s*===.*?(?=(?:\n===\s+[^\n]+?\s+===)|\Z)",
+    re.DOTALL,
+)
+
+
+def _compute_dossier_hash(
+    dossiers: Sequence[CollectedEventDossier],
+    *,
+    include_text: bool = True,
+) -> str:
+    """
+    Детерминированный SHA-256 хэш досье для проверки изменений страницы без вызова LLM/OCR.
+    Исключает OCR-блок, чтобы recheck без Vision OCR давал тот же хэш при неизменном сайте.
+    """
+    payload: list[dict[str, object]] = []
+    for dossier in dossiers:
+        sorted_urls = sorted(
+            {
+                _url_lookup_key(u)
+                for u in (dossier.source_urls or [])
+                if isinstance(u, str) and u.strip()
+            }
+        )
+        entry: dict[str, object] = {"urls": sorted_urls}
+        if include_text:
+            raw_text = _OCR_SECTION_RE.sub("", dossier.dossier_text or "")
+            entry["text"] = re.sub(r"\s+", " ", raw_text).strip()
+        payload.append(entry)
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+async def _load_active_ready_events(
+    session: AsyncSession,
+) -> list[tuple[int, str, datetime.date, datetime.date, str]]:
+    """Загружает компактный список активных ready-событий для раннего pre-dedup до краулинга."""
+    stmt = select(
+        Event.id,
+        Event.canonical_title,
+        Event.start_date,
+        Event.end_date,
+        Event.data_status,
+    ).where(Event.data_status == "ready", Event.is_active.is_(True))
+    try:
+        res = await session.execute(stmt)
+        rows = res.all()
+    except (TypeError, AttributeError, SQLAlchemyError):
+        return []
+    ready_list: list[tuple[int, str, datetime.date, datetime.date, str]] = []
+    for row in rows:
+        if (
+            isinstance(row, tuple)
+            or hasattr(row, "__len__")
+        ) and len(row) >= 5:
+            ev_id, title, start_dt, end_dt, status_val = row[0], row[1], row[2], row[3], row[4]
+            if (
+                isinstance(ev_id, int)
+                and isinstance(title, str)
+                and isinstance(start_dt, datetime.date)
+                and isinstance(end_dt, datetime.date)
+            ):
+                ready_list.append((ev_id, title, start_dt, end_dt, str(status_val)))
+    return ready_list
+
+
+def _find_pre_dedup_event_id(
+    candidate_title: str | None,
+    ready_events: Sequence[tuple[int, str, datetime.date, datetime.date, str]],
+    today: datetime.date,
+) -> int | None:
+    """Возвращает ID уже готового актуального события при высоком совпадении заголовка (>= 92%)."""
+    if not candidate_title or len(candidate_title.strip()) < 6:
+        return None
+    cand_clean = _clean_title_for_comparison(candidate_title)
+    if len(cand_clean) < 6:
+        return None
+    for ev_id, ev_title, _start_dt, end_dt, _status in ready_events:
+        if end_dt < today:
+            continue
+        ev_clean = _clean_title_for_comparison(ev_title)
+        if not ev_clean:
+            continue
+        if float(fuzz.token_set_ratio(cand_clean, ev_clean)) >= 92.0:
+            return ev_id
+    return None
+
+
 async def _load_seen_urls_map(session: AsyncSession) -> dict[str, _SeenUrlState]:
     """Загружает историю проверенных URL из scraper_seen_urls в виде plain Python состояний."""
     res = await session.execute(select(ScraperSeenUrl))
@@ -99,6 +194,8 @@ async def _load_seen_urls_map(session: AsyncSession) -> dict[str, _SeenUrlState]
         seen_map[_url_lookup_key(row.url)] = _SeenUrlState(
             outcome=row.outcome,
             recheck_attempts=int(row.recheck_attempts or 0),
+            content_hash=getattr(row, "content_hash", None),
+            event_id=getattr(row, "event_id", None),
         )
     return seen_map
 
@@ -110,14 +207,20 @@ def _should_skip_url(
 ) -> bool:
     """
     Проверяет, следует ли пропустить URL:
-    - ingested_ready / rejected_b2c / rejected_geo / rejected_past -> пропуск;
+    - ingested_ready / rejected_b2c / rejected_geo / rejected_past / ignored -> пропуск;
     - ingested_needs_enrichment -> разрешена ровно 1 повторная проверка (recheck_attempts < 1);
     - failed -> разрешен повторный обход;
     - legacy events.source_urls (отсутствующие в scraper_seen_urls) -> пропуск.
     """
     state = seen_map.get(url_key)
     if state is not None:
-        if state.outcome in ("ingested_ready", "rejected_b2c", "rejected_geo", "rejected_past"):
+        if state.outcome in (
+            "ingested_ready",
+            "rejected_b2c",
+            "rejected_geo",
+            "rejected_past",
+            "ignored",
+        ):
             return True
         if state.outcome == "ingested_needs_enrichment":
             return state.recheck_attempts >= 1
@@ -134,6 +237,7 @@ async def _upsert_seen_url(
     event_id: int | None,
     last_error: str | None,
     seen_map: dict[str, _SeenUrlState],
+    content_hash: str | None = None,
 ) -> None:
     canon_url = canonicalize_url(raw_url) or raw_url.strip()
     url_key = _url_lookup_key(canon_url)
@@ -154,6 +258,12 @@ async def _upsert_seen_url(
                 break
     now_ts = datetime.datetime.now(datetime.UTC)
 
+    effective_hash = content_hash if content_hash is not None else (
+        row_obj.content_hash if isinstance(row_obj, ScraperSeenUrl) else (
+            prev_state.content_hash if prev_state is not None else None
+        )
+    )
+
     if isinstance(row_obj, ScraperSeenUrl):
         if row_obj.outcome == "ingested_needs_enrichment" or was_needs_enrichment:
             row_obj.recheck_attempts = int(row_obj.recheck_attempts or 0) + 1
@@ -161,6 +271,7 @@ async def _upsert_seen_url(
         row_obj.source_key = source_key
         row_obj.outcome = outcome
         row_obj.event_id = event_id
+        row_obj.content_hash = effective_hash
         row_obj.last_error = last_error
         row_obj.last_checked_at = now_ts
         new_attempts = row_obj.recheck_attempts
@@ -172,12 +283,18 @@ async def _upsert_seen_url(
             outcome=outcome,
             event_id=event_id,
             recheck_attempts=new_attempts,
+            content_hash=effective_hash,
             last_error=last_error,
             last_checked_at=now_ts,
         )
         session.add(row_obj)
 
-    seen_map[url_key] = _SeenUrlState(outcome=outcome, recheck_attempts=new_attempts)
+    seen_map[url_key] = _SeenUrlState(
+        outcome=outcome,
+        recheck_attempts=new_attempts,
+        content_hash=effective_hash,
+        event_id=event_id,
+    )
 
 
 _INGEST_ERRORS = (
@@ -207,6 +324,8 @@ async def _ingest_source_candidates(
 
     active_seen_map = seen_map if seen_map is not None else {}
     res = _SourceIngestResult()
+    today = _get_app_today()
+    active_ready_events = await _load_active_ready_events(session)
 
     for raw_item in new_candidates:
         candidate = (
@@ -215,7 +334,32 @@ async def _ingest_source_candidates(
             else DiscoveredCandidate(url=raw_item, source_key=src.source_key)
         )
         card_url = candidate.url
+        url_key = _url_lookup_key(card_url)
+        prev_state = active_seen_map.get(url_key)
         try:
+            matched_ready_id = _find_pre_dedup_event_id(
+                candidate.title, active_ready_events, today
+            )
+            if matched_ready_id is not None:
+                logger.info(
+                    "Ранний pre-dedup: кандидат %s (%r) совпал с ready-событием ID=%d",
+                    card_url,
+                    candidate.title,
+                    matched_ready_id,
+                )
+                await _upsert_seen_url(
+                    session,
+                    raw_url=card_url,
+                    source_key=src.source_key,
+                    outcome="ingested_ready",
+                    event_id=matched_ready_id,
+                    last_error=None,
+                    seen_map=active_seen_map,
+                )
+                await session.commit()
+                known_urls.add(url_key)
+                continue
+
             if src.b2b_filter_enabled:
                 decision = await scraper_pkg.triage_discovery_candidate(candidate, src)
                 if not decision.is_b2b_target or not decision.is_russia_or_online:
@@ -236,16 +380,64 @@ async def _ingest_source_candidates(
                         res.rejected_geo += 1
                     continue
 
-            crawler_kwargs = _filter_supported_kwargs(
-                scraper_pkg.collect_event_dossiers,
-                {"vision_ocr": vision_ocr, "ocr_budget": ocr_budget},
+            is_recheck_with_hash = (
+                prev_state is not None
+                and prev_state.outcome == "ingested_needs_enrichment"
+                and bool(prev_state.content_hash)
             )
-            dossiers = await scraper_pkg.collect_event_dossiers(candidate, src, **crawler_kwargs)  # type: ignore[arg-type]
+            if is_recheck_with_hash and prev_state is not None:
+                no_ocr_kwargs = _filter_supported_kwargs(
+                    scraper_pkg.collect_event_dossiers,
+                    {"vision_ocr": None, "ocr_budget": None},
+                )
+                dossiers = await scraper_pkg.collect_event_dossiers(
+                    candidate, src, **no_ocr_kwargs  # type: ignore[arg-type]
+                )
+                new_hash = _compute_dossier_hash(dossiers)
+                if new_hash == prev_state.content_hash:
+                    logger.info(
+                        "Контент %s (%s) не изменился (content_hash=%s), пропуск LLM/OCR.",
+                        card_url,
+                        src.source_key,
+                        new_hash[:12],
+                    )
+                    await _upsert_seen_url(
+                        session,
+                        raw_url=card_url,
+                        source_key=src.source_key,
+                        outcome="ingested_needs_enrichment",
+                        event_id=prev_state.event_id,
+                        last_error=None,
+                        seen_map=active_seen_map,
+                        content_hash=new_hash,
+                    )
+                    await session.commit()
+                    continue
+                if vision_ocr is not None:
+                    crawler_kwargs = _filter_supported_kwargs(
+                        scraper_pkg.collect_event_dossiers,
+                        {"vision_ocr": vision_ocr, "ocr_budget": ocr_budget},
+                    )
+                    dossiers = await scraper_pkg.collect_event_dossiers(
+                        candidate, src, **crawler_kwargs  # type: ignore[arg-type]
+                    )
+                    new_hash = _compute_dossier_hash(dossiers)
+            else:
+                crawler_kwargs = _filter_supported_kwargs(
+                    scraper_pkg.collect_event_dossiers,
+                    {"vision_ocr": vision_ocr, "ocr_budget": ocr_budget},
+                )
+                dossiers = await scraper_pkg.collect_event_dossiers(
+                    candidate, src, **crawler_kwargs  # type: ignore[arg-type]
+                )
+                new_hash = _compute_dossier_hash(dossiers)
+
             url_ready = 0
             url_enrichment_ids: list[int] = []
             first_event_id: int | None = None
             url_rej_past = 0
             url_rej_geo = 0
+            url_ignored = 0
             last_rej_reason: str | None = None
             sub_errors: list[str] = []
 
@@ -311,7 +503,9 @@ async def _ingest_source_candidates(
                         rej_exc.reason,
                     )
                     last_rej_reason = rej_exc.reason[:500]
-                    if rej_exc.outcome == "rejected_past":
+                    if rej_exc.outcome == "ignored":
+                        url_ignored += 1
+                    elif rej_exc.outcome == "rejected_past":
                         url_rej_past += 1
                         res.rejected_past += 1
                     else:
@@ -336,6 +530,9 @@ async def _ingest_source_candidates(
                 seen_err = None
             elif sub_errors:
                 raise RuntimeError(sub_errors[0])
+            elif url_ignored > 0 and url_rej_past == 0 and url_rej_geo == 0:
+                seen_outcome = "ignored"
+                seen_err = last_rej_reason
             elif url_rej_past > 0 and url_rej_geo == 0:
                 seen_outcome = "rejected_past"
                 seen_err = last_rej_reason
@@ -354,6 +551,7 @@ async def _ingest_source_candidates(
                 event_id=first_event_id,
                 last_error=seen_err,
                 seen_map=active_seen_map,
+                content_hash=new_hash,
             )
             await session.commit()
             if url_ready > 0 or url_enrichment_ids:
