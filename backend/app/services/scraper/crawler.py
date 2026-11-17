@@ -29,10 +29,12 @@ logger = logging.getLogger(__name__)
 
 _MAX_NAV_CANDIDATE_LINKS: int = 40
 _MAX_HTML_SUBPAGES: int = 2
-_MAX_PDF_FILES: int = 2
+_MAX_PDF_FILES: int = 3
+_MAX_PDF_CANDIDATES: int = 6
 
 _AGGREGATOR_AND_TICKETING_DOMAINS: tuple[str, ...] = (
     "expomap.ru",
+    "expolead.ru",
     "architime.ru",
     "archi.ru",
     "helpinver.com",
@@ -142,6 +144,46 @@ _NAV_POSITIVE_KEYWORDS: tuple[tuple[str, int], ...] = (
     (".pdf", 6),
 )
 
+# Анкорные слова документов в облаке: такие ссылки получают тот же вес, что и прямой .pdf.
+_CLOUD_DOC_ANCHOR_KEYWORDS: tuple[str, ...] = (
+    "услов",
+    "тариф",
+    "прайс",
+    "программ",
+    "презентац",
+    "регламент",
+    "оферт",
+    "скачать",
+    "буклет",
+)
+_CLOUD_DOC_ANCHOR_RE = re.compile(r"\bкп\b")
+_CLOUD_DOC_ANCHOR_WEIGHT: int = 6
+
+# Скрипты скачивания (/download?id=1, /get_file.php) на том же домене: умеренный бонус.
+_DOWNLOAD_HINT_KEYWORDS: tuple[str, ...] = (
+    "скачать",
+    "download",
+    "get_file",
+    "презентац",
+    "буклет",
+    "прайс",
+    "оферт",
+)
+_DOWNLOAD_HINT_WEIGHT: int = 3
+
+# Ссылки подвала сайта, которые допустимы как кандидаты (оферты, регламенты, условия, прайсы).
+_FOOTER_DOC_MARKER_RE = re.compile(
+    r"оферт|регламент|услов|положен|прайс|тариф|презентац|программ|\bкп\b"
+    r"|offer|pricing|terms|regulation",
+    re.IGNORECASE,
+)
+_FOOTER_PRIVACY_RE = re.compile(
+    r"персональн|конфиденц|privacy|policy|политик|cookie|куки",
+    re.IGNORECASE,
+)
+
+_SURVEY_FORM_HOSTS: tuple[str, ...] = ("forms.yandex.ru", "forms.gle")
+
 _NAV_NEGATIVE_KEYWORDS: tuple[str, ...] = (
     "privacy",
     "policy",
@@ -192,7 +234,10 @@ class OrganizerLinksSelection(BaseModel):
     )
     pdf_urls: list[str] = Field(
         default_factory=list,
-        description="До 2 URL PDF-документов (коммерческое предложение, прайс-лист, программа, регламент).",
+        description=(
+            "До 6 URL документов по убыванию полезности: .pdf или публичные ссылки Яндекс.Диска/Google Drive "
+            "(коммерческое предложение, прайс-лист, программа, регламент, оферта)."
+        ),
     )
 
 
@@ -230,10 +275,34 @@ def _host_matches_domain(host: str, domain: str) -> bool:
     return clean_host == clean_dom or clean_host.endswith(f".{clean_dom}")
 
 
+def _is_survey_form_url(url: str) -> bool:
+    """Анкеты и формы (Google Forms, Яндекс Формы): не сайт мероприятия и не источник подстраниц."""
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if any(_host_matches_domain(host, form_host) for form_host in _SURVEY_FORM_HOSTS):
+        return True
+    return _host_matches_domain(host, "docs.google.com") and parts.path.lower().startswith("/forms")
+
+
+def is_cloud_document_url(url: str) -> bool:
+    """Публичная ссылка на документ в облаке (Яндекс.Диск /i/ /d/, Google Drive file/open)."""
+    return fetcher_mod.is_cloud_document_url(url)
+
+
+def is_document_candidate_url(url: str) -> bool:
+    """Единая классификация документа: прямой .pdf или поддерживаемая публичная облачная ссылка."""
+    return urlsplit(url).path.lower().endswith(".pdf") or is_cloud_document_url(url)
+
+
 def _is_blocked_external_url(url: str) -> bool:
     parts = urlsplit(url)
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
         return True
+    if _is_survey_form_url(url):
+        return True
+    if is_cloud_document_url(url):
+        # drive.google.com иначе отсекся бы общим фильтром google.com
+        return False
     host = parts.hostname.lower()
     if any(_host_matches_domain(host, dom) for dom in _BLOCKED_NOISE_DOMAINS):
         return True
@@ -408,7 +477,7 @@ def _discover_official_site_and_card_pdfs(
     seen_pdfs: set[str] = set()
 
     def _maybe_add_pdf(url: str) -> bool:
-        if not urlsplit(url).path.lower().endswith(".pdf"):
+        if not is_document_candidate_url(url):
             return False
         if _is_blocked_external_url(url) or _is_aggregator_boilerplate(url):
             return True
@@ -508,6 +577,7 @@ def _convert_organizer_html_to_markdown(html_content: str, *, base_url: str) -> 
 
 
 def _score_organizer_link(norm_url: str, label: str, *, is_pdf: bool, in_nav_or_header: bool) -> int:
+    """`is_pdf` означает «документ» (прямой .pdf или публичная облачная ссылка)."""
     text_low = f"{label} {urlsplit(norm_url).path}".lower()
     score = 0
     for kw, weight in _NAV_POSITIVE_KEYWORDS:
@@ -515,11 +585,32 @@ def _score_organizer_link(norm_url: str, label: str, *, is_pdf: bool, in_nav_or_
             score += weight
     if is_pdf:
         score += 4
+        if is_cloud_document_url(norm_url):
+            label_low = label.lower()
+            if any(kw in label_low for kw in _CLOUD_DOC_ANCHOR_KEYWORDS) or _CLOUD_DOC_ANCHOR_RE.search(
+                label_low
+            ):
+                score += _CLOUD_DOC_ANCHOR_WEIGHT
+    elif any(hint in text_low for hint in _DOWNLOAD_HINT_KEYWORDS):
+        score += _DOWNLOAD_HINT_WEIGHT
     if in_nav_or_header and score > 0:
         score += 2
     if any(bad in text_low for bad in _NAV_NEGATIVE_KEYWORDS):
         score -= 8
     return score
+
+
+def _is_allowed_footer_link(norm_url: str, label: str, organizer_url: str) -> bool:
+    """
+    Из подвала сайта допускаются только документы (.pdf/облако) и страницы того же домена с явными
+    документными маркерами (оферта, регламент, условия, прайс...). Политика конфиденциальности и прочее — нет.
+    """
+    probe = f"{label} {urlsplit(norm_url).path}"
+    if _FOOTER_PRIVACY_RE.search(probe):
+        return False
+    if is_document_candidate_url(norm_url):
+        return True
+    return _same_organizer_domain(norm_url, organizer_url) and bool(_FOOTER_DOC_MARKER_RE.search(probe))
 
 
 def _extract_organizer_candidate_links(
@@ -532,7 +623,9 @@ def _extract_organizer_candidate_links(
     extra_agg_hosts: set[str] = set()
     by_key: dict[str, _LinkCandidate] = {}
 
-    def _consider_link(raw_href: str, label: str, ctx: str, *, in_nav: bool) -> None:
+    def _consider_link(
+        raw_href: str, label: str, ctx: str, *, in_nav: bool, from_footer: bool = False
+    ) -> None:
         norm = canonicalize_url(raw_href, organizer_url)
         if not norm:
             return
@@ -541,7 +634,9 @@ def _extract_organizer_candidate_links(
             return
         if _is_blocked_external_url(norm):
             return
-        is_pdf = urlsplit(norm).path.lower().endswith(".pdf")
+        if from_footer and not _is_allowed_footer_link(norm, label, organizer_url):
+            return
+        is_pdf = is_document_candidate_url(norm)
         if not is_pdf:
             if not _same_organizer_domain(norm, organizer_url):
                 return
@@ -555,18 +650,29 @@ def _extract_organizer_candidate_links(
         if prev is None or cand.score > prev.score or (cand.score == prev.score and len(cand.label) > len(prev.label)):
             by_key[k] = cand
 
+    def _anchor_label(a_tag: Tag) -> str:
+        label = " ".join(a_tag.get_text(" ", strip=True).split())
+        if not label:
+            label = " ".join(str(a_tag.get("title") or a_tag.get("aria-label") or "").split())
+        return label
+
     if not is_markdown:
         soup = BeautifulSoup(raw_content, "lxml")
+        # Подвал удаляется целиком, но ДО этого из него забираются только документные ссылки.
+        for footer_tag in soup.find_all("footer"):
+            for a_tag in footer_tag.find_all("a", href=True):
+                raw_href = str(a_tag.get("href") or "").strip()
+                if raw_href:
+                    label = _anchor_label(a_tag)
+                    _consider_link(raw_href, label, label, in_nav=False, from_footer=True)
         for tag in soup(["footer", "script", "style", "noscript", "svg"]):
             tag.decompose()
         for a_tag in soup.find_all("a", href=True):
             raw_href = str(a_tag.get("href") or "").strip()
             if not raw_href:
                 continue
-            label = " ".join(a_tag.get_text(" ", strip=True).split())
-            if not label:
-                label = " ".join(str(a_tag.get("title") or a_tag.get("aria-label") or "").split())
-            in_nav = isinstance(a_tag, Tag) and a_tag.find_parent(["header", "nav"]) is not None
+            label = _anchor_label(a_tag)
+            in_nav = a_tag.find_parent(["header", "nav"]) is not None
             _consider_link(raw_href, label, label, in_nav=in_nav)
     else:
         for norm, label, line_ctx in _extract_markdown_links_with_context(raw_content, organizer_url):
@@ -580,7 +686,7 @@ def _select_organizer_links_deterministic(
     candidates: list[_LinkCandidate],
     *,
     max_html: int = _MAX_HTML_SUBPAGES,
-    max_pdf: int = _MAX_PDF_FILES,
+    max_pdf: int = _MAX_PDF_CANDIDATES,
 ) -> tuple[list[str], list[str]]:
     html_urls = [c.url for c in candidates if not c.is_pdf and c.score > 0][:max_html]
     pdf_candidates = [c for c in candidates if c.is_pdf and c.score >= 0]
@@ -595,7 +701,7 @@ async def _select_organizer_links(
     candidates: list[_LinkCandidate],
 ) -> tuple[list[str], list[str]]:
     """
-    AI Link Navigator (LLM-2): выбирает до 2 HTML-подстраниц и до 2 PDF-ссылок.
+    AI Link Navigator (LLM-2): выбирает до 2 HTML-подстраниц и до 6 документов (PDF/облако) по убыванию полезности.
     При отсутствии LLM_API_KEY или сбое LLM использует детерминированный отбор по ключевым словам.
     """
     import app.services.scraper as scraper_pkg
@@ -616,7 +722,8 @@ async def _select_organizer_links(
         "Из списка ссылок на сайте организатора выбери:\n"
         f"- до {_MAX_HTML_SUBPAGES} самых полезных HTML-подстраниц с тарифами/ценами, условиями участия, "
         "требованиями к спикерам, программой или регламентом;\n"
-        f"- до {_MAX_PDF_FILES} самых полезных .pdf ссылок (коммерческое предложение, прайс, регламент, программа).\n"
+        f"- до {_MAX_PDF_CANDIDATES} самых полезных документов (.pdf или публичные ссылки Яндекс.Диска/Google Drive: "
+        "коммерческое предложение, прайс, регламент, программа, оферта) в порядке убывания полезности;\n"
         "Возвращай ТОЛЬКО точные URL из переданного списка. Ничего не выдумывай."
     )
     user_prompt = f"Главная страница организатора: {organizer_url}\nКандидаты:\n" + "\n".join(lines)
@@ -669,7 +776,7 @@ async def _select_organizer_links(
         if cand and cand.is_pdf and k not in seen_pdf:
             seen_pdf.add(k)
             valid_pdf.append(cand.url)
-            if len(valid_pdf) >= _MAX_PDF_FILES:
+            if len(valid_pdf) >= _MAX_PDF_CANDIDATES:
                 break
 
     if not valid_html and not valid_pdf:
@@ -824,6 +931,41 @@ def _truncate_section(text: str, limit: int) -> str:
     return f"{cleaned[:limit].rstrip()}\n...[фрагмент сокращен]"
 
 
+async def _fetch_organizer_page(url: str, **optional_kwargs: object) -> tuple[str, bool]:
+    """
+    Вызывает fetcher._fetch_raw_page_content, передавая необязательные выходные параметры
+    (resolved_url_out, pdf_bytes_out, max_pdf_bytes) только если их принимает сигнатура/мок (старые 2-arg моки).
+    """
+    kwargs = _filter_supported_kwargs(fetcher_mod._fetch_raw_page_content, optional_kwargs)
+    return await fetcher_mod._fetch_raw_page_content(url, **kwargs)  # type: ignore[arg-type]
+
+
+def _is_usable_organizer_url(url: str, card_host: str) -> bool:
+    """Финальный URL после редиректов пригоден как сайт организатора (не соцсеть/форма/агрегатор/документ)."""
+    if is_document_candidate_url(url) or _is_blocked_external_url(url):
+        return False
+    return not _is_aggregator_or_ticketing(url, {card_host} if card_host else set())
+
+
+def _pdf_section_budget(sections_count: int) -> int:
+    """Бюджет символов на один PDF/OCR-раздел: суммарно укладывается в MAX_DOSSIER_CHARS при 3 документах."""
+    if sections_count <= 1:
+        return 11_000
+    if sections_count == 2:
+        return 6_000
+    return 4_000
+
+
+_FETCH_ERRORS: tuple[type[BaseException], ...] = (
+    fetcher_mod.CaptchaBlockedError,
+    fetcher_mod.UnsafeUrlError,
+    httpx.HTTPError,
+    ValueError,
+    RuntimeError,
+    TimeoutError,
+)
+
+
 async def _enrich_from_base_markdown(
     *,
     base_label: str,
@@ -842,6 +984,8 @@ async def _enrich_from_base_markdown(
     collected_urls: list[str] = [base_url]
     seen_collected: set[str] = {_url_dedup_key(base_url)}
     warnings: list[str] = []
+    card_host = (urlsplit(base_url).hostname or "").lower()
+    max_pdf_bytes = scraper_pkg.settings.SCRAPER_MAX_PDF_BYTES
 
     def _add_collected_url(url: str) -> None:
         k = _url_dedup_key(url)
@@ -853,64 +997,82 @@ async def _enrich_from_base_markdown(
     subpage_sections: list[tuple[str, str]] = []
     org_pdf_urls: list[str] = []
     subpage_pdf_urls: list[str] = []
+    subpage_pdf_blobs: list[tuple[str, bytes]] = []
+    effective_organizer_url = official_url
+    reported_official_url = official_url
 
     if official_url:
         try:
-            org_raw, org_is_md = await fetcher_mod._fetch_raw_page_content(official_url)
-            _add_collected_url(official_url)
-            org_homepage_md = (
-                org_raw
-                if org_is_md
-                else _convert_organizer_html_to_markdown(org_raw, base_url=official_url)
-            )
-            org_candidates = _extract_organizer_candidate_links(
-                org_raw,
-                is_markdown=org_is_md,
-                organizer_url=official_url,
-            )
-            selected_subpages, org_pdf_urls = await _select_organizer_links(
-                official_url, org_candidates
-            )
+            resolved_out: list[str] = []
+            org_raw, org_is_md = await _fetch_organizer_page(official_url, resolved_url_out=resolved_out)
 
-            for sub_url in selected_subpages[:_MAX_HTML_SUBPAGES]:
-                try:
-                    sub_raw, sub_is_md = await fetcher_mod._fetch_raw_page_content(sub_url)
-                    _add_collected_url(sub_url)
-                    sub_md = (
-                        sub_raw
-                        if sub_is_md
-                        else _convert_organizer_html_to_markdown(sub_raw, base_url=sub_url)
-                    )
-                    if sub_md.strip():
-                        subpage_sections.append((sub_url, sub_md))
-                    sub_links = _extract_organizer_candidate_links(
-                        sub_raw, is_markdown=sub_is_md, organizer_url=official_url
-                    )
-                    for lc in sub_links:
-                        if lc.is_pdf:
-                            subpage_pdf_urls.append(lc.url)
-                except (
-                    fetcher_mod.CaptchaBlockedError,
-                    fetcher_mod.UnsafeUrlError,
-                    httpx.HTTPError,
-                    ValueError,
-                    RuntimeError,
-                    TimeoutError,
-                ) as exc:
+            final_url = canonicalize_url(resolved_out[0], official_url) if resolved_out else None
+            organizer_usable = True
+            if final_url and _url_dedup_key(final_url) != _url_dedup_key(official_url):
+                if _is_usable_organizer_url(final_url, card_host):
+                    effective_organizer_url = final_url
+                else:
+                    organizer_usable = False
+                    reported_official_url = None
                     logger.warning(
-                        "2-Hop: не удалось загрузить подстраницу организатора %s: %s",
-                        sub_url,
-                        exc,
+                        "2-Hop: ссылка организатора %s ведёт на непригодный адрес %s — подстраницы не ищем",
+                        official_url,
+                        final_url,
                     )
-                    warnings.append("official_subpage_unreachable")
-        except (
-            fetcher_mod.CaptchaBlockedError,
-            fetcher_mod.UnsafeUrlError,
-            httpx.HTTPError,
-            ValueError,
-            RuntimeError,
-            TimeoutError,
-        ) as exc:
+                    warnings.append("official_site_redirected_to_blocked_domain")
+
+            if organizer_usable and effective_organizer_url:
+                _add_collected_url(official_url)
+                _add_collected_url(effective_organizer_url)
+                reported_official_url = effective_organizer_url
+                org_homepage_md = (
+                    org_raw
+                    if org_is_md
+                    else _convert_organizer_html_to_markdown(org_raw, base_url=effective_organizer_url)
+                )
+                org_candidates = _extract_organizer_candidate_links(
+                    org_raw,
+                    is_markdown=org_is_md,
+                    organizer_url=effective_organizer_url,
+                )
+                selected_subpages, org_pdf_urls = await _select_organizer_links(
+                    effective_organizer_url, org_candidates
+                )
+
+                for sub_url in selected_subpages[:_MAX_HTML_SUBPAGES]:
+                    sub_pdf_bytes: list[bytes] = []
+                    try:
+                        sub_raw, sub_is_md = await _fetch_organizer_page(
+                            sub_url,
+                            pdf_bytes_out=sub_pdf_bytes,
+                            max_pdf_bytes=max_pdf_bytes,
+                        )
+                        if sub_pdf_bytes:
+                            # Скрипт скачивания без .pdf в URL: байты пойдут в общий PDF-обработчик ниже.
+                            subpage_pdf_blobs.append((sub_url, sub_pdf_bytes[0]))
+                            continue
+                        _add_collected_url(sub_url)
+                        sub_md = (
+                            sub_raw
+                            if sub_is_md
+                            else _convert_organizer_html_to_markdown(sub_raw, base_url=sub_url)
+                        )
+                        if sub_md.strip():
+                            subpage_sections.append((sub_url, sub_md))
+                        sub_links = _extract_organizer_candidate_links(
+                            sub_raw, is_markdown=sub_is_md, organizer_url=effective_organizer_url
+                        )
+                        for lc in sub_links:
+                            if lc.is_pdf:
+                                subpage_pdf_urls.append(lc.url)
+                    except _FETCH_ERRORS as exc:
+                        logger.warning(
+                            "2-Hop: не удалось загрузить подстраницу организатора %s: %s",
+                            sub_url,
+                            exc,
+                        )
+                        warnings.append("official_subpage_unreachable")
+        except _FETCH_ERRORS as exc:
             logger.warning(
                 "2-Hop: сайт организатора недоступен (%s) для карточки %s: %s",
                 official_url,
@@ -924,7 +1086,7 @@ async def _enrich_from_base_markdown(
     ]
     if org_homepage_md.strip():
         sections_out.append(
-            f"=== ОФИЦИАЛЬНЫЙ САЙТ ОРГАНИЗАТОРА ({official_url}) ===\n"
+            f"=== ОФИЦИАЛЬНЫЙ САЙТ ОРГАНИЗАТОРА ({effective_organizer_url}) ===\n"
             f"{_truncate_section(org_homepage_md, 13_000)}"
         )
 
@@ -945,44 +1107,34 @@ async def _enrich_from_base_markdown(
         if k not in seen_pdf_keys:
             seen_pdf_keys.add(k)
             candidate_pdfs.append(pdf_u)
-        if len(candidate_pdfs) >= _MAX_PDF_FILES:
+        if len(candidate_pdfs) >= _MAX_PDF_CANDIDATES:
             break
 
     source_cookies = dict(source.required_cookies) if source.required_cookies else None
-    card_host = (urlsplit(base_url).hostname or "").lower()
     pdf_sections: list[tuple[str, str]] = []
     ocr_sections: list[tuple[str, str]] = []
-    for pdf_url in candidate_pdfs:
+
+    async def _ingest_pdf_bytes(pdf_bytes: bytes, display_url: str) -> bool:
+        """
+        Общий обработчик байт PDF: PyMuPDF + (при необходимости) Vision OCR в рамках бюджета.
+        `display_url` — исходная человекочитаемая ссылка (а не одноразовый CDN-токен).
+        Возвращает True, если документ дал непустой текст или OCR-текст.
+        """
         try:
-            pdf_host = (urlsplit(pdf_url).hostname or "").lower()
-            cookies_for_pdf = (
-                source_cookies
-                if source_cookies and _host_matches_domain(pdf_host, card_host)
-                else None
-            )
-            pdf_bytes = await fetcher_mod.fetch_pdf_bytes_safe(
-                pdf_url,
-                max_bytes=scraper_pkg.settings.SCRAPER_MAX_PDF_BYTES,
-                cookies=cookies_for_pdf,
-            )
             pdf_text, ocr_images = await scraper_pkg.extract_pdf_text_async(
                 pdf_bytes,
                 max_ocr_pages=scraper_pkg.settings.VISION_OCR_MAX_PAGES_AUTO,
                 include_all_if_compact=True,
             )
-            if pdf_text and pdf_text.strip():
-                _add_collected_url(pdf_url)
-                pdf_sections.append((pdf_url, pdf_text.strip()))
-        except (
-            fetcher_mod.UnsafeUrlError,
-            httpx.HTTPError,
-            ValueError,
-            RuntimeError,
-            TimeoutError,
-        ) as exc:
-            logger.warning("2-Hop: ошибка загрузки/чтения PDF %s: %s", pdf_url, exc)
+        except (httpx.HTTPError, ValueError, RuntimeError, TimeoutError) as exc:
+            logger.warning("2-Hop: ошибка чтения PDF %s: %s", display_url, exc)
             warnings.append("pdf_download_failed")
-            continue
+            return False
+
+        produced_text = bool(pdf_text and pdf_text.strip())
+        if produced_text:
+            _add_collected_url(display_url)
+            pdf_sections.append((display_url, pdf_text.strip()))
 
         if ocr_images and scraper_pkg.should_run_vision_ocr(html_context, pdf_text, ocr_images):
             if vision_ocr is None:
@@ -1004,16 +1156,62 @@ async def _enrich_from_base_markdown(
                     try:
                         ocr_text = await vision_ocr.extract_text_from_images(ocr_images[:allowed])
                     except (TimeoutError, APIError, httpx.HTTPError, RuntimeError, ValueError) as exc:
-                        logger.warning("2-Hop: сбой Vision OCR для PDF %s: %s", pdf_url, exc)
+                        logger.warning("2-Hop: сбой Vision OCR для PDF %s: %s", display_url, exc)
                         ocr_text = ""
                     if ocr_text and ocr_text.strip():
-                        _add_collected_url(pdf_url)
-                        ocr_sections.append((pdf_url, ocr_text.strip()))
+                        _add_collected_url(display_url)
+                        ocr_sections.append((display_url, ocr_text.strip()))
+                        produced_text = True
                     else:
                         warnings.append("pdf_scanned_pages_not_recognized")
+        return produced_text
+
+    # Лимит считается по успешно прочитанным документам: битая ссылка/404 не сжигает квоту.
+    success_pdf_count = 0
+    for pdf_url in candidate_pdfs:
+        if success_pdf_count >= _MAX_PDF_FILES:
+            break
+        try:
+            direct_urls = await fetcher_mod.resolve_cloud_pdf_urls(pdf_url, max_bytes=max_pdf_bytes)
+        except _FETCH_ERRORS as exc:
+            logger.warning("2-Hop: не удалось разрешить ссылку на документ %s: %s", pdf_url, exc)
+            warnings.append("pdf_download_failed")
+            continue
+        if not direct_urls:
+            warnings.append("pdf_download_failed")
+            continue
+
+        for direct_url in direct_urls:
+            if success_pdf_count >= _MAX_PDF_FILES:
+                break
+            direct_host = (urlsplit(direct_url).hostname or "").lower()
+            # Приватные cookies источника — только на домен карточки, никогда на облако/CDN/редиректы.
+            cookies_for_pdf = (
+                source_cookies
+                if source_cookies and _host_matches_domain(direct_host, card_host)
+                else None
+            )
+            try:
+                pdf_bytes = await fetcher_mod.fetch_pdf_bytes_safe(
+                    direct_url,
+                    max_bytes=max_pdf_bytes,
+                    cookies=cookies_for_pdf,
+                )
+            except _FETCH_ERRORS as exc:
+                logger.warning("2-Hop: ошибка загрузки PDF %s (%s): %s", pdf_url, direct_host, exc)
+                warnings.append("pdf_download_failed")
+                continue
+            if await _ingest_pdf_bytes(pdf_bytes, pdf_url):
+                success_pdf_count += 1
+
+    for blob_url, blob_bytes in subpage_pdf_blobs:
+        if success_pdf_count >= _MAX_PDF_FILES:
+            break
+        if await _ingest_pdf_bytes(blob_bytes, blob_url):
+            success_pdf_count += 1
 
     if pdf_sections:
-        pdf_budget = 11_000 if len(pdf_sections) == 1 else 6_000
+        pdf_budget = _pdf_section_budget(len(pdf_sections))
         for pdf_url, pdf_txt in pdf_sections:
             sections_out.append(
                 f"=== ТЕКСТ ИЗ PDF-ДОКУМЕНТА ({pdf_url}) ===\n"
@@ -1021,7 +1219,7 @@ async def _enrich_from_base_markdown(
             )
 
     if ocr_sections:
-        ocr_budget_chars = 11_000 if len(ocr_sections) == 1 else 6_000
+        ocr_budget_chars = _pdf_section_budget(len(ocr_sections))
         for pdf_url, ocr_txt in ocr_sections:
             sections_out.append(
                 f"=== РАСПОЗНАННЫЙ OCR ТЕКСТ PDF ===\nИсточник: {pdf_url}\n"
@@ -1035,7 +1233,7 @@ async def _enrich_from_base_markdown(
     return CollectedEventDossier(
         dossier_text=assembled,
         source_urls=collected_urls,
-        official_site_url=official_url,
+        official_site_url=reported_official_url,
         warnings=list(dict.fromkeys(warnings)),
     )
 
@@ -1128,9 +1326,9 @@ async def collect_event_dossiers(
         if intro_text:
             sec_md_parts.append(f"Контекст подборки: {intro_text[:600]}")
         sec_md = "\n\n".join(sec_md_parts)
-        sec_pdfs = [u for u in sec.ext_links if urlsplit(u).path.lower().endswith(".pdf")]
+        sec_pdfs = [u for u in sec.ext_links if is_document_candidate_url(u)]
         sec_official = next(
-            (u for u in sec.ext_links if not urlsplit(u).path.lower().endswith(".pdf")),
+            (u for u in sec.ext_links if not is_document_candidate_url(u)),
             None,
         )
         enriched = await _enrich_from_base_markdown(
