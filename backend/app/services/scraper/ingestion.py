@@ -34,11 +34,11 @@ _RUSSIA_CITY_SET: frozenset[str] = frozenset(CITY_ALIASES.keys()) - _NON_RUSSIA_
 
 
 class EventRejectedError(ValueError):
-    """Контролируемое отклонение события на валидации даты или географии ДО вызова эмбеддингов."""
+    """Контролируемое отклонение события на валидации даты, географии или архивного статуса ДО вызова эмбеддингов."""
 
     def __init__(
         self,
-        outcome: Literal["rejected_past", "rejected_geo"],
+        outcome: Literal["rejected_past", "rejected_geo", "ignored"],
         reason: str,
     ) -> None:
         self.outcome = outcome
@@ -543,6 +543,7 @@ async def ingest_event_from_text(
     enforce_russia_online: bool = False,
     allow_global_online: bool = True,
     reject_past: bool = False,
+    skip_archived: bool | None = None,
     extra_source_urls: Sequence[str] = (),
 ) -> Event:
     """
@@ -590,6 +591,13 @@ async def ingest_event_from_text(
     embedding_vec = await scraper_pkg.get_embedding(emb_text)
 
     existing = await scraper_pkg.find_duplicate_event(session, schema)
+    should_skip_archived = reject_past if skip_archived is None else skip_archived
+    if existing is not None and existing.data_status == "archived" and should_skip_archived:
+        raise EventRejectedError(
+            "ignored",
+            f"Мероприятие '{existing.canonical_title}' (ID={existing.id}) находится в архиве.",
+        )
+
     was_created = existing is None
     was_ready = existing is not None and existing.data_status == "ready"
     if existing is not None:
